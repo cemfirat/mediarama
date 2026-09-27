@@ -230,6 +230,31 @@ try {
         'known failed-generation orphan objects are reconciled through the same durable queue',
     );
 
+    $reclaimed = cleanupDerivative(
+        $mediaId,
+        'large',
+        97,
+        new DateTimeImmutable('-2 days'),
+    );
+    $trackedStorage[] = $reclaimed->storage;
+    $stream = cleanupStream('reclaimed cleanup object');
+    try {
+        $storage->write($reclaimed->storage, $stream, 'image/webp');
+    } finally {
+        fclose($stream);
+    }
+    $cleanupRepository->enqueueOrphan($reclaimed);
+    $derivatives->save($reclaimed);
+
+    $reclaimedReport = $cleanup(100, 500);
+    requireDerivativeCleanup(
+        $reclaimedReport->completedObjects === 1
+        && $reclaimedReport->failedObjects === 0
+        && $storage->exists($reclaimed->storage)
+        && $cleanupRepository->isReferenced($reclaimed->storage),
+        'a queued key reclaimed by a persisted derivative is unqueued without deleting the live object',
+    );
+
     $alreadyDeleted = cleanupDerivative(
         $mediaId,
         'preview',
