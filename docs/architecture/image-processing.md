@@ -82,7 +82,7 @@ The current derivative identity is `media_id + kind + profile + processing_versi
 A profile opts into watermarking with `ImageDerivativeProfile::watermark=true`. The shared deployment settings are:
 
 - `IMAGE_WATERMARK_ASSET_PATH` — trusted local PNG asset; empty by default;
-- `IMAGE_WATERMARK_WIDTH_PERCENT` — width relative to the actual resized derivative, 1–50;
+- `IMAGE_WATERMARK_SIZE_PERCENT` — maximum watermark bounding-box size relative to both dimensions of the actual resized derivative, 1–50;
 - `IMAGE_WATERMARK_OPACITY_PERCENT` — overlay opacity, 1–100;
 - `IMAGE_WATERMARK_MARGIN_PERCENT` — inset relative to the derivative's shorter side, 0–20;
 - `IMAGE_WATERMARK_GRAVITY` — one of `northwest`, `north`, `northeast`, `west`, `center`, `east`, `southwest`, `south`, `southeast`;
@@ -94,11 +94,11 @@ Rendering avoids lossy double encoding:
 
 1. the source is decoded, auto-oriented, stripped and resized into a temporary lossless MIFF image under the normal ImageMagick resource envelope;
 2. actual resized dimensions are inspected;
-3. watermark pixel width and margin are calculated from those dimensions;
+3. watermark bounding-box dimensions and margin are calculated from those dimensions;
 4. the PNG watermark is resized, its alpha channel is multiplied by the configured opacity, and it is composited with validated gravity using the standard `Over` alpha-composition mode;
 5. metadata is stripped again and the requested derivative format is encoded once.
 
-The derivative metadata records that watermarking occurred plus the asset/render-configuration fingerprint, gravity, width percentage, opacity percentage and margin percentage. The configured filesystem path is never persisted.
+The derivative metadata records that watermarking occurred plus the asset/render-configuration fingerprint, gravity, size percentage, opacity percentage and margin percentage. The configured filesystem path is never persisted.
 
 Changing the watermark asset or any rendering setting changes the fingerprint and requires a new processing version/regeneration before existing public derivatives change.
 
