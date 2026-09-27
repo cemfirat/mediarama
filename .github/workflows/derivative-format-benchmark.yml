@@ -174,7 +174,9 @@ jobs:
           }
           fclose($handle);
 
-          $sortedRows = array_keys($rows);
+          // PHP converts numeric-string array keys such as "1069" to integers.
+          // Normalize them back to strings before the strict manifest completeness check.
+          $sortedRows = array_map('strval', array_keys($rows));
           sort($sortedRows, SORT_STRING);
           $sortedSelected = $selected;
           sort($sortedSelected, SORT_STRING);
