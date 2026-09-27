@@ -85,7 +85,8 @@ A profile opts into watermarking with `ImageDerivativeProfile::watermark=true`. 
 - `IMAGE_WATERMARK_WIDTH_PERCENT` — width relative to the actual resized derivative, 1–50;
 - `IMAGE_WATERMARK_OPACITY_PERCENT` — overlay opacity, 1–100;
 - `IMAGE_WATERMARK_MARGIN_PERCENT` — inset relative to the derivative's shorter side, 0–20;
-- `IMAGE_WATERMARK_GRAVITY` — one of `northwest`, `north`, `northeast`, `west`, `center`, `east`, `southwest`, `south`, `southeast`.
+- `IMAGE_WATERMARK_GRAVITY` — one of `northwest`, `north`, `northeast`, `west`, `center`, `east`, `southwest`, `south`, `southeast`;
+- `IMAGE_WATERMARK_THUMBNAIL`, `IMAGE_WATERMARK_PREVIEW`, `IMAGE_WATERMARK_LARGE` — per-standard-profile switches, all `false` by default.
 
 The path is deployment configuration, never request/user input. The configured asset must be a readable, non-empty PNG no larger than 16 MiB or 8192 pixels in either dimension. A watermark-enabled profile fails closed when the asset is missing or invalid.
 
@@ -101,7 +102,7 @@ The derivative metadata records that watermarking occurred plus the asset/render
 
 Changing the watermark asset or any rendering setting changes the fingerprint and requires a new processing version/regeneration before existing public derivatives change.
 
-Default thumbnail/preview/large profiles remain unwatermarked until a profile is explicitly configured otherwise.
+Default thumbnail/preview/large profiles remain unwatermarked. Deployment can enable them individually through the three profile switches above; enabling or changing watermark behavior requires explicit versioned regeneration before existing derivatives change.
 
 Primary ImageMagick behavior references:
 
