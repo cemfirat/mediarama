@@ -214,3 +214,19 @@ A later decision change must include:
 3. validated output-format capability boundary in application code;
 4. runtime integration coverage for every exposed output codec;
 5. unchanged immutable-original, metadata-stripping, resource-limit and versioned-regeneration guarantees.
+
+
+## Accepted product decision
+
+The representative benchmark evidence is accepted and retained in:
+
+`docs/research/evidence/derivative-format-benchmark-2026-09-27.json`
+
+ADR-0011 records the resulting product boundary:
+
+- keep the production `cwebp` WebP profiles as the sole standard display derivatives;
+- do not expose JPEG display profiles;
+- do not replace the current single-format profiles with AVIF;
+- reconsider AVIF only together with an explicit multi-format derivative identity/fallback architecture and a benchmark of that exact production encoder path.
+
+The benchmark therefore closes the format-decision gate without changing the current public derivative codec.
