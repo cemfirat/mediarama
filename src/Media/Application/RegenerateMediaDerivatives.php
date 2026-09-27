@@ -15,12 +15,14 @@ final readonly class RegenerateMediaDerivatives
     ) {
     }
 
-    public function __invoke(Uuid $mediaId): void
+    public function __invoke(Uuid $mediaId): int
     {
         $asset = $this->media->get($mediaId);
 
-        if ($asset->mediaType === MediaType::Image) {
-            ($this->images)($asset);
+        if ($asset->mediaType !== MediaType::Image) {
+            throw new \DomainException('Versioned derivative regeneration currently supports image media only.');
         }
+
+        return $this->images->regenerate($asset);
     }
 }
