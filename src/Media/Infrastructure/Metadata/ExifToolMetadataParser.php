@@ -22,22 +22,61 @@ final class ExifToolMetadataParser
 
         return new InspectedMetadata(
             embedded: $this->groupEmbeddedMetadata($raw),
-            capturedAt: $this->date($this->first($raw, ['EXIF:DateTimeOriginal', 'XMP:DateCreated', 'IPTC:DateCreated'])),
-            title: $this->string($this->first($raw, ['XMP:Title', 'IPTC:ObjectName'])),
-            description: $this->string($this->first($raw, ['XMP:Description', 'IPTC:Caption-Abstract', 'EXIF:ImageDescription'])),
-            creator: $this->string($this->first($raw, ['XMP:Creator', 'IPTC:By-line', 'EXIF:Artist'])),
-            copyright: $this->string($this->first($raw, ['XMP:Rights', 'IPTC:CopyrightNotice', 'EXIF:Copyright'])),
-            cameraMake: $this->string($this->first($raw, ['EXIF:Make'])),
-            cameraModel: $this->string($this->first($raw, ['EXIF:Model'])),
-            lens: $this->string($this->first($raw, ['EXIF:LensModel', 'Composite:LensID'])),
-            iso: $this->integer($this->first($raw, ['EXIF:ISO'])),
-            aperture: $this->string($this->first($raw, ['EXIF:FNumber', 'Composite:Aperture'])),
-            exposureTime: $this->string($this->first($raw, ['EXIF:ExposureTime'])),
-            focalLength: $this->string($this->first($raw, ['EXIF:FocalLength'])),
-            latitude: $this->float($this->first($raw, ['Composite:GPSLatitude', 'EXIF:GPSLatitude'])),
-            longitude: $this->float($this->first($raw, ['Composite:GPSLongitude', 'EXIF:GPSLongitude'])),
-            locationName: $this->string($this->first($raw, ['XMP:Location', 'IPTC:Sub-location'])),
-            keywords: $this->strings($this->first($raw, ['XMP:Subject', 'IPTC:Keywords'])),
+            capturedAt: $this->date($this->first($raw, [
+                'ExifIFD:DateTimeOriginal',
+                'XMP-exif:DateTimeOriginal',
+                'XMP-photoshop:DateCreated',
+                'EXIF:DateTimeOriginal',
+                'XMP:DateCreated',
+                'IPTC:DateCreated',
+            ])),
+            title: $this->string($this->first($raw, ['XMP-dc:Title', 'XMP:Title', 'IPTC:ObjectName'])),
+            description: $this->string($this->first($raw, [
+                'XMP-dc:Description',
+                'XMP:Description',
+                'IPTC:Caption-Abstract',
+                'IFD0:ImageDescription',
+                'EXIF:ImageDescription',
+            ])),
+            creator: $this->string($this->first($raw, [
+                'XMP-dc:Creator',
+                'XMP:Creator',
+                'IPTC:By-line',
+                'IFD0:Artist',
+                'EXIF:Artist',
+            ])),
+            copyright: $this->string($this->first($raw, [
+                'XMP-dc:Rights',
+                'XMP:Rights',
+                'IPTC:CopyrightNotice',
+                'IFD0:Copyright',
+                'EXIF:Copyright',
+            ])),
+            cameraMake: $this->string($this->first($raw, ['IFD0:Make', 'EXIF:Make'])),
+            cameraModel: $this->string($this->first($raw, ['IFD0:Model', 'EXIF:Model'])),
+            lens: $this->string($this->first($raw, ['ExifIFD:LensModel', 'EXIF:LensModel', 'Composite:LensID'])),
+            iso: $this->integer($this->first($raw, ['ExifIFD:ISO', 'EXIF:ISO'])),
+            aperture: $this->string($this->first($raw, ['ExifIFD:FNumber', 'EXIF:FNumber', 'Composite:Aperture'])),
+            exposureTime: $this->string($this->first($raw, ['ExifIFD:ExposureTime', 'EXIF:ExposureTime'])),
+            focalLength: $this->string($this->first($raw, ['ExifIFD:FocalLength', 'EXIF:FocalLength'])),
+            latitude: $this->float($this->first($raw, [
+                'Composite:GPSLatitude',
+                'GPS:GPSLatitude',
+                'XMP-exif:GPSLatitude',
+                'EXIF:GPSLatitude',
+            ])),
+            longitude: $this->float($this->first($raw, [
+                'Composite:GPSLongitude',
+                'GPS:GPSLongitude',
+                'XMP-exif:GPSLongitude',
+                'EXIF:GPSLongitude',
+            ])),
+            locationName: $this->string($this->first($raw, [
+                'XMP-iptcCore:Location',
+                'XMP:Location',
+                'IPTC:Sub-location',
+            ])),
+            keywords: $this->strings($this->first($raw, ['XMP-dc:Subject', 'XMP:Subject', 'IPTC:Keywords'])),
         );
     }
 
@@ -53,14 +92,16 @@ final class ExifToolMetadataParser
 
             [$group, $name] = str_contains($tag, ':') ? explode(':', $tag, 2) : ['Technical', $tag];
             $bucket = match (true) {
-                str_starts_with($group, 'EXIF') => 'exif',
+                str_starts_with($group, 'EXIF'),
+                preg_match('/^(?:IFD\\d+|ExifIFD|GPS|InteropIFD|SubIFD\\d*)$/', $group) === 1 => 'exif',
                 str_starts_with($group, 'IPTC') => 'iptc',
                 str_starts_with($group, 'XMP') => 'xmp',
                 str_starts_with($group, 'ICC') => 'icc',
                 default => 'technical',
             };
 
-            $grouped[$bucket][$name] = $value;
+            $key = array_key_exists($name, $grouped[$bucket]) ? $group.':'.$name : $name;
+            $grouped[$bucket][$key] = $value;
         }
 
         return $grouped;
