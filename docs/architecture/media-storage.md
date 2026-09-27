@@ -169,7 +169,7 @@ A successful retry may detect the same valid object and avoid duplicate database
 
 Superseded generations are not deleted immediately after regeneration.
 
-The accepted default retention policy in ADR-0013 keeps the newest three generations per media/kind and only makes an older generation eligible after its newest record is at least 400 days old. Both conditions must be true. The age is deliberately longer than the current one-year immutable public cache lifetime.
+The accepted default retention policy in ADR-0013 keeps the newest three generations per media/kind. Only after a generation falls outside that retained set does its 400-day cleanup grace begin. The grace is deliberately longer than the current one-year immutable public cache lifetime and is not measured from the old generation's creation date.
 
 `mediarama:media:cleanup-derivatives` is preview-only by default. `--execute` transactionally converts eligible derivative records into durable storage-cleanup jobs before physical deletion is attempted.
 
