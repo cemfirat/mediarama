@@ -279,25 +279,31 @@ SQL,
         bool $lock,
     ): array {
         $sql = <<<'SQL'
-WITH ranked_generations AS (
+WITH generation_times AS (
     SELECT
         media_id,
         kind,
         processing_version,
-        MAX(GREATEST(created_at, updated_at)) AS generation_touched_at,
-        DENSE_RANK() OVER (
-            PARTITION BY media_id, kind
-            ORDER BY processing_version DESC
-        ) AS generation_rank
+        MAX(GREATEST(created_at, updated_at)) AS generation_touched_at
     FROM media_derivatives
     GROUP BY media_id, kind, processing_version
 ),
+retention_windows AS (
+    SELECT
+        media_id,
+        kind,
+        processing_version,
+        LEAD(generation_touched_at, :keep_versions) OVER (
+            PARTITION BY media_id, kind
+            ORDER BY processing_version ASC
+        ) AS cleanup_eligible_since
+    FROM generation_times
+),
 candidate_generations AS (
     SELECT media_id, kind, processing_version
-    FROM ranked_generations
-    WHERE generation_rank > :keep_versions
-      AND generation_touched_at < :cutoff
-    ORDER BY generation_touched_at ASC, media_id ASC, kind ASC, processing_version ASC
+    FROM retention_windows
+    WHERE cleanup_eligible_since < :cutoff
+    ORDER BY cleanup_eligible_since ASC, media_id ASC, kind ASC, processing_version ASC
     LIMIT :generation_limit
 )
 SELECT
