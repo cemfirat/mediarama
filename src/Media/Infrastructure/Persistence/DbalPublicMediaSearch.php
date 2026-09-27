@@ -9,16 +9,23 @@ use Doctrine\DBAL\ParameterType;
 use Mediarama\Media\Application\PublicMediaSearch;
 use Mediarama\Media\Application\PublicMediaSearchCriteria;
 use Mediarama\Media\Application\PublicMediaSearchResult;
+use Mediarama\Platform\Application\PlatformSettingsRepository;
 use Symfony\Component\Uid\Uuid;
 
 final readonly class DbalPublicMediaSearch implements PublicMediaSearch
 {
-    public function __construct(private Connection $connection)
-    {
+    public function __construct(
+        private Connection $connection,
+        private PlatformSettingsRepository $settings,
+    ) {
     }
 
     public function search(PublicMediaSearchCriteria $criteria): array
     {
+        if (!$this->settings->current()->publicPublishingEnabled) {
+            return [];
+        }
+
         $where = [
             "m.deleted_at IS NULL",
             "m.processing_state = 'ready'",

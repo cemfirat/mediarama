@@ -119,6 +119,7 @@ Permissions use stable string keys such as `media.upload`.
 - `captured_at timestamptz nullable`
 - `processing_state varchar`
 - `moderation_state varchar`
+- `search_index_policy varchar` (`inherit | index | noindex`)
 - `metadata jsonb not null default '{}'`
 - `created_at timestamptz`
 - `updated_at timestamptz`
@@ -191,6 +192,7 @@ is retryable/idempotent.
 - `title text`
 - `description text nullable`
 - `visibility varchar`
+- `search_index_policy varchar` (`inherit | index | noindex`)
 - `cover_media_id uuid fk media_assets nullable`
 - `position integer default 0`
 - timestamps
@@ -223,6 +225,31 @@ Explicit resource-level policy.
 - timestamps
 
 Check constraint: exactly one principal column is non-null.
+
+## platform_settings
+
+Singleton site-level publication/discovery settings.
+
+- `id smallint primary key`, constrained to `1`
+- `deployment_profile varchar`
+- `public_publishing_enabled boolean`
+- `search_index_default varchar` (`index | noindex`)
+- timestamps
+
+`deployment_profile` records the last applied setup/operator preset. It is not an ACL and does not prove actual network isolation.
+
+For new empty installations the migration initializes **Private workspace** semantics:
+
+- public publishing off;
+- site search-index default `noindex`.
+
+When upgrading an existing database that already has effectively public Collections, the migration preserves that established behavior by initializing **Public publishing** with `index`.
+
+Resource policies stay separate:
+
+- Collection policy controls the Collection page;
+- MediaAsset policy controls the MediaAsset/public media identity;
+- neither policy can bypass access/publication gates.
 
 ## tags
 

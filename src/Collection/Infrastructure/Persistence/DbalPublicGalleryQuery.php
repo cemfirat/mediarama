@@ -9,36 +9,59 @@ use Doctrine\DBAL\ParameterType;
 use Mediarama\Collection\Application\PublicCollectionResult;
 use Mediarama\Collection\Application\PublicGalleryQuery;
 use Mediarama\Collection\Application\PublicMediaResult;
+use Mediarama\Platform\Application\PlatformSettingsRepository;
+use Mediarama\Platform\Domain\SearchIndexPolicy;
 use Symfony\Component\Uid\Uuid;
 
 final readonly class DbalPublicGalleryQuery implements PublicGalleryQuery
 {
-    public function __construct(private Connection $connection)
-    {
+    public function __construct(
+        private Connection $connection,
+        private PlatformSettingsRepository $settings,
+    ) {
     }
 
     public function rootCollections(): array
     {
+        if (!$this->settings->current()->publicPublishingEnabled) {
+            return [];
+        }
+
         return $this->collections(null);
     }
 
     public function collection(Uuid $id): ?PublicCollectionResult
     {
+        $settings = $this->settings->current();
+        if (!$settings->publicPublishingEnabled) {
+            return null;
+        }
+
         $row = $this->connection->fetchAssociative(
             $this->collectionSelect().' WHERE c.id = :id',
             ['id' => $id->toRfc4122()],
         );
 
-        return $row === false ? null : $this->mapCollection($row);
+        return $row === false
+            ? null
+            : $this->mapCollection($row, $settings->searchIndexDefault);
     }
 
     public function childCollections(Uuid $parentId): array
     {
+        if (!$this->settings->current()->publicPublishingEnabled) {
+            return [];
+        }
+
         return $this->collections($parentId);
     }
 
     public function media(Uuid $collectionId, int $limit = 120, int $offset = 0): array
     {
+        if (!$this->settings->current()->publicPublishingEnabled) {
+            return [];
+        }
+
         if ($limit < 1 || $limit > 240 || $offset < 0) {
             throw new \InvalidArgumentException('Invalid public gallery pagination.');
         }
@@ -112,6 +135,10 @@ SQL,
 
     public function canViewMedia(Uuid $mediaId): bool
     {
+        if (!$this->settings->current()->publicPublishingEnabled) {
+            return false;
+        }
+
         return (bool) $this->connection->fetchOne(
             <<<'SQL'
 SELECT EXISTS (
@@ -129,8 +156,44 @@ SQL,
         );
     }
 
+    public function isMediaIndexable(Uuid $mediaId): bool
+    {
+        $settings = $this->settings->current();
+        if (!$settings->publicPublishingEnabled) {
+            return false;
+        }
+
+        $policy = $this->connection->fetchOne(
+            <<<'SQL'
+SELECT m.search_index_policy
+FROM media_assets m
+WHERE m.id = :media
+  AND m.deleted_at IS NULL
+  AND m.processing_state = 'ready'
+  AND m.moderation_state = 'published'
+  AND EXISTS (
+      SELECT 1
+      FROM collection_media cm
+      JOIN effective_public_collections epc
+        ON epc.collection_id = cm.collection_id
+      WHERE cm.media_id = m.id
+  )
+SQL,
+            ['media' => $mediaId->toRfc4122()],
+        );
+
+        if ($policy === false) {
+            return false;
+        }
+
+        return SearchIndexPolicy::from((string) $policy)
+            ->resolve($settings->searchIndexDefault);
+    }
+
     private function collections(?Uuid $parentId): array
     {
+        $settings = $this->settings->current();
+
         $where = $parentId === null
             ? 'c.parent_id IS NULL'
             : 'c.parent_id = :parent';
@@ -141,7 +204,13 @@ SQL,
             $params,
         );
 
-        return array_map($this->mapCollection(...), $rows);
+        return array_map(
+            fn (array $row): PublicCollectionResult => $this->mapCollection(
+                $row,
+                $settings->searchIndexDefault,
+            ),
+            $rows,
+        );
     }
 
     private function collectionSelect(): string
@@ -151,6 +220,7 @@ SELECT
     c.id,
     c.title,
     c.description,
+    c.search_index_policy,
     (
         SELECT COUNT(*)
         FROM collection_media cm
@@ -195,8 +265,12 @@ LEFT JOIN LATERAL (
 SQL;
     }
 
-    private function mapCollection(array $row): PublicCollectionResult
-    {
+    private function mapCollection(
+        array $row,
+        SearchIndexPolicy $siteDefault,
+    ): PublicCollectionResult {
+        $policy = SearchIndexPolicy::from((string) $row['search_index_policy']);
+
         return new PublicCollectionResult(
             Uuid::fromString((string) $row['id']),
             (string) $row['title'],
@@ -205,6 +279,7 @@ SQL;
             (int) $row['child_count'],
             $row['cover_media_id'] !== null ? Uuid::fromString((string) $row['cover_media_id']) : null,
             $row['cover_thumbnail_version'] !== null ? (int) $row['cover_thumbnail_version'] : null,
+            $policy->resolve($siteDefault),
         );
     }
 }

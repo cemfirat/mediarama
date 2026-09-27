@@ -12,6 +12,7 @@ use Mediarama\Media\Domain\MediaType;
 use Mediarama\Media\Domain\ModerationState;
 use Mediarama\Media\Domain\ProcessingState;
 use Mediarama\Media\Domain\StorageObjectId;
+use Mediarama\Platform\Domain\SearchIndexPolicy;
 use Symfony\Component\Uid\Uuid;
 
 final readonly class DbalMediaAssetRepository implements MediaAssetRepository
@@ -29,13 +30,13 @@ INSERT INTO media_assets (
     byte_size, checksum_sha256, width, height, duration_ms, title, description, captured_at,
     processing_state, moderation_state, metadata, metadata_provenance, creator, copyright,
     camera_make, camera_model, lens, iso, aperture, exposure_time, focal_length,
-    latitude, longitude, location_name, created_at, updated_at
+    latitude, longitude, location_name, search_index_policy, created_at, updated_at
 ) VALUES (
     :id, :owner_id, :storage_disk, :storage_key, :original_filename, :mime_type, :media_type,
     :byte_size, :checksum_sha256, :width, :height, :duration_ms, :title, :description, :captured_at,
     :processing_state, :moderation_state, CAST(:metadata AS JSONB), CAST(:metadata_provenance AS JSONB),
     :creator, :copyright, :camera_make, :camera_model, :lens, :iso, :aperture, :exposure_time,
-    :focal_length, :latitude, :longitude, :location_name, :created_at, :updated_at
+    :focal_length, :latitude, :longitude, :location_name, :search_index_policy, :created_at, :updated_at
 )
 ON CONFLICT (id) DO UPDATE SET
     title = EXCLUDED.title,
@@ -57,6 +58,7 @@ ON CONFLICT (id) DO UPDATE SET
     latitude = EXCLUDED.latitude,
     longitude = EXCLUDED.longitude,
     location_name = EXCLUDED.location_name,
+    search_index_policy = EXCLUDED.search_index_policy,
     width = EXCLUDED.width,
     height = EXCLUDED.height,
     duration_ms = EXCLUDED.duration_ms,
@@ -94,6 +96,7 @@ SQL,
                 'latitude' => $media->latitude,
                 'longitude' => $media->longitude,
                 'location_name' => $media->locationName,
+                'search_index_policy' => $media->searchIndexPolicy->value,
                 'created_at' => $media->createdAt->format(DATE_ATOM),
                 'updated_at' => $media->updatedAt->format(DATE_ATOM),
             ],
@@ -144,6 +147,7 @@ SQL,
             latitude: $row['latitude'] !== null ? (float) $row['latitude'] : null,
             longitude: $row['longitude'] !== null ? (float) $row['longitude'] : null,
             locationName: $row['location_name'] !== null ? (string) $row['location_name'] : null,
+            searchIndexPolicy: SearchIndexPolicy::from((string) $row['search_index_policy']),
         );
     }
 }
