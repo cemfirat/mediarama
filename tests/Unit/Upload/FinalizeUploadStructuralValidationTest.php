@@ -7,6 +7,8 @@ namespace Mediarama\Tests\Unit\Upload;
 use DateTimeImmutable;
 use Mediarama\Media\Application\MediaAssetRepository;
 use Mediarama\Media\Application\MediaStorage;
+use Mediarama\Media\Application\MediaValidationRejected;
+use Mediarama\Media\Application\MediaValidationUnavailable;
 use Mediarama\Media\Application\StoredObject;
 use Mediarama\Media\Application\ValidateStoredMediaStructure;
 use Mediarama\Media\Domain\MediaAsset;
@@ -22,6 +24,7 @@ use Mediarama\Upload\Application\UploadFinalizationRepository;
 use Mediarama\Upload\Application\UploadProblem;
 use Mediarama\Upload\Application\UploadQuota;
 use Mediarama\Upload\Application\UploadSessionRepository;
+use Mediarama\Upload\Domain\UploadFailureStage;
 use Mediarama\Upload\Domain\UploadSession;
 use Mediarama\Upload\Domain\UploadStatus;
 use PHPUnit\Framework\TestCase;
@@ -31,10 +34,52 @@ use Symfony\Component\Uid\Uuid;
 
 final class FinalizeUploadStructuralValidationTest extends TestCase
 {
-    public function testStructuralFailureHappensBeforeFinalizationSideEffects(): void
+    public function testRejectedMediaIsTerminalAndReleasesQuotaBeforeSideEffects(): void
     {
+        $this->assertValidationFailure(
+            new MediaValidationRejected('Decoder rejected malformed media.'),
+            expectedCode: 'invalid_media',
+            expectedRetryable: false,
+            expectedTerminal: true,
+            expectedStatus: UploadStatus::Failed,
+            expectedQuotaReleases: 1,
+        );
+    }
+
+    public function testUnavailableValidationIsRetryableAndKeepsQuotaReservation(): void
+    {
+        $this->assertValidationFailure(
+            new MediaValidationUnavailable('Validation process timed out.'),
+            expectedCode: 'upload_temporarily_unavailable',
+            expectedRetryable: true,
+            expectedTerminal: false,
+            expectedStatus: UploadStatus::Uploaded,
+            expectedQuotaReleases: 0,
+        );
+    }
+
+    public function testUnexpectedValidationRuntimeFailureFailsSafeAsRetryable(): void
+    {
+        $this->assertValidationFailure(
+            new \RuntimeException('Unexpected validator transport failure.'),
+            expectedCode: 'upload_temporarily_unavailable',
+            expectedRetryable: true,
+            expectedTerminal: false,
+            expectedStatus: UploadStatus::Uploaded,
+            expectedQuotaReleases: 0,
+        );
+    }
+
+    private function assertValidationFailure(
+        \Throwable $validationFailure,
+        string $expectedCode,
+        bool $expectedRetryable,
+        bool $expectedTerminal,
+        UploadStatus $expectedStatus,
+        int $expectedQuotaReleases,
+    ): void {
         $userId = Uuid::v7();
-        $session = UploadSession::create($userId, null, 'broken.jpg', 123, 'image/jpeg');
+        $session = UploadSession::create($userId, null, 'fixture.jpg', 123, 'image/jpeg');
         $session->markUploaded();
 
         $sessions = new class($session) implements UploadSessionRepository {
@@ -106,7 +151,7 @@ final class FinalizeUploadStructuralValidationTest extends TestCase
             public function promote(StorageObjectId $temporary, StorageObjectId $permanent): StoredObject
             {
                 ++$this->promotions;
-                throw new \LogicException('Promotion must not happen after structural validation failure.');
+                throw new \LogicException('Promotion must not happen after validation failure.');
             }
 
             public function publicUrl(StorageObjectId $id): ?string
@@ -123,17 +168,26 @@ final class FinalizeUploadStructuralValidationTest extends TestCase
         $inspector = new class implements ContentInspector {
             public function inspect(StorageObjectId $object): InspectedContent
             {
-                return new InspectedContent('image/jpeg', MediaType::Image, str_repeat('a', 64), 123);
+                return new InspectedContent(
+                    'image/jpeg',
+                    MediaType::Image,
+                    str_repeat('a', 64),
+                    123,
+                );
             }
         };
 
-        $structure = new class implements ValidateStoredMediaStructure {
+        $structure = new class($validationFailure) implements ValidateStoredMediaStructure {
             public int $calls = 0;
+
+            public function __construct(private \Throwable $failure)
+            {
+            }
 
             public function __invoke(StorageObjectId $object, MediaType $mediaType): void
             {
                 ++$this->calls;
-                throw new \DomainException('Uploaded image failed structural validation.');
+                throw $this->failure;
             }
         };
 
@@ -219,23 +273,25 @@ final class FinalizeUploadStructuralValidationTest extends TestCase
 
         try {
             $finalize($session->id, $userId);
-            self::fail('Expected structural validation to reject the upload.');
+            self::fail('Expected structural validation to stop finalization.');
         } catch (UploadProblem $error) {
-            self::assertSame('invalid_media', $error->publicCode);
-            self::assertFalse($error->retryable);
-            self::assertTrue($error->terminal);
+            self::assertSame($expectedCode, $error->publicCode);
+            self::assertSame($expectedRetryable, $error->retryable);
+            self::assertSame($expectedTerminal, $error->terminal);
+            self::assertSame(UploadFailureStage::Finalization, $error->failureStage);
+            self::assertSame($validationFailure, $error->getPrevious());
         }
 
         self::assertSame(1, $structure->calls);
-        self::assertSame(UploadStatus::Failed, $session->status);
-        self::assertSame('invalid_media', $session->lastFailure?->code);
-        self::assertFalse($session->lastFailure?->retryable ?? true);
+        self::assertSame($expectedStatus, $session->status);
+        self::assertSame($expectedCode, $session->lastFailure?->code);
+        self::assertSame($expectedRetryable, $session->lastFailure?->retryable);
         self::assertSame(1, $sessions->saves);
         self::assertSame(0, $storage->promotions);
         self::assertSame(0, $media->saves);
         self::assertSame(0, $finalizations->remembers);
         self::assertSame(0, $quota->commits);
-        self::assertSame(1, $quota->releases);
+        self::assertSame($expectedQuotaReleases, $quota->releases);
         self::assertSame(1, $criticalSection->calls);
         self::assertSame(0, $bus->dispatches);
     }

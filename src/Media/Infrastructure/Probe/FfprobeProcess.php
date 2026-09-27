@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace Mediarama\Media\Infrastructure\Probe;
 
 use JsonException;
+use Mediarama\Media\Infrastructure\Process\MediaToolRejected;
+use Mediarama\Media\Infrastructure\Process\MediaToolUnavailable;
+use Symfony\Component\Process\Exception\ExceptionInterface as ProcessException;
 use Symfony\Component\Process\Process;
 
 final readonly class FfprobeProcess
@@ -39,29 +42,46 @@ final readonly class FfprobeProcess
             $path,
         ]);
         $process->setTimeout($this->timeoutSeconds);
-        $process->run();
+
+        try {
+            $process->run();
+        } catch (ProcessException $error) {
+            throw new MediaToolUnavailable(
+                'FFprobe process could not complete.',
+                0,
+                $error,
+            );
+        }
 
         if (!$process->isSuccessful()) {
             $details = trim($process->getErrorOutput());
             if ($details === '') {
                 $details = trim($process->getOutput());
             }
+            $details = $details === '' ? '' : substr($details, 0, 2000);
+            $exitCode = $process->getExitCode();
 
-            throw new \RuntimeException(sprintf(
+            $message = sprintf(
                 'FFprobe failed with exit code %s%s',
-                (string) $process->getExitCode(),
-                $details === '' ? '.' : ': '.substr($details, 0, 2000),
-            ));
+                $exitCode === null ? 'unknown' : (string) $exitCode,
+                $details === '' ? '.' : ': '.$details,
+            );
+
+            if ($exitCode === null || in_array($exitCode, [126, 127], true)) {
+                throw new MediaToolUnavailable($message);
+            }
+
+            throw new MediaToolRejected($message);
         }
 
         try {
             $decoded = json_decode($process->getOutput(), true, flags: JSON_THROW_ON_ERROR);
         } catch (JsonException $error) {
-            throw new \RuntimeException('FFprobe returned invalid JSON.', 0, $error);
+            throw new MediaToolUnavailable('FFprobe returned invalid JSON.', 0, $error);
         }
 
         if (!is_array($decoded) || !isset($decoded['streams']) || !is_array($decoded['streams'])) {
-            throw new \RuntimeException('FFprobe response does not contain a streams array.');
+            throw new MediaToolUnavailable('FFprobe response does not contain a streams array.');
         }
 
         $types = [];

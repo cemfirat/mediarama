@@ -52,8 +52,12 @@ PHP
 
 APP_ENV=prod APP_DEBUG=0 php -S 127.0.0.1:8082 -t public public/index.php >/tmp/mediarama-upload-failure-http.log 2>&1 &
 SERVER_PID=$!
+TOOL_SERVER_PID=""
 
 cleanup() {
+    if [ -n "$TOOL_SERVER_PID" ]; then
+        kill "$TOOL_SERVER_PID" 2>/dev/null || true
+    fi
     kill "$SERVER_PID" 2>/dev/null || true
 
     php <<'PHP' || true
@@ -362,6 +366,130 @@ if (is_file($temporary)) {
 }
 
 echo "OK abandon removes session, reservation and temporary file".PHP_EOL;
+PHP
+
+# A valid image must remain retryable when the validation tool itself is unavailable.
+convert -size 4x4 xc:white /tmp/failure-tool-unavailable.jpg
+TOOL_SIZE="$(wc -c < /tmp/failure-tool-unavailable.jpg | tr -d ' ')"
+TOOL_SHA="$(sha256sum /tmp/failure-tool-unavailable.jpg | awk '{print $1}')"
+
+expect_status 201 "$(create_upload "$USER_JAR" "$USER_CSRF" tool-unavailable.jpg "$TOOL_SIZE" image/jpeg /tmp/tool-unavailable-create.json)" "validation outage session created"
+TOOL_FAILURE_ID="$(extract_id /tmp/tool-unavailable-create.json)"
+expect_status 202 "$(put_chunk "$USER_JAR" "$USER_CSRF" "$TOOL_FAILURE_ID" "$TOOL_SHA" /tmp/failure-tool-unavailable.jpg /tmp/tool-unavailable-chunk.json)" "validation outage chunk accepted"
+expect_status 200 "$(post_upload_action "$USER_JAR" "$USER_CSRF" "$TOOL_FAILURE_ID" complete /tmp/tool-unavailable-complete.json)" "validation outage upload assembled"
+
+TOOL_BASE_URL="http://127.0.0.1:8084"
+MISSING_IDENTIFY="/tmp/mediarama-intentionally-missing-identify"
+rm -f "$MISSING_IDENTIFY"
+IMAGEMAGICK_IDENTIFY_BINARY="$MISSING_IDENTIFY" APP_ENV=prod APP_DEBUG=0 \
+    php -S 127.0.0.1:8084 -t public public/index.php \
+    >/tmp/mediarama-upload-tool-unavailable-http.log 2>&1 &
+TOOL_SERVER_PID=$!
+
+for _ in $(seq 1 50); do
+    if curl --fail --silent "$TOOL_BASE_URL/login" >/dev/null 2>&1; then
+        break
+    fi
+    sleep 0.2
+done
+
+TOOL_FINALIZE_STATUS="$(curl --silent --show-error \
+    --request POST \
+    --cookie "$USER_JAR" \
+    --cookie-jar "$USER_JAR" \
+    --header "X-CSRF-Token: $USER_CSRF" \
+    --output /tmp/tool-unavailable-finalize.json \
+    --write-out '%{http_code}' \
+    "$TOOL_BASE_URL/api/uploads/$TOOL_FAILURE_ID/finalize")"
+expect_status 503 "$TOOL_FINALIZE_STATUS" "missing ImageMagick validation tool is retryable"
+
+php -r '
+  $data = json_decode((string) file_get_contents($argv[1]), true, flags: JSON_THROW_ON_ERROR);
+  $expected = [
+      "error" => "upload_temporarily_unavailable",
+      "retryable" => true,
+      "failure_stage" => "finalization",
+  ];
+  if ($data !== $expected) {
+      fwrite(STDERR, "Unexpected validation-tool outage payload: ".json_encode($data).PHP_EOL);
+      exit(1);
+  }
+  echo "OK validation-tool outage response is sanitized".PHP_EOL;
+' /tmp/tool-unavailable-finalize.json
+
+expect_status 200 "$(get_upload "$USER_JAR" "$TOOL_FAILURE_ID" /tmp/tool-unavailable-status.json)" "validation outage state remains observable"
+php -r '
+  $data = json_decode((string) file_get_contents($argv[1]), true, flags: JSON_THROW_ON_ERROR);
+  $failure = $data["failure"] ?? null;
+  if (($data["status"] ?? null) !== "uploaded"
+      || !is_array($failure)
+      || ($failure["code"] ?? null) !== "upload_temporarily_unavailable"
+      || ($failure["stage"] ?? null) !== "finalization"
+      || ($failure["retryable"] ?? null) !== true) {
+      fwrite(STDERR, "Validation outage did not remain retryable: ".json_encode($data).PHP_EOL);
+      exit(1);
+  }
+  echo "OK validation outage keeps UploadSession retryable".PHP_EOL;
+' /tmp/tool-unavailable-status.json
+
+TOOL_FAILURE_ID="$TOOL_FAILURE_ID" MEDIA_STORAGE_PATH="$MEDIA_STORAGE_PATH" php <<'PHP'
+<?php
+require 'vendor/autoload.php';
+
+$dsn = new Doctrine\DBAL\Tools\DsnParser([
+    'postgresql' => 'pdo_pgsql',
+    'postgres' => 'pdo_pgsql',
+]);
+$db = Doctrine\DBAL\DriverManager::getConnection($dsn->parse((string) getenv('DATABASE_URL')));
+$id = (string) getenv('TOOL_FAILURE_ID');
+
+if ((int) $db->fetchOne(
+    'SELECT COUNT(*) FROM upload_quota_reservations WHERE upload_session_id = :id',
+    ['id' => $id],
+) !== 1) {
+    throw new RuntimeException('Retryable validation outage released the quota reservation.');
+}
+
+if ((int) $db->fetchOne(
+    'SELECT COUNT(*) FROM media_assets WHERE id = :id',
+    ['id' => $id],
+) !== 0) {
+    throw new RuntimeException('Retryable validation outage created a MediaAsset.');
+}
+
+$temporary = rtrim((string) getenv('MEDIA_STORAGE_PATH'), '/').'/temporary/'.$id.'/source';
+$permanent = rtrim((string) getenv('MEDIA_STORAGE_PATH'), '/').'/originals/'.$id.'/source';
+if (!is_file($temporary) || is_file($permanent)) {
+    throw new RuntimeException('Retryable validation outage changed immutable-storage state.');
+}
+
+echo "OK validation outage keeps reservation and temporary object without promotion".PHP_EOL;
+PHP
+
+kill "$TOOL_SERVER_PID" 2>/dev/null || true
+wait "$TOOL_SERVER_PID" 2>/dev/null || true
+TOOL_SERVER_PID=""
+
+expect_status 204 "$(delete_upload "$USER_JAR" "$USER_CSRF" "$TOOL_FAILURE_ID" /tmp/tool-unavailable-abandon.json)" "retryable validation outage can be abandoned cleanly"
+
+TOOL_FAILURE_ID="$TOOL_FAILURE_ID" php <<'PHP'
+<?php
+require 'vendor/autoload.php';
+
+$dsn = new Doctrine\DBAL\Tools\DsnParser([
+    'postgresql' => 'pdo_pgsql',
+    'postgres' => 'pdo_pgsql',
+]);
+$db = Doctrine\DBAL\DriverManager::getConnection($dsn->parse((string) getenv('DATABASE_URL')));
+$id = (string) getenv('TOOL_FAILURE_ID');
+
+if ((int) $db->fetchOne(
+    'SELECT COUNT(*) FROM upload_quota_reservations WHERE upload_session_id = :id',
+    ['id' => $id],
+) !== 0) {
+    throw new RuntimeException('Abandoned validation-outage reservation survived cleanup.');
+}
+echo "OK abandoning retryable validation outage releases reservation".PHP_EOL;
 PHP
 
 # Simulate the crash window after finalization claim but before promotion.
