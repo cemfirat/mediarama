@@ -39,6 +39,7 @@ function benchmarkOptions(): array
         'cwebp-binary::',
         'corpus-id::',
         'corpus-revision::',
+        'retain-dir::',
         'help',
     ]);
 
@@ -65,6 +66,7 @@ Optional:
   --cwebp-binary=cwebp
   --corpus-id=imazen/codec-corpus:gb82
   --corpus-revision=<pinned source commit>
+  --retain-dir=/path/to/review-output
 
 The benchmark does not modify Mediarama production profiles. It creates temporary
 lossless references, probes each requested encoder, records bytes/encode time and
@@ -410,6 +412,11 @@ try {
             throw new InvalidArgumentException('Benchmark '.$label.' contains invalid control characters or is too long.');
         }
     }
+
+    $retainDirectory = isset($options['retain-dir']) ? trim((string) $options['retain-dir']) : '';
+    if ($retainDirectory !== '' && str_contains($retainDirectory, "\0")) {
+        throw new InvalidArgumentException('Benchmark retain directory contains a NUL byte.');
+    }
 } catch (InvalidArgumentException $error) {
     benchmarkFail($error->getMessage());
 }
@@ -445,6 +452,13 @@ $webp = new CwebpEncoder(
 $sources = benchmarkSources($inputDirectory, $limit);
 if ($sources === []) {
     benchmarkFail('No supported image files were found in the benchmark input directory.');
+}
+
+if ($retainDirectory !== '') {
+    if (!is_dir($retainDirectory) && !mkdir($retainDirectory, 0770, true) && !is_dir($retainDirectory)) {
+        benchmarkFail('Unable to create benchmark retain directory.');
+    }
+    $retainDirectory = realpath($retainDirectory) ?: $retainDirectory;
 }
 
 $temporaryRoot = sys_get_temp_dir().'/mediarama-format-benchmark-'.bin2hex(random_bytes(8));
@@ -578,6 +592,18 @@ try {
 
             $referenceInfo = benchmarkIdentify($imageMagick, $reference);
 
+            if ($retainDirectory !== '') {
+                $retainedReference = sprintf(
+                    '%s/%s-%s-reference.png',
+                    $retainDirectory,
+                    $sourceId,
+                    $profileName,
+                );
+                if (!copy($reference, $retainedReference)) {
+                    throw new RuntimeException('Unable to retain benchmark reference image.');
+                }
+            }
+
             foreach ($formats as $format) {
                 if (!($capabilities[$format]['supported'] ?? false)) {
                     $report['samples'][] = [
@@ -623,6 +649,21 @@ try {
                         $bytes = filesize($candidate);
                         if ($bytes === false || $bytes < 1) {
                             throw new RuntimeException('Encoder produced an empty candidate.');
+                        }
+
+                        if ($retainDirectory !== '') {
+                            $retainedCandidate = sprintf(
+                                '%s/%s-%s-%s-q%d.%s',
+                                $retainDirectory,
+                                $sourceId,
+                                $profileName,
+                                $format,
+                                $quality,
+                                $extension,
+                            );
+                            if (!copy($candidate, $retainedCandidate)) {
+                                throw new RuntimeException('Unable to retain benchmark candidate image.');
+                            }
                         }
 
                         $sample = [
