@@ -81,6 +81,9 @@ Application-level rate limiting only runs after Symfony/PHP has booted. It is no
 - `/login` is public and non-indexable.
 - `/api/uploads...` requires `ROLE_USER` in production.
 - `/api/library/media` requires `ROLE_USER` in production and returns actor-authorized rich library metadata.
+- `/admin...` requires `ROLE_USER` as the coarse production HTTP boundary.
+- privileged system-setting reads/writes additionally require the Mediarama `system.admin` permission through the application authorization policy.
+- browser-based privileged settings mutations require CSRF validation.
 - anonymous protected API requests receive JSON `401 authentication_required`.
 - protected browser requests are redirected to the login page.
 - public gallery and public search routes stay anonymous subject to their own visibility/privacy rules.
@@ -106,3 +109,7 @@ CI starts the actual application with `APP_ENV=prod` against PostgreSQL and veri
 - CSRF-protected logout invalidates the session
 - changing an authenticated password invalidates the existing session
 - changing an authenticated account from active to inactive invalidates further authenticated API access
+- anonymous admin browser routes are redirected to authentication
+- an ordinary authenticated user without `system.admin` is denied the current system-administration dashboard and settings
+- a user with active `system.admin` group permission can change publication settings
+- missing/invalid CSRF is rejected for browser settings mutation

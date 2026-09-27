@@ -204,6 +204,9 @@ jobs:
       - name: Verify collection access policy
         run: php tests/Integration/Collection/access-policy.php
 
+      - name: Verify system administration permission policy
+        run: php tests/Integration/Security/system-administration-policy.php
+
       - name: Verify authenticated library media search
         run: php tests/Integration/Media/library-search.php
 
@@ -212,6 +215,9 @@ jobs:
 
       - name: Verify production authentication boundary
         run: tests/Integration/Security/http-authentication.sh
+
+      - name: Verify admin authorization and publication settings
+        run: bash tests/Integration/Security/http-admin-authorization.sh
 
       - name: Verify upload failure lifecycle
         run: tests/Integration/Upload/http-failure-lifecycle.sh

@@ -210,6 +210,9 @@ services:
     Mediarama\Security\Application\CurrentUser:
         alias: Mediarama\Security\Infrastructure\Http\RequestCurrentUser
 
+    Mediarama\Security\Application\SystemAdministrationPolicy:
+        alias: Mediarama\Security\Infrastructure\Authorization\DbalSystemAdministrationPolicy
+
     Mediarama\Security\Infrastructure\Http\RequestCurrentUser:
         arguments:
             $appEnvironment: '%kernel.environment%'
