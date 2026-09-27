@@ -12,4 +12,6 @@ interface UploadSessionRepository
     public function save(UploadSession $session): void;
 
     public function get(Uuid $id): UploadSession;
+
+    public function delete(UploadSession $session): void;
 }

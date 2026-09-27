@@ -220,6 +220,22 @@ post_action() {
         "$BASE_URL/api/uploads/$id/$action"
 }
 
+delete_upload() {
+    local jar="$1"
+    local csrf="$2"
+    local id="$3"
+    local output="$4"
+
+    curl --silent --show-error \
+        --request DELETE \
+        --cookie "$jar" \
+        --cookie-jar "$jar" \
+        --output "$output" \
+        --write-out '%{http_code}' \
+        --header "X-CSRF-Token: $csrf" \
+        "$BASE_URL/api/uploads/$id"
+}
+
 get_status() {
     local jar="$1"
     local id="$2"
@@ -329,6 +345,8 @@ assert_status_failure "$WORK/retry-status-failed.json" uploading upload_chunk_ch
 expect_status 202 "$(put_chunk "$JAR_A" "$CSRF_A" "$RETRY_ID" 0 0 "$WORK/retry.bin" "$RIGHT_HASH" "$WORK/retry-correct.json")" "chunk checksum retry succeeds"
 expect_status 200 "$(get_status "$JAR_A" "$RETRY_ID" "$WORK/retry-status-clear.json")" "retryable failure clears"
 assert_status_clear "$WORK/retry-status-clear.json" uploading
+expect_status 409 "$(delete_upload "$JAR_A" "$CSRF_A" "$RETRY_ID" "$WORK/retry-delete.json")" "active acquisition cannot be race-unsafely abandoned"
+assert_problem "$WORK/retry-delete.json" upload_invalid_state false -
 
 # 2. Incomplete assembly is retryable; sending the missing chunk clears it.
 printf 'abc' > "$WORK/part-a.bin"
@@ -347,6 +365,21 @@ expect_status 202 "$(put_chunk "$JAR_A" "$CSRF_A" "$INCOMPLETE_ID" 1 3 "$WORK/pa
 expect_status 200 "$(get_status "$JAR_A" "$INCOMPLETE_ID" "$WORK/incomplete-cleared.json")" "assembly failure clears after chunk retry"
 assert_status_clear "$WORK/incomplete-cleared.json" uploading
 expect_status 200 "$(post_action "$JAR_A" "$CSRF_A" "$INCOMPLETE_ID" complete "$WORK/incomplete-complete.json")" "completed retryable assembly"
+expect_status 204 "$(delete_upload "$JAR_A" "$CSRF_A" "$INCOMPLETE_ID" "$WORK/incomplete-delete.json")" "uploaded session can be explicitly abandoned"
+expect_status 404 "$(get_status "$JAR_A" "$INCOMPLETE_ID" "$WORK/incomplete-after-delete.json")" "abandoned uploaded session is gone"
+assert_problem "$WORK/incomplete-after-delete.json" upload_not_found false -
+
+INCOMPLETE_ID="$INCOMPLETE_ID" php <<'PHP'
+<?php
+require 'vendor/autoload.php';
+$dsn = new Doctrine\DBAL\Tools\DsnParser(['postgresql' => 'pdo_pgsql', 'postgres' => 'pdo_pgsql']);
+$db = Doctrine\DBAL\DriverManager::getConnection($dsn->parse((string) getenv('DATABASE_URL')));
+$id = (string) getenv('INCOMPLETE_ID');
+if ((int) $db->fetchOne('SELECT COUNT(*) FROM upload_quota_reservations WHERE upload_session_id = :id', ['id' => $id]) !== 0) {
+    fwrite(STDERR, "Abandonment did not release uploaded-session quota.\n");
+    exit(1);
+}
+PHP
 
 # 3. MIME-looking but decoder-invalid image is terminal and releases quota.
 "$IMAGEMAGICK_BINARY" -size 32x32 xc:white "$WORK/valid.png"
@@ -391,6 +424,14 @@ expect_status 404 "$(get_status "$JAR_B" "$BAD_ID" "$WORK/peer-status.json")" "o
 assert_problem "$WORK/peer-status.json" upload_not_found false -
 if grep -q -F 'upload_media_invalid' "$WORK/peer-status.json"; then
     echo "Other user response leaked owner failure details."
+    exit 1
+fi
+
+expect_status 204 "$(delete_upload "$JAR_A" "$CSRF_A" "$BAD_ID" "$WORK/bad-delete.json")" "terminal failed session can be abandoned"
+expect_status 404 "$(get_status "$JAR_A" "$BAD_ID" "$WORK/bad-after-delete.json")" "abandoned failed session is gone"
+assert_problem "$WORK/bad-after-delete.json" upload_not_found false -
+if [ -e "$MEDIA_STORAGE_PATH/temporary/$BAD_ID/source" ] || [ -e "$MEDIA_STORAGE_PATH/originals/$BAD_ID/source" ]; then
+    echo "Abandonment left upload media artifacts behind."
     exit 1
 fi
 

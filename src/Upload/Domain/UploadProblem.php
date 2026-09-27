@@ -83,6 +83,17 @@ final class UploadProblem extends \RuntimeException
         );
     }
 
+    public static function abandonUnavailable(?\Throwable $previous = null): self
+    {
+        return new self(
+            'upload_abandon_unavailable',
+            'The upload cannot be abandoned right now. Retry the request.',
+            true,
+            null,
+            $previous,
+        );
+    }
+
     public function stage(): ?UploadFailureStage
     {
         return $this->failureCode?->stage();

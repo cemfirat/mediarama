@@ -56,6 +56,11 @@ final class FinalizeUploadStructuralValidationTest extends TestCase
             {
                 return $this->session;
             }
+
+            public function delete(UploadSession $session): void
+            {
+                throw new \LogicException('Delete is not expected in finalization validation.');
+            }
         };
 
         $media = new class implements MediaAssetRepository {

@@ -85,6 +85,7 @@ final readonly class UploadExceptionSubscriber
             'upload_destination_forbidden' => Response::HTTP_FORBIDDEN,
             'upload_asset_size_invalid' => Response::HTTP_UNPROCESSABLE_ENTITY,
             'upload_chunk_metadata_invalid' => Response::HTTP_BAD_REQUEST,
+            'upload_abandon_unavailable' => Response::HTTP_SERVICE_UNAVAILABLE,
             default => Response::HTTP_INTERNAL_SERVER_ERROR,
         };
     }

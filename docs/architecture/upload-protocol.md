@@ -41,7 +41,7 @@ After the MIME/type allow policy and expected-size check pass, Mediarama validat
 - audio must contain an audio stream recognized by FFprobe;
 - video must contain a video stream recognized by FFprobe.
 
-FFprobe runs through an argv-only process with a parent timeout plus bounded probe size and analyze duration. With the current local-storage adapter the validator probes the already assembled temporary file in place; it does not duplicate a potentially multi-gigabyte upload merely to validate it. A structural validation failure leaves the upload session in `uploaded`, keeps the temporary object retryable, and prevents immutable-original promotion, `MediaAsset` creation and background dispatch.
+FFprobe runs through an argv-only process with a parent timeout plus bounded probe size and analyze duration. With the current local-storage adapter the validator probes the already assembled temporary file in place; it does not duplicate a potentially multi-gigabyte upload merely to validate it. A decoder/probe rejection is terminal and records `failed`; temporary media remains available until explicit abandonment or expiry cleanup. Tool timeout/unavailability is retryable and keeps the current session state and quota reservation.
 
 
 ## Finalization idempotency and crash recovery
@@ -79,6 +79,14 @@ Finalization distinguishes decoder/probe rejection from tool availability at the
 Unexpected database or Doctrine-Messenger interruption inside a finalization critical section is surfaced as retryable `upload_finalization_interrupted`. If the session has already reached `finalizing`, that state is preserved for the deterministic recovery path. Failed-session expiry cleanup removes both temporary data and a deterministic permanent original that may have been promoted before an integrity failure, then deletes the session. Explicit quota release is idempotent, so the later FK cascade cannot double-release quota.
 
 Downstream MediaAsset processing has its own `processing_state` and remains a separate failure domain.
+
+## Abandonment
+
+`DELETE /api/uploads/{id}` is an authenticated, CSRF-protected explicit abandonment path for sessions in `uploaded` or `failed`.
+
+The operation takes the same PostgreSQL session-row lock used by finalization, verifies ownership and absence of a committed finalization mapping, removes chunks/temporary data plus any deterministic orphan original, and finally deletes the UploadSession. The reservation FK provides the final idempotent quota cleanup.
+
+`created`, `uploading`, `finalizing` and `completed` deliberately return `409 upload_invalid_state`. Active acquisition is not deleted yet because chunk writes do not currently share this row-lock boundary; allowing it would permit a racing chunk request to recreate a deleted session through the repository upsert. Active acquisition is retried or left for expiry cleanup instead.
 
 ## Resume
 

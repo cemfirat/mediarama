@@ -77,4 +77,12 @@ SQL,
 
         return DbalUploadSessionMapper::fromRow($row);
     }
+
+    public function delete(UploadSession $session): void
+    {
+        $this->connection->delete(
+            'upload_sessions',
+            ['id' => $session->id->toRfc4122()],
+        );
+    }
 }
