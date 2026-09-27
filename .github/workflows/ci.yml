@@ -160,6 +160,12 @@ jobs:
       - name: Show migration status
         run: php bin/console doctrine:migrations:status
 
+      - name: Validate production security container
+        run: APP_ENV=prod APP_DEBUG=0 php bin/console lint:container
+
+      - name: Verify production authentication boundary
+        run: tests/Integration/Security/http-authentication.sh
+
       - name: Run unit tests
         run: vendor/bin/phpunit
 

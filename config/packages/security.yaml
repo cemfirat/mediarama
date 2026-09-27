@@ -1,11 +1,12 @@
-# Baseline SecurityBundle configuration.
-# This does not provide Mediarama production authentication; that is tracked in #33.
 security:
+    expose_security_errors: none
+
     password_hashers:
         Symfony\Component\Security\Core\User\PasswordAuthenticatedUserInterface: 'auto'
 
     providers:
-        users_in_memory: { memory: null }
+        mediarama_users:
+            id: Mediarama\Security\Infrastructure\Authentication\DbalSecurityUserProvider
 
     firewalls:
         dev:
@@ -13,9 +14,24 @@ security:
             security: false
         main:
             lazy: true
-            provider: users_in_memory
+            provider: mediarama_users
+            user_checker: Mediarama\Security\Infrastructure\Authentication\ActiveUserChecker
+            entry_point: Mediarama\Security\Infrastructure\Http\MediaramaAuthenticationEntryPoint
+            form_login:
+                login_path: app_login
+                check_path: app_login
+                enable_csrf: true
+            logout:
+                path: /logout
+                target: home
+                enable_csrf: true
 
-    access_control: []
+when@prod:
+    security:
+        access_control:
+            - { path: ^/login$, roles: PUBLIC_ACCESS }
+            - { path: ^/api/auth/csrf$, roles: ROLE_USER }
+            - { path: ^/api/uploads, roles: ROLE_USER }
 
 when@test:
     security:

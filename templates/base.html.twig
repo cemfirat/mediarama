@@ -17,6 +17,11 @@
                 <div class="uk-navbar-right">
                     <ul class="uk-navbar-nav uk-visible@m">
                         <li><a href="{{ path('public_collections') }}">Collections</a></li>
+                        {% if app.user %}
+                            <li><a href="{{ logout_path('main') }}">Sign out</a></li>
+                        {% else %}
+                            <li><a href="{{ path('app_login') }}">Sign in</a></li>
+                        {% endif %}
                     </ul>
                     <button class="uk-navbar-toggle uk-hidden@m" type="button" uk-toggle="target: #mobile-navigation" aria-label="Open navigation">
                         <span uk-navbar-toggle-icon></span>
@@ -31,6 +36,11 @@
             <button class="uk-offcanvas-close" type="button" uk-close aria-label="Close navigation"></button>
             <ul class="uk-nav uk-nav-default">
                 <li><a href="{{ path('public_collections') }}">Collections</a></li>
+                {% if app.user %}
+                    <li><a href="{{ logout_path('main') }}">Sign out</a></li>
+                {% else %}
+                    <li><a href="{{ path('app_login') }}">Sign in</a></li>
+                {% endif %}
             </ul>
         </div>
     </div>

@@ -19,6 +19,7 @@ services:
             - '../src/Upload/Application/InspectedContent.php'
             - '../src/Export/Application/MetadataExportPolicy.php'
             - '../src/Security/Application/AuthenticatedUser.php'
+            - '../src/Security/Infrastructure/Authentication/SecurityUser.php'
 
     Mediarama\Media\Infrastructure\Metadata\ExifToolProcess:
         arguments:
@@ -170,6 +171,10 @@ services:
 
     Mediarama\Security\Application\CurrentUser:
         alias: Mediarama\Security\Infrastructure\Http\RequestCurrentUser
+
+    Mediarama\Security\Infrastructure\Http\RequestCurrentUser:
+        arguments:
+            $appEnvironment: '%kernel.environment%'
 
     Mediarama\Security\Infrastructure\Http\DevelopmentActorSubscriber:
         arguments:
