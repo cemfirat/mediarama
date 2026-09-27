@@ -29,7 +29,7 @@ final class Collection
         }
     }
 
-    public static function create(?Uuid $ownerId, string $title, Visibility $visibility = Visibility::Public): self
+    public static function create(?Uuid $ownerId, string $title, Visibility $visibility = Visibility::Private): self
     {
         $now = new DateTimeImmutable();
 
