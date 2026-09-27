@@ -170,6 +170,9 @@ jobs:
       - name: Verify upload failure lifecycle
         run: tests/Integration/Upload/http-failure-lifecycle.sh
 
+      - name: Verify successful authenticated upload ingestion
+        run: tests/Integration/Upload/http-successful-ingestion.sh
+
       - name: Run unit tests
         run: vendor/bin/phpunit
 
@@ -178,6 +181,9 @@ jobs:
 
       - name: Verify concurrent upload finalization and crash recovery
         run: php tests/Integration/Upload/finalize-concurrency.php
+
+      - name: Verify successful authenticated HTTP upload E2E
+        run: tests/Integration/Upload/http-success-e2e.sh
 
       - name: Prepare Coppermine 1.6 fixture
         run: |
