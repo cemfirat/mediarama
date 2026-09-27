@@ -154,6 +154,27 @@ Unique logical derivative:
 
 `(media_id, kind, profile, processing_version)`
 
+## storage_cleanup_jobs
+
+Durable operational debt for physical object deletion after relational state changes.
+
+- `id uuid primary key`
+- `storage_disk varchar`
+- `storage_key text`
+- `reason varchar` (`superseded_derivative` / `orphaned_derivative` initially)
+- `metadata jsonb` with non-sensitive reconciliation context
+- `status varchar` (`pending` / `processing`)
+- `attempts integer >= 0`
+- `claimed_at timestamptz nullable`
+- `last_error text nullable` containing only stable sanitized failure codes
+- timestamps
+
+Unique physical object:
+
+`(storage_disk, storage_key)`
+
+The queue intentionally has no foreign key to `media_derivatives`: superseded derivative rows are removed transactionally when cleanup debt is created, and the queue must survive until the physical object is confirmed absent.
+
 ## collections
 
 - `id uuid primary key`
