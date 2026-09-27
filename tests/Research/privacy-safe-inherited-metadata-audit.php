@@ -164,6 +164,12 @@ $convert = getenv('IMAGEMAGICK_BINARY') ?: 'convert';
 $identify = getenv('IMAGEMAGICK_IDENTIFY_BINARY') ?: 'identify';
 $exiftool = getenv('EXIFTOOL_BINARY') ?: 'exiftool';
 $root = sys_get_temp_dir().'/mediarama-privacy-audit-'.getmypid();
+$iccProfile = '/usr/share/color/icc/sRGB.icc';
+
+if (!is_file($iccProfile)) {
+    $fallbackProfiles = glob('/usr/share/color/icc/*sRGB*.icc') ?: [];
+    $iccProfile = $fallbackProfiles[0] ?? '';
+}
 
 if (!mkdir($root, 0700, true) && !is_dir($root)) {
     throw new RuntimeException('Unable to create Privacy-safe audit directory.');
@@ -200,6 +206,16 @@ try {
         try {
             auditCreateFixture($name, $source, $root, $convert);
 
+            if ($name !== 'png' && $iccProfile !== '') {
+                auditRequire([
+                    $exiftool,
+                    '-overwrite_original',
+                    '-ICC_Profile<='.$iccProfile,
+                    '--',
+                    $source,
+                ], 'embed ICC profile in '.$name.' fixture');
+            }
+
             $seed = [
                 $exiftool,
                 '-overwrite_original',
@@ -227,6 +243,10 @@ try {
                 $seed[] = '-PNG:Comment=PRIVATE-PNG-TEXT-87';
                 $seed[] = '-PNG:Gamma=2.2';
                 $seed[] = '-PNG:SRGBRendering#=0';
+            }
+
+            if (in_array($name, ['avif', 'heic'], true)) {
+                $seed[] = '-QuickTime:Rotation#=1';
             }
 
             $seed[] = '--';
@@ -292,6 +312,8 @@ try {
                     'XMP-tiff:Orientation',
                     'QuickTime:Rotation',
                 ]),
+                'quicktime_rotation_before' => auditFirst($before, ['QuickTime:Rotation']),
+                'quicktime_rotation_after' => auditFirst($after, ['QuickTime:Rotation']),
                 'icc_before' => auditFirst($before, [
                     'ICC-header:ProfileDescription',
                     'ICC_Profile:ProfileDescription',

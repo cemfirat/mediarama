@@ -35,7 +35,7 @@ jobs:
       - name: Install runtime tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y exiftool imagemagick libheif-examples libheif-plugin-aomdec libheif-plugin-aomenc libheif-plugin-libde265 libheif-plugin-x265
+          sudo apt-get install -y exiftool imagemagick libheif-examples libheif-plugin-aomdec libheif-plugin-aomenc libheif-plugin-libde265 libheif-plugin-x265 icc-profiles-free
 
       - name: Install dependencies
         run: composer install --no-interaction --prefer-dist --no-progress
