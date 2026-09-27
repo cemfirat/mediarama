@@ -147,6 +147,12 @@ api_csrf_token() {
     ' "$output"
 }
 
+PUBLIC_COLLECTIONS_STATUS="$(curl --silent --show-error --output /tmp/auth-public-collections.html --write-out '%{http_code}' "$BASE_URL/collections")"
+expect_status 200 "$PUBLIC_COLLECTIONS_STATUS" "public collections remain anonymously readable in prod"
+
+PUBLIC_SEARCH_STATUS="$(curl --silent --show-error --output /tmp/auth-public-search.json --write-out '%{http_code}' "$BASE_URL/api/media?q=auth-ci")"
+expect_status 200 "$PUBLIC_SEARCH_STATUS" "public media search remains anonymously readable in prod"
+
 ANON_STATUS="$(upload_status)"
 expect_status 401 "$ANON_STATUS" "anonymous upload create is rejected"
 
