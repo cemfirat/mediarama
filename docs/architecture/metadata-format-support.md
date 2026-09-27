@@ -56,6 +56,12 @@ For every format the test verifies:
 
 The JPEG case additionally carries a real ICC profile plus EXIF orientation and verifies both survive byte-for-byte/semantically through the Privacy-safe scrub.
 
+The TIFF case seeds a descriptive IFD0 value and verifies the Privacy-safe path clears that metadata without removing the structural image-bearing IFD.
+
+The PNG case seeds gamma and sRGB rendering-intent metadata and verifies both survive the Privacy-safe scrub.
+
+The completed research gate also verifies real AVIF/HEIC item rotation survives the same scrub boundary.
+
 This is a runtime integration gate rather than a parser-only fixture. If the declared CI/runtime toolchain loses one of these format capabilities, the repository gate fails instead of silently downgrading support.
 
 ## RAW XMP sidecars
