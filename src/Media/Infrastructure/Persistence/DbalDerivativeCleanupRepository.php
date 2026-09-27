@@ -171,6 +171,21 @@ SQL,
         $this->connection->delete('derivative_cleanup_jobs', ['id' => $jobId]);
     }
 
+    public function isReferenced(StorageObjectId $storage): bool
+    {
+        return (bool) $this->connection->fetchOne(
+            'SELECT EXISTS (
+                SELECT 1
+                FROM media_derivatives
+                WHERE storage_disk = :disk AND storage_key = :key
+            )',
+            [
+                'disk' => $storage->disk,
+                'key' => $storage->key,
+            ],
+        );
+    }
+
     public function enqueueOrphan(MediaDerivative $derivative): void
     {
         if (
