@@ -222,6 +222,11 @@ try {
     requireWatermark(($derivative->metadata['watermark_opacity_percent'] ?? null) === 50, 'watermark opacity policy is recorded');
     requireWatermark(($derivative->metadata['watermark_margin_percent'] ?? null) === 10, 'watermark margin policy is recorded');
     requireWatermark(
+        !array_key_exists('watermark_asset_path', $derivative->metadata)
+        && !in_array($watermarkPath, $derivative->metadata, true),
+        'watermark filesystem path is not persisted in derivative metadata',
+    );
+    requireWatermark(
         is_string($derivative->metadata['watermark_fingerprint'] ?? null)
         && strlen((string) $derivative->metadata['watermark_fingerprint']) === 64,
         'watermark configuration/asset fingerprint is recorded without exposing its path',
