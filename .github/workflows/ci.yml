@@ -68,6 +68,8 @@ jobs:
       IMAGEMAGICK_LIMIT_TIME_SECONDS: 45
       IMAGEMAGICK_LIMIT_LIST_LENGTH: 32
       IMAGEMAGICK_PROCESS_TIMEOUT_SECONDS: 60
+      CWEBP_BINARY: cwebp
+      CWEBP_PROCESS_TIMEOUT_SECONDS: 60
       IMAGE_WATERMARK_ASSET_PATH: ""
       IMAGE_WATERMARK_SIZE_PERCENT: 18
       IMAGE_WATERMARK_OPACITY_PERCENT: 35
@@ -101,7 +103,7 @@ jobs:
       - name: Install runtime tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y exiftool ffmpeg imagemagick mariadb-client libheif-examples libheif-plugin-aomdec libheif-plugin-aomenc libheif-plugin-libde265 libheif-plugin-x265
+          sudo apt-get install -y exiftool ffmpeg imagemagick webp mariadb-client libheif-examples libheif-plugin-aomdec libheif-plugin-aomenc libheif-plugin-libde265 libheif-plugin-x265
 
       - name: Validate Composer metadata
         run: composer validate --strict
@@ -126,6 +128,9 @@ jobs:
 
       - name: Verify ImageMagick application resource envelope
         run: php tests/Integration/ImageMagick/resource-limits.php
+
+      - name: Verify cwebp quality control
+        run: php tests/Integration/ImageMagick/cwebp-quality.php
 
       - name: Verify real image derivative formats
         run: php tests/Integration/ImageMagick/real-format-derivatives.php
