@@ -157,6 +157,7 @@ $storage = new LocalMediaStorage($mediaRoot);
 $derivatives = new DbalMediaDerivativeRepository($db);
 $cleanupRepository = new DbalDerivativeCleanupRepository($db);
 $mediaId = Uuid::v7();
+$graceMediaId = Uuid::v7();
 $guardMediaId = Uuid::v7();
 $now = (new DateTimeImmutable())->format(DATE_ATOM);
 $old = new DateTimeImmutable('-500 days');
@@ -278,6 +279,31 @@ SQL,
         'repeated cleanup is idempotent',
     );
 
+    insertCleanupMedia($db, $graceMediaId, $now);
+    foreach (range(1, 4) as $version) {
+        $createdAt = $version === 4 ? new DateTimeImmutable() : $old;
+        $derivatives->save(cleanupDerivative(
+            $graceMediaId,
+            'thumbnail',
+            $version,
+            $createdAt,
+            1,
+        ));
+    }
+
+    $gracePreview = $cleanupRepository->previewSuperseded($cutoff, 3, 10);
+    requireCleanup(
+        $gracePreview->generations === 0 && $gracePreview->derivatives === 0,
+        'retention grace starts when a generation falls outside the newest retained set',
+    );
+    requireCleanup(
+        (int) $db->fetchOne(
+            'SELECT COUNT(*) FROM media_derivatives WHERE media_id = :media',
+            ['media' => $graceMediaId->toRfc4122()],
+        ) === 4,
+        'an old generation is not removed immediately when a recent regeneration first makes it superseded',
+    );
+
     insertCleanupMedia($db, $guardMediaId, $now);
     foreach (range(1, 4) as $version) {
         $derivatives->save(cleanupDerivative(
@@ -316,9 +342,10 @@ SQL,
     echo "Superseded derivative cleanup integration checks passed.".PHP_EOL;
 } finally {
     $db->executeStatement(
-        'DELETE FROM media_assets WHERE id IN (:first, :second)',
+        'DELETE FROM media_assets WHERE id IN (:first, :grace, :second)',
         [
             'first' => $mediaId->toRfc4122(),
+            'grace' => $graceMediaId->toRfc4122(),
             'second' => $guardMediaId->toRfc4122(),
         ],
     );
@@ -328,6 +355,9 @@ SQL,
 
     $db->close();
     removeCleanupTree($derivativeRoot);
+    removeCleanupTree(
+        $mediaRoot.DIRECTORY_SEPARATOR.'derivatives'.DIRECTORY_SEPARATOR.$graceMediaId->toRfc4122(),
+    );
     removeCleanupTree(
         $mediaRoot.DIRECTORY_SEPARATOR.'derivatives'.DIRECTORY_SEPARATOR.$guardMediaId->toRfc4122(),
     );
