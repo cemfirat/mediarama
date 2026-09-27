@@ -210,3 +210,5 @@ Search-engine indexing never means "publish all metadata".
 Public HTML, structured data and sitemaps continue to use the deliberately public metadata projection defined by the public presentation layer.
 
 Raw EXIF/IPTC/XMP/DICOM/vendor metadata does not become public merely because the MediaAsset is indexable.
+
+Likewise, search-index policy is independent from export sanitization. ADR-0013/0014 define Privacy-safe export behavior; an indexable public MediaAsset still exposes only the deliberately public presentation projection, never its raw source snapshot.
