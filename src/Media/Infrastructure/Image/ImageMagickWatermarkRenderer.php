@@ -67,7 +67,7 @@ final readonly class ImageMagickWatermarkRenderer
             '-gravity',
             $this->configuration->imageMagickGravity(),
             '-geometry',
-            sprintf('+%d+%d', $margin, $margin),
+            $this->configuration->geometryOffset($margin),
             '-compose',
             'Over',
             '-composite',
