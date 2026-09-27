@@ -88,6 +88,11 @@ final class CleanupSupersededDerivativesTest extends TestCase
             ) {
             }
 
+            public function enqueueOrphanedDerivative(\Mediarama\Media\Domain\MediaDerivative $derivative): StorageCleanupJob
+            {
+                return new StorageCleanupJob(Uuid::v7(), $derivative->storage);
+            }
+
             public function previewSuperseded(
                 DateTimeImmutable $cutoff,
                 int $keepVersions,
