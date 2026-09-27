@@ -230,6 +230,32 @@ try {
             ], 30.0);
         }
 
+        if ($name === 'tiff') {
+            // TIFF cannot drop structural IFD0 wholesale. Seed a common IFD0
+            // descriptive field so the Privacy-safe path proves CommonIFD0 is
+            // scrubbed without damaging the image-bearing directory.
+            runCommand([
+                $exiftoolBinary,
+                '-overwrite_original',
+                '-IFD0:Artist=PRIVATE-IFD0-TIFF',
+                '--',
+                $sourcePath,
+            ], 30.0);
+        }
+
+        if ($name === 'png') {
+            // gAMA/sRGB are display/color semantics and must survive the metadata
+            // privacy scrub even though arbitrary PNG textual metadata must not.
+            runCommand([
+                $exiftoolBinary,
+                '-overwrite_original',
+                '-PNG:Gamma=2.2',
+                '-PNG:SRGBRendering#=0',
+                '--',
+                $sourcePath,
+            ], 30.0);
+        }
+
         $sourceVisualSignature = visualSignature($convertBinary, $sourcePath);
         $sourceMetadataJson = $process->run([
             '-json',
@@ -244,6 +270,21 @@ try {
             str_contains($sourceMetadataJson, 'PRIVATE-WORKFLOW-'.$name),
             'Source fixture is missing inherited private metadata for '.$name.'.',
         );
+
+        if ($name === 'tiff') {
+            requireCondition(
+                str_contains($sourceMetadataJson, 'PRIVATE-IFD0-TIFF'),
+                'TIFF source fixture is missing inherited IFD0 metadata.',
+            );
+        }
+
+        if ($name === 'png') {
+            requireCondition(
+                str_contains($sourceMetadataJson, '"PNG:Gamma": 2.2')
+                && str_contains($sourceMetadataJson, '"PNG:SRGBRendering": 0'),
+                'PNG source fixture is missing rendering-critical color metadata.',
+            );
+        }
 
         $sourceIccHash = null;
         if ($name === 'jpeg') {
@@ -353,6 +394,22 @@ try {
             && !str_contains($privacyMetadataJson, 'PRIVATE-TOOL-'.$name),
             'Privacy-safe export retained inherited private metadata for '.$name.'.',
         );
+
+        if ($name === 'tiff') {
+            requireCondition(
+                !str_contains($privacyMetadataJson, 'PRIVATE-IFD0-TIFF'),
+                'Privacy-safe TIFF export retained common descriptive IFD0 metadata.',
+            );
+        }
+
+        if ($name === 'png') {
+            requireCondition(
+                str_contains($privacyMetadataJson, '"PNG:Gamma": 2.2')
+                && str_contains($privacyMetadataJson, '"PNG:SRGBRendering": 0'),
+                'Privacy-safe PNG export did not preserve gamma/sRGB rendering semantics.',
+            );
+        }
+
         requireCondition(
             visualSignature($convertBinary, $privacyPath) === $sourceVisualSignature,
             'Privacy-safe metadata scrub changed rendered pixels/orientation for '.$name.'.',
