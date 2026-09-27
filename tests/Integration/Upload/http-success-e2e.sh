@@ -473,7 +473,7 @@ foreach (['title', 'creator', 'location_name'] as $field) {
 }
 
 $derivatives = $db->fetchAllAssociative(
-    'SELECT profile, processing_version, storage_key, mime_type, byte_size, width, height
+    'SELECT profile, processing_version, storage_key, mime_type, byte_size, width, height, metadata
      FROM media_derivatives
      WHERE media_id = :id AND kind = :kind
      ORDER BY profile',
@@ -490,13 +490,25 @@ if ($actualProfiles !== $expectedProfiles) {
 }
 
 $root = rtrim((string) getenv('MEDIA_STORAGE_PATH'), '/');
+$expectedQuality = [
+    'thumbnail' => 82,
+    'preview' => 84,
+    'large' => 86,
+];
+
 foreach ($derivatives as $derivative) {
-    if ((int) $derivative['processing_version'] !== 1
+    if ((int) $derivative['processing_version'] !== 2
         || $derivative['mime_type'] !== 'image/webp'
         || (int) $derivative['byte_size'] < 1
         || (int) $derivative['width'] < 1
         || (int) $derivative['height'] < 1) {
         throw new RuntimeException('Derivative database state is invalid for '.$derivative['profile'].'.');
+    }
+
+    $metadata = json_decode((string) $derivative['metadata'], true, flags: JSON_THROW_ON_ERROR);
+    if (($metadata['encoder'] ?? null) !== 'cwebp'
+        || ($metadata['encoder_quality'] ?? null) !== ($expectedQuality[$derivative['profile']] ?? null)) {
+        throw new RuntimeException('Derivative encoder provenance is invalid for '.$derivative['profile'].'.');
     }
 
     $path = $root.'/'.$derivative['storage_key'];
