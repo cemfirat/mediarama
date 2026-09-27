@@ -1,0 +1,620 @@
+<?php
+
+declare(strict_types=1);
+
+use Mediarama\Media\Infrastructure\Image\ImageMagickProcess;
+use Mediarama\Media\Infrastructure\Image\ImageMagickResourceLimits;
+use Symfony\Component\Process\Process;
+
+require dirname(__DIR__).'/vendor/autoload.php';
+
+const DEFAULT_FORMATS = ['webp', 'jpeg', 'avif'];
+const DEFAULT_QUALITIES = [55, 70, 82, 90];
+const DEFAULT_PROFILES = [
+    'thumbnail' => [480, 480],
+    'preview' => [1600, 1600],
+    'large' => [2560, 2560],
+];
+
+function benchmarkFail(string $message, int $code = 1): never
+{
+    fwrite(STDERR, $message.PHP_EOL);
+    exit($code);
+}
+
+/** @return array<string, mixed> */
+function benchmarkOptions(): array
+{
+    $options = getopt('', [
+        'input-dir:',
+        'output:',
+        'formats::',
+        'qualities::',
+        'profiles::',
+        'limit::',
+        'convert-binary::',
+        'identify-binary::',
+        'compare-binary::',
+        'help',
+    ]);
+
+    if ($options === false) {
+        benchmarkFail('Unable to parse benchmark options.');
+    }
+
+    if (array_key_exists('help', $options)) {
+        echo <<<'TXT'
+Mediarama derivative-format benchmark
+
+Required:
+  --input-dir=/path/to/photos
+  --output=/path/to/report.json
+
+Optional:
+  --formats=webp,jpeg,avif
+  --qualities=55,70,82,90
+  --profiles=thumbnail:480x480,preview:1600x1600,large:2560x2560
+  --limit=0
+  --convert-binary=convert|magick
+  --identify-binary=identify
+  --compare-binary=compare
+
+The benchmark does not modify Mediarama production profiles. It creates temporary
+lossless references, probes each requested encoder, records bytes/encode time and
+uses ImageMagick SSIM/PSNR when the installed compare tool exposes those metrics.
+
+Quality numbers are sampled as codec-specific curve points. Do not compare
+quality=82 across codecs as though it represented equal visual quality.
+TXT;
+        exit(0);
+    }
+
+    return $options;
+}
+
+/** @return list<string> */
+function benchmarkFormats(string $raw): array
+{
+    $allowed = ['webp', 'jpeg', 'avif'];
+    $values = array_values(array_unique(array_filter(array_map(
+        static fn (string $value): string => strtolower(trim($value)),
+        explode(',', $raw),
+    ))));
+
+    if ($values === []) {
+        throw new InvalidArgumentException('At least one benchmark format is required.');
+    }
+
+    foreach ($values as $value) {
+        if (!in_array($value, $allowed, true)) {
+            throw new InvalidArgumentException('Unsupported benchmark format: '.$value);
+        }
+    }
+
+    return $values;
+}
+
+/** @return list<int> */
+function benchmarkQualities(string $raw): array
+{
+    $qualities = [];
+    foreach (explode(',', $raw) as $value) {
+        $value = trim($value);
+        if ($value === '' || !ctype_digit($value)) {
+            throw new InvalidArgumentException('Benchmark qualities must be comma-separated integers.');
+        }
+
+        $quality = (int) $value;
+        if ($quality < 1 || $quality > 100) {
+            throw new InvalidArgumentException('Benchmark qualities must be between 1 and 100.');
+        }
+
+        $qualities[] = $quality;
+    }
+
+    $qualities = array_values(array_unique($qualities));
+    sort($qualities);
+
+    return $qualities;
+}
+
+/** @return array<string, array{0: int, 1: int}> */
+function benchmarkProfiles(string $raw): array
+{
+    $profiles = [];
+
+    foreach (explode(',', $raw) as $entry) {
+        $entry = trim($entry);
+        if (!preg_match('/^([a-z][a-z0-9_-]{0,31}):(\d+)x(\d+)$/', $entry, $match)) {
+            throw new InvalidArgumentException('Invalid profile definition: '.$entry);
+        }
+
+        $width = (int) $match[2];
+        $height = (int) $match[3];
+        if ($width < 1 || $height < 1 || $width > 32768 || $height > 32768) {
+            throw new InvalidArgumentException('Benchmark profile dimensions are outside the safe range.');
+        }
+
+        $profiles[$match[1]] = [$width, $height];
+    }
+
+    if ($profiles === []) {
+        throw new InvalidArgumentException('At least one benchmark profile is required.');
+    }
+
+    return $profiles;
+}
+
+function benchmarkEnv(string $name, string $fallback): string
+{
+    $value = getenv($name);
+
+    return is_string($value) && trim($value) !== '' ? trim($value) : $fallback;
+}
+
+function benchmarkEnvInt(string $name, int $fallback): int
+{
+    $value = getenv($name);
+
+    return is_string($value) && ctype_digit($value) ? (int) $value : $fallback;
+}
+
+/** @return list<string> */
+function benchmarkSources(string $inputDirectory, int $limit): array
+{
+    $extensions = [
+        'jpg', 'jpeg', 'png', 'tif', 'tiff', 'webp', 'avif', 'heic', 'heif',
+    ];
+    $sources = [];
+
+    $iterator = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($inputDirectory, FilesystemIterator::SKIP_DOTS),
+    );
+
+    foreach ($iterator as $file) {
+        if (!$file->isFile() || !$file->isReadable()) {
+            continue;
+        }
+
+        if (!in_array(strtolower($file->getExtension()), $extensions, true)) {
+            continue;
+        }
+
+        $sources[] = $file->getPathname();
+    }
+
+    sort($sources, SORT_STRING);
+
+    if ($limit > 0) {
+        $sources = array_slice($sources, 0, $limit);
+    }
+
+    return $sources;
+}
+
+/** @return array{success: bool, output: string, error: string, exit_code: ?int, duration_ms: float} */
+function benchmarkRun(
+    array $command,
+    array $environment = [],
+    float $timeout = 120.0,
+): array {
+    $process = new Process($command, null, $environment);
+    $process->setTimeout($timeout);
+
+    $started = hrtime(true);
+    $process->run();
+    $durationMs = (hrtime(true) - $started) / 1_000_000;
+
+    return [
+        'success' => $process->isSuccessful(),
+        'output' => trim($process->getOutput()),
+        'error' => trim($process->getErrorOutput()),
+        'exit_code' => $process->getExitCode(),
+        'duration_ms' => round($durationMs, 3),
+    ];
+}
+
+/** @return array{supported: bool, reason: ?string} */
+function benchmarkEncoderCapability(
+    ImageMagickProcess $imageMagick,
+    string $format,
+    string $temporaryRoot,
+): array {
+    $extension = $format === 'jpeg' ? 'jpg' : $format;
+    $probe = $temporaryRoot.'/encoder-probe.'.$extension;
+
+    try {
+        $imageMagick->convert([
+            '-size',
+            '8x8',
+            'xc:white',
+            '-strip',
+            '-quality',
+            '75',
+            $format.':'.$probe,
+        ]);
+    } catch (Throwable $error) {
+        @unlink($probe);
+
+        return [
+            'supported' => false,
+            'reason' => substr($error->getMessage(), 0, 500),
+        ];
+    }
+
+    $supported = is_file($probe) && filesize($probe) !== false && filesize($probe) > 0;
+    @unlink($probe);
+
+    return [
+        'supported' => $supported,
+        'reason' => $supported ? null : 'Encoder command completed without producing a non-empty file.',
+    ];
+}
+
+/** @return list<string> */
+function benchmarkCompareMetrics(
+    string $compareBinary,
+    ImageMagickResourceLimits $limits,
+): array {
+    $result = benchmarkRun(
+        [$compareBinary, ...$limits->commandArguments(), '-list', 'metric'],
+        $limits->environment(),
+        30.0,
+    );
+
+    if (!$result['success']) {
+        return [];
+    }
+
+    $metrics = [];
+    foreach (preg_split('/\s+/', strtoupper($result['output'])) ?: [] as $metric) {
+        if ($metric !== '') {
+            $metrics[] = $metric;
+        }
+    }
+
+    return array_values(array_unique($metrics));
+}
+
+function benchmarkMetric(
+    string $compareBinary,
+    ImageMagickResourceLimits $limits,
+    string $metric,
+    string $reference,
+    string $candidate,
+): ?float {
+    $result = benchmarkRun(
+        [
+            $compareBinary,
+            ...$limits->commandArguments(),
+            '-metric',
+            $metric,
+            '-define',
+            'compare:virtual-pixels=false',
+            $reference,
+            $candidate,
+            'null:',
+        ],
+        $limits->environment(),
+        60.0,
+    );
+
+    // ImageMagick compare returns 1 for a valid non-identical comparison.
+    if (!in_array($result['exit_code'], [0, 1], true)) {
+        return null;
+    }
+
+    $raw = trim($result['error'] !== '' ? $result['error'] : $result['output']);
+    if (preg_match('/(?:^|\s)(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)(?:\s|$)/', $raw, $match) !== 1) {
+        return null;
+    }
+
+    return (float) $match[1];
+}
+
+/** @return array{format: string, width: int, height: int} */
+function benchmarkIdentify(ImageMagickProcess $imageMagick, string $path): array
+{
+    $raw = trim($imageMagick->identify([
+        '-format',
+        '%m %w %h',
+        $path.'[0]',
+    ]));
+
+    if (preg_match('/^([A-Za-z0-9_-]+)\s+(\d+)\s+(\d+)$/', $raw, $match) !== 1) {
+        throw new RuntimeException('Unable to identify benchmark output: '.$raw);
+    }
+
+    return [
+        'format' => strtoupper($match[1]),
+        'width' => (int) $match[2],
+        'height' => (int) $match[3],
+    ];
+}
+
+function benchmarkRemoveTree(string $path): void
+{
+    if (!is_dir($path)) {
+        return;
+    }
+
+    $iterator = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($path, FilesystemIterator::SKIP_DOTS),
+        RecursiveIteratorIterator::CHILD_FIRST,
+    );
+
+    foreach ($iterator as $item) {
+        if ($item->isDir()) {
+            @rmdir($item->getPathname());
+        } else {
+            @unlink($item->getPathname());
+        }
+    }
+
+    @rmdir($path);
+}
+
+$options = benchmarkOptions();
+$inputDirectory = isset($options['input-dir']) ? realpath((string) $options['input-dir']) : false;
+if ($inputDirectory === false || !is_dir($inputDirectory) || !is_readable($inputDirectory)) {
+    benchmarkFail('The --input-dir value must be a readable directory.');
+}
+
+$outputPath = isset($options['output']) ? trim((string) $options['output']) : '';
+if ($outputPath === '') {
+    benchmarkFail('The --output JSON path is required.');
+}
+
+try {
+    $formats = benchmarkFormats((string) ($options['formats'] ?? implode(',', DEFAULT_FORMATS)));
+    $qualities = benchmarkQualities((string) ($options['qualities'] ?? implode(',', DEFAULT_QUALITIES)));
+
+    $profileRaw = $options['profiles'] ?? null;
+    if ($profileRaw === null) {
+        $profiles = DEFAULT_PROFILES;
+    } else {
+        $profiles = benchmarkProfiles((string) $profileRaw);
+    }
+
+    $limit = isset($options['limit']) ? (int) $options['limit'] : 0;
+    if ($limit < 0) {
+        throw new InvalidArgumentException('Benchmark limit cannot be negative.');
+    }
+} catch (InvalidArgumentException $error) {
+    benchmarkFail($error->getMessage());
+}
+
+$convertBinary = trim((string) ($options['convert-binary'] ?? benchmarkEnv('IMAGEMAGICK_BINARY', 'magick')));
+$identifyBinary = trim((string) ($options['identify-binary'] ?? benchmarkEnv('IMAGEMAGICK_IDENTIFY_BINARY', 'identify')));
+$compareBinary = trim((string) ($options['compare-binary'] ?? benchmarkEnv('IMAGEMAGICK_COMPARE_BINARY', 'compare')));
+
+$limits = new ImageMagickResourceLimits(
+    memory: benchmarkEnv('IMAGEMAGICK_LIMIT_MEMORY', '256MiB'),
+    map: benchmarkEnv('IMAGEMAGICK_LIMIT_MAP', '512MiB'),
+    disk: benchmarkEnv('IMAGEMAGICK_LIMIT_DISK', '2GiB'),
+    area: benchmarkEnv('IMAGEMAGICK_LIMIT_AREA', '512MiB'),
+    width: benchmarkEnvInt('IMAGEMAGICK_LIMIT_WIDTH', 32768),
+    height: benchmarkEnvInt('IMAGEMAGICK_LIMIT_HEIGHT', 32768),
+    files: benchmarkEnvInt('IMAGEMAGICK_LIMIT_FILES', 128),
+    threads: benchmarkEnvInt('IMAGEMAGICK_LIMIT_THREADS', 2),
+    timeSeconds: benchmarkEnvInt('IMAGEMAGICK_LIMIT_TIME_SECONDS', 45),
+    listLength: benchmarkEnvInt('IMAGEMAGICK_LIMIT_LIST_LENGTH', 32),
+);
+$imageMagick = new ImageMagickProcess(
+    $limits,
+    $convertBinary,
+    $identifyBinary,
+    (float) benchmarkEnv('IMAGEMAGICK_PROCESS_TIMEOUT_SECONDS', '60'),
+);
+
+$sources = benchmarkSources($inputDirectory, $limit);
+if ($sources === []) {
+    benchmarkFail('No supported image files were found in the benchmark input directory.');
+}
+
+$temporaryRoot = sys_get_temp_dir().'/mediarama-format-benchmark-'.bin2hex(random_bytes(8));
+if (!mkdir($temporaryRoot, 0700, true) && !is_dir($temporaryRoot)) {
+    benchmarkFail('Unable to create benchmark temporary directory.');
+}
+
+try {
+    $version = benchmarkRun([$convertBinary, '-version'], [], 15.0);
+    $compareMetrics = benchmarkCompareMetrics($compareBinary, $limits);
+
+    $capabilities = [];
+    foreach ($formats as $format) {
+        $capabilities[$format] = benchmarkEncoderCapability(
+            $imageMagick,
+            $format,
+            $temporaryRoot,
+        );
+    }
+
+    $report = [
+        'schema_version' => 1,
+        'generated_at' => (new DateTimeImmutable())->format(DATE_ATOM),
+        'purpose' => 'Mediarama derivative-format benchmark; not production profile configuration',
+        'privacy' => [
+            'source_paths_included' => false,
+            'embedded_metadata_copied_to_outputs' => false,
+        ],
+        'runtime' => [
+            'php' => PHP_VERSION,
+            'os' => PHP_OS_FAMILY,
+            'imagemagick' => $version['success']
+                ? strtok($version['output'], "\n")
+                : null,
+            'convert_binary' => $convertBinary,
+            'identify_binary' => $identifyBinary,
+            'compare_binary' => $compareBinary,
+            'compare_metrics' => $compareMetrics,
+        ],
+        'matrix' => [
+            'formats' => $formats,
+            'qualities' => $qualities,
+            'quality_note' => 'Numeric quality values are codec-specific curve samples, not equal-quality cross-codec points.',
+            'profiles' => array_map(
+                static fn (array $dimensions): array => [
+                    'maximum_width' => $dimensions[0],
+                    'maximum_height' => $dimensions[1],
+                ],
+                $profiles,
+            ),
+        ],
+        'capabilities' => $capabilities,
+        'sources' => [],
+        'samples' => [],
+    ];
+
+    foreach ($sources as $sourceIndex => $sourcePath) {
+        $sourceHash = hash_file('sha256', $sourcePath);
+        if ($sourceHash === false) {
+            throw new RuntimeException('Unable to checksum benchmark source #'.($sourceIndex + 1).'.');
+        }
+
+        $sourceId = substr($sourceHash, 0, 16);
+        $sourceInfo = benchmarkIdentify($imageMagick, $sourcePath);
+
+        $report['sources'][] = [
+            'source_id' => $sourceId,
+            'sha256' => $sourceHash,
+            'format' => $sourceInfo['format'],
+            'width' => $sourceInfo['width'],
+            'height' => $sourceInfo['height'],
+            'byte_size' => filesize($sourcePath) ?: null,
+        ];
+
+        foreach ($profiles as $profileName => [$maximumWidth, $maximumHeight]) {
+            $reference = sprintf(
+                '%s/%s-%s-reference.png',
+                $temporaryRoot,
+                $sourceId,
+                $profileName,
+            );
+
+            $imageMagick->convert([
+                $sourcePath.'[0]',
+                '-auto-orient',
+                '-strip',
+                '-thumbnail',
+                sprintf('%dx%d>', $maximumWidth, $maximumHeight),
+                '-colorspace',
+                'sRGB',
+                'png:'.$reference,
+            ]);
+
+            $referenceInfo = benchmarkIdentify($imageMagick, $reference);
+
+            foreach ($formats as $format) {
+                if (!($capabilities[$format]['supported'] ?? false)) {
+                    $report['samples'][] = [
+                        'source_id' => $sourceId,
+                        'profile' => $profileName,
+                        'format' => $format,
+                        'status' => 'unsupported',
+                        'reason' => $capabilities[$format]['reason'] ?? 'Encoder unavailable.',
+                    ];
+                    continue;
+                }
+
+                $extension = $format === 'jpeg' ? 'jpg' : $format;
+
+                foreach ($qualities as $quality) {
+                    $candidate = sprintf(
+                        '%s/%s-%s-%s-q%d.%s',
+                        $temporaryRoot,
+                        $sourceId,
+                        $profileName,
+                        $format,
+                        $quality,
+                        $extension,
+                    );
+
+                    $started = hrtime(true);
+                    try {
+                        $imageMagick->convert([
+                            $reference,
+                            '-strip',
+                            '-quality',
+                            (string) $quality,
+                            $format.':'.$candidate,
+                        ]);
+                        $durationMs = (hrtime(true) - $started) / 1_000_000;
+
+                        $candidateInfo = benchmarkIdentify($imageMagick, $candidate);
+                        $bytes = filesize($candidate);
+                        if ($bytes === false || $bytes < 1) {
+                            throw new RuntimeException('Encoder produced an empty candidate.');
+                        }
+
+                        $sample = [
+                            'source_id' => $sourceId,
+                            'profile' => $profileName,
+                            'reference_width' => $referenceInfo['width'],
+                            'reference_height' => $referenceInfo['height'],
+                            'format' => $format,
+                            'quality' => $quality,
+                            'status' => 'ok',
+                            'output_format' => $candidateInfo['format'],
+                            'output_width' => $candidateInfo['width'],
+                            'output_height' => $candidateInfo['height'],
+                            'byte_size' => $bytes,
+                            'encode_duration_ms' => round($durationMs, 3),
+                            'ssim' => in_array('SSIM', $compareMetrics, true)
+                                ? benchmarkMetric($compareBinary, $limits, 'SSIM', $reference, $candidate)
+                                : null,
+                            'psnr' => in_array('PSNR', $compareMetrics, true)
+                                ? benchmarkMetric($compareBinary, $limits, 'PSNR', $reference, $candidate)
+                                : null,
+                        ];
+                    } catch (Throwable $error) {
+                        $sample = [
+                            'source_id' => $sourceId,
+                            'profile' => $profileName,
+                            'format' => $format,
+                            'quality' => $quality,
+                            'status' => 'failed',
+                            'reason' => substr($error->getMessage(), 0, 500),
+                        ];
+                    } finally {
+                        @unlink($candidate);
+                    }
+
+                    $report['samples'][] = $sample;
+                }
+            }
+
+            @unlink($reference);
+        }
+    }
+
+    $outputDirectory = dirname($outputPath);
+    if (!is_dir($outputDirectory) && !mkdir($outputDirectory, 0770, true) && !is_dir($outputDirectory)) {
+        throw new RuntimeException('Unable to create benchmark report directory.');
+    }
+
+    $json = json_encode(
+        $report,
+        JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR,
+    ).PHP_EOL;
+
+    if (file_put_contents($outputPath, $json, LOCK_EX) === false) {
+        throw new RuntimeException('Unable to write benchmark report.');
+    }
+
+    $successfulSamples = count(array_filter(
+        $report['samples'],
+        static fn (array $sample): bool => ($sample['status'] ?? null) === 'ok',
+    ));
+
+    echo sprintf(
+        "Benchmark complete: %d source(s), %d successful sample(s). Report: %s\n",
+        count($report['sources']),
+        $successfulSamples,
+        $outputPath,
+    );
+} catch (Throwable $error) {
+    benchmarkFail('Benchmark failed: '.$error->getMessage());
+} finally {
+    benchmarkRemoveTree($temporaryRoot);
+}
