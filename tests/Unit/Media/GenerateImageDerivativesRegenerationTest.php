@@ -5,7 +5,10 @@ declare(strict_types=1);
 namespace Mediarama\Tests\Unit\Media;
 
 use DateTimeImmutable;
+use Mediarama\Media\Application\DerivativeCleanupRepository;
+use Mediarama\Media\Application\DerivativeCleanupSummary;
 use Mediarama\Media\Application\GenerateImageDerivatives;
+use Mediarama\Media\Application\StorageCleanupJob;
 use Mediarama\Media\Application\ImageDerivativeGenerator;
 use Mediarama\Media\Application\ImageDerivativeProfile;
 use Mediarama\Media\Application\MediaDerivativeRepository;
@@ -386,6 +389,188 @@ final class GenerateImageDerivativesRegenerationTest extends TestCase
         self::assertCount(2, $storage->deleted);
         self::assertStringContainsString('/v8/thumbnail.webp', $storage->deleted[0]->key);
         self::assertStringContainsString('/v8/preview.webp', $storage->deleted[1]->key);
+    }
+
+    public function testFailedStorageDeleteLeavesRetryableOrphanCleanupJob(): void
+    {
+        $asset = $this->imageAsset();
+
+        $repository = new class implements MediaDerivativeRepository {
+            public function save(MediaDerivative $derivative): void
+            {
+                throw new \LogicException('Versioned regeneration must use batch persistence.');
+            }
+
+            public function saveAll(array $derivatives): void
+            {
+                throw new \RuntimeException('Synthetic persistence failure.');
+            }
+
+            public function find(
+                Uuid $mediaId,
+                string $kind,
+                string $profile,
+                int $processingVersion,
+            ): ?MediaDerivative {
+                return null;
+            }
+
+            public function latestProcessingVersion(Uuid $mediaId, string $kind): int
+            {
+                return 1;
+            }
+        };
+
+        $generator = new class implements ImageDerivativeGenerator {
+            public function generate(
+                MediaAsset $media,
+                ImageDerivativeProfile $profile,
+                int $processingVersion,
+            ): MediaDerivative {
+                $now = new DateTimeImmutable();
+
+                return new MediaDerivative(
+                    Uuid::v7(),
+                    $media->id,
+                    'image',
+                    $profile->name,
+                    $processingVersion,
+                    new StorageObjectId(
+                        'media',
+                        sprintf(
+                            'derivatives/%s/v%d/%s.webp',
+                            $media->id->toRfc4122(),
+                            $processingVersion,
+                            $profile->name,
+                        ),
+                    ),
+                    'image/webp',
+                    100,
+                    64,
+                    64,
+                    null,
+                    [],
+                    $now,
+                    $now,
+                );
+            }
+        };
+
+        $storage = new class implements MediaStorage {
+            public function write(StorageObjectId $id, $stream, ?string $contentType = null): StoredObject
+            {
+                throw new \LogicException('Not used by this test.');
+            }
+
+            public function read(StorageObjectId $id)
+            {
+                throw new \LogicException('Not used by this test.');
+            }
+
+            public function exists(StorageObjectId $id): bool
+            {
+                return true;
+            }
+
+            public function stat(StorageObjectId $id): StoredObject
+            {
+                throw new \LogicException('Not used by this test.');
+            }
+
+            public function delete(StorageObjectId $id): void
+            {
+                throw new \RuntimeException('Synthetic storage delete failure.');
+            }
+
+            public function promote(StorageObjectId $temporary, StorageObjectId $permanent): StoredObject
+            {
+                throw new \LogicException('Not used by this test.');
+            }
+
+            public function publicUrl(StorageObjectId $id): ?string
+            {
+                return null;
+            }
+
+            public function temporaryUrl(StorageObjectId $id, DateTimeImmutable $expiresAt): ?string
+            {
+                return null;
+            }
+        };
+
+        $cleanup = new class implements DerivativeCleanupRepository {
+            /** @var list<StorageCleanupJob> */
+            public array $queued = [];
+            /** @var list<string> */
+            public array $completed = [];
+
+            public function enqueueOrphanedDerivative(MediaDerivative $derivative): StorageCleanupJob
+            {
+                $job = new StorageCleanupJob(Uuid::v7(), $derivative->storage);
+                $this->queued[] = $job;
+
+                return $job;
+            }
+
+            public function previewSuperseded(
+                DateTimeImmutable $cutoff,
+                int $keepVersions,
+                int $generationLimit,
+            ): DerivativeCleanupSummary {
+                return DerivativeCleanupSummary::empty();
+            }
+
+            public function enqueueSuperseded(
+                DateTimeImmutable $cutoff,
+                int $keepVersions,
+                int $generationLimit,
+            ): DerivativeCleanupSummary {
+                return DerivativeCleanupSummary::empty();
+            }
+
+            public function claimStorageJobs(
+                int $limit,
+                DateTimeImmutable $claimedAt,
+                DateTimeImmutable $staleBefore,
+            ): array {
+                return [];
+            }
+
+            public function completeStorageJob(Uuid $id): void
+            {
+                $this->completed[] = $id->toRfc4122();
+            }
+
+            public function failStorageJob(Uuid $id, string $error): void
+            {
+            }
+
+            public function pendingStorageJobCount(): int
+            {
+                return count($this->queued) - count($this->completed);
+            }
+        };
+
+        $service = new GenerateImageDerivatives(
+            $repository,
+            $generator,
+            $storage,
+            $this->immediateLock(),
+            [new ImageDerivativeProfile('thumbnail', 480, 480)],
+            1,
+            $cleanup,
+        );
+
+        try {
+            $service->regenerate($asset);
+            self::fail('Expected persistence failure.');
+        } catch (\RuntimeException $error) {
+            self::assertSame('Synthetic persistence failure.', $error->getMessage());
+        }
+
+        self::assertCount(1, $cleanup->queued);
+        self::assertSame([], $cleanup->completed);
+        self::assertStringContainsString('/v2/thumbnail.webp', $cleanup->queued[0]->storage->key);
     }
 
     private function imageAsset(): MediaAsset
