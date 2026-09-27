@@ -36,7 +36,11 @@ final class PublicationSettingsController extends AbstractController
     )]
     public function __invoke(Request $request): Response
     {
-        $user = $this->currentUser->requireUser();
+        try {
+            $user = $this->currentUser->requireUser();
+        } catch (\DomainException) {
+            throw $this->createAccessDeniedException('Authentication is required.');
+        }
 
         if (!$this->administration->canAdminister($user->id)) {
             throw $this->createAccessDeniedException(
