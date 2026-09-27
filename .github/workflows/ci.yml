@@ -179,6 +179,9 @@ jobs:
       - name: Verify concurrent upload finalization and crash recovery
         run: php tests/Integration/Upload/finalize-concurrency.php
 
+      - name: Verify successful authenticated HTTP upload E2E
+        run: tests/Integration/Upload/http-success-e2e.sh
+
       - name: Prepare Coppermine 1.6 fixture
         run: |
           mkdir -p /tmp/coppermine-albums/userpics
