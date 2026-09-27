@@ -6,7 +6,7 @@ on:
   pull_request:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   php:
@@ -107,6 +107,22 @@ jobs:
           path: |
             composer.lock
             symfony.lock
+
+      - name: Commit verified rate-limiter Composer lock
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        run: |
+          printf '%s  %s\n'             'f95ad2bde7bf20b2c173c74965dc845a79d72831014150c0031e2fbc03b0109d' composer.lock             | sha256sum --check --strict
+
+          if git diff --quiet -- composer.lock; then
+            echo "Verified rate-limiter composer.lock is already committed."
+            exit 0
+          fi
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add composer.lock
+          git commit -m 'build: lock Symfony rate limiter dependency (#43)'
+          git push origin HEAD:security/login-throttling
 
       - name: Verify PHP exposes real environment variables
         run: |
