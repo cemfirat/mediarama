@@ -68,7 +68,11 @@ services:
         alias: Mediarama\Upload\Infrastructure\Authorization\CollectionUploadDestinationAuthorizer
 
     Mediarama\Upload\Application\UploadQuota:
-        alias: Mediarama\Upload\Application\UnlimitedUploadQuota
+        alias: Mediarama\Upload\Infrastructure\Persistence\DbalUploadQuota
+
+    Mediarama\Upload\Infrastructure\Persistence\DbalUploadQuota:
+        arguments:
+            $defaultQuotaBytes: '%env(int:UPLOAD_DEFAULT_QUOTA_BYTES)%'
 
     Mediarama\Upload\Application\ChunkStorage:
         alias: Mediarama\Upload\Infrastructure\Storage\LocalChunkStorage

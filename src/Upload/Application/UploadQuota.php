@@ -8,7 +8,24 @@ use Symfony\Component\Uid\Uuid;
 
 interface UploadQuota
 {
-    public function reserve(Uuid $userId, int $bytes): void;
+    /**
+     * Persist a session-scoped reservation and execute UploadSession
+     * persistence in the same database transaction.
+     *
+     * @param callable(): void $persistSession
+     */
+    public function reserve(
+        Uuid $sessionId,
+        Uuid $userId,
+        int $bytes,
+        callable $persistSession,
+    ): void;
 
-    public function release(Uuid $userId, int $bytes): void;
+    /**
+     * Convert a reservation into committed usage.
+     *
+     * Committed usage is derived from MediaAsset rows, so this removes only
+     * the temporary reservation rather than incrementing a second counter.
+     */
+    public function commit(Uuid $sessionId): void;
 }
