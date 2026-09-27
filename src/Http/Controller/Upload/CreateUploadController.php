@@ -6,9 +6,8 @@ namespace Mediarama\Http\Controller\Upload;
 
 use Mediarama\Security\Application\CurrentUser;
 use Mediarama\Upload\Application\CreateUploadSession;
-use Mediarama\Upload\Application\UploadQuotaExceeded;
+use Mediarama\Upload\Application\UploadProblem;
 use Symfony\Component\HttpFoundation\JsonResponse;
-use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Uid\Uuid;
@@ -22,30 +21,52 @@ final readonly class CreateUploadController
     #[Route('/api/uploads', name: 'upload_create', methods: ['POST'])]
     public function __invoke(Request $request): JsonResponse
     {
-        $payload = $request->toArray();
-
-        $userId = $this->currentUser->requireUser()->id;
-        $collectionId = isset($payload['collection_id']) && $payload['collection_id'] !== null
-            ? Uuid::fromString((string) $payload['collection_id'])
-            : null;
-
         try {
-            $session = ($this->create)(
-                $userId,
-                $collectionId,
-                (string) ($payload['filename'] ?? ''),
-                (int) ($payload['size'] ?? -1),
-                isset($payload['mime']) ? (string) $payload['mime'] : null,
+            $payload = $request->toArray();
+        } catch (\Throwable $error) {
+            throw UploadProblem::request(
+                'invalid_upload_request',
+                'Upload create request body is not valid JSON.',
             );
-        } catch (UploadQuotaExceeded $error) {
-            return new JsonResponse([
-                'error' => 'upload_quota_exceeded',
-                'limit_bytes' => $error->limitBytes,
-                'committed_bytes' => $error->committedBytes,
-                'reserved_bytes' => $error->reservedBytes,
-                'requested_bytes' => $error->requestedBytes,
-            ], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
+
+        $filename = $payload['filename'] ?? null;
+        $size = $payload['size'] ?? null;
+        $mime = $payload['mime'] ?? null;
+        $collectionValue = $payload['collection_id'] ?? null;
+
+        if (
+            !is_string($filename)
+            || trim($filename) === ''
+            || !is_int($size)
+            || ($mime !== null && !is_string($mime))
+            || ($collectionValue !== null && !is_string($collectionValue))
+        ) {
+            throw UploadProblem::request(
+                'invalid_upload_request',
+                'Upload create request contains invalid fields.',
+            );
+        }
+
+        $collectionId = null;
+        if ($collectionValue !== null) {
+            try {
+                $collectionId = Uuid::fromString($collectionValue);
+            } catch (\Throwable) {
+                throw UploadProblem::request(
+                    'invalid_upload_request',
+                    'Upload collection identifier is invalid.',
+                );
+            }
+        }
+
+        $session = ($this->create)(
+            $this->currentUser->requireUser()->id,
+            $collectionId,
+            $filename,
+            $size,
+            $mime,
+        );
 
         return new JsonResponse([
             'id' => $session->id->toRfc4122(),

@@ -24,8 +24,16 @@ final readonly class CreateUploadSession
         int $expectedSize,
         ?string $expectedMime = null,
     ): UploadSession {
+        if (trim($originalFilename) === '') {
+            throw UploadProblem::request(
+                'invalid_upload_request',
+                'Original filename must not be empty.',
+            );
+        }
+
         $this->authorizer->assertCanUpload($userId, $targetCollectionId);
         $this->policy->assertAssetSize($expectedSize);
+
         $session = UploadSession::create(
             $userId,
             $targetCollectionId,

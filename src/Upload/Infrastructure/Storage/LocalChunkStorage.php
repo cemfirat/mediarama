@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace Mediarama\Upload\Infrastructure\Storage;
 
 use Mediarama\Upload\Application\ChunkStorage;
+use Mediarama\Upload\Application\UploadProblem;
 use Mediarama\Upload\Domain\UploadChunk;
+use Mediarama\Upload\Domain\UploadFailureStage;
 use Symfony\Component\Uid\Uuid;
 
 final readonly class LocalChunkStorage implements ChunkStorage
@@ -57,12 +59,20 @@ final readonly class LocalChunkStorage implements ChunkStorage
 
         if ($written !== $chunk->size) {
             @unlink($tmp);
-            throw new \DomainException('Chunk byte count does not match declared size.');
+            throw UploadProblem::retryable(
+                'chunk_size_mismatch',
+                UploadFailureStage::Acquisition,
+                'Chunk byte count does not match declared size.',
+            );
         }
 
         if (hash_final($hash) !== $chunk->checksumSha256) {
             @unlink($tmp);
-            throw new \DomainException('Chunk checksum mismatch.');
+            throw UploadProblem::retryable(
+                'chunk_checksum_mismatch',
+                UploadFailureStage::Acquisition,
+                'Chunk checksum mismatch.',
+            );
         }
 
         if (!rename($tmp, $path)) {
@@ -105,7 +115,11 @@ final readonly class LocalChunkStorage implements ChunkStorage
     {
         $chunks = $this->listChunks($sessionId);
         if ($chunks === []) {
-            throw new \DomainException('No upload chunks available.');
+            throw UploadProblem::retryable(
+                'upload_incomplete',
+                UploadFailureStage::Assembly,
+                'No upload chunks are available.',
+            );
         }
 
         $target = rtrim($this->mediaRoot, '/').'/'.$targetStorageKey;
@@ -124,12 +138,20 @@ final readonly class LocalChunkStorage implements ChunkStorage
         try {
             foreach ($chunks as $chunk) {
                 if ($chunk->offset !== $expectedOffset) {
-                    throw new \DomainException('Upload chunks are incomplete or out of sequence.');
+                    throw UploadProblem::retryable(
+                        'upload_incomplete',
+                        UploadFailureStage::Assembly,
+                        'Upload chunks are incomplete or out of sequence.',
+                    );
                 }
 
                 $in = fopen($this->chunkPath($sessionId, $chunk->index), 'rb');
                 if ($in === false) {
-                    throw new \DomainException('Upload chunk is missing.');
+                    throw UploadProblem::retryable(
+                        'upload_incomplete',
+                        UploadFailureStage::Assembly,
+                        'Upload chunk is missing.',
+                    );
                 }
                 stream_copy_to_stream($in, $out);
                 fclose($in);
@@ -142,7 +164,11 @@ final readonly class LocalChunkStorage implements ChunkStorage
 
         if ($expectedOffset !== $expectedSize) {
             @unlink($tmp);
-            throw new \DomainException('Assembled upload size does not match expected size.');
+            throw UploadProblem::retryable(
+                'upload_incomplete',
+                UploadFailureStage::Assembly,
+                'Assembled upload size does not match expected size.',
+            );
         }
 
         if (!rename($tmp, $target)) {

@@ -9,7 +9,6 @@ use Mediarama\Upload\Application\FinalizeUpload;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Attribute\Route;
-use Symfony\Component\Uid\Uuid;
 
 final readonly class FinalizeUploadController
 {
@@ -21,7 +20,7 @@ final readonly class FinalizeUploadController
     public function __invoke(string $id, Request $request): JsonResponse
     {
         $media = ($this->finalize)(
-            Uuid::fromString($id),
+            UploadRequestId::parse($id),
             $this->currentUser->requireUser()->id,
         );
 
