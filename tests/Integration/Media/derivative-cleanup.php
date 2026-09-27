@@ -229,7 +229,7 @@ try {
     ]);
     requireCleanup(
         str_contains($execute, 'Queued 1 generation(s) / 3 derivative object(s)')
-        && str_contains($execute, 'storage deleted=6 failed=0 pending=0'),
+        && str_contains($execute, 'storage resolved=6 failed=0 pending=0'),
         'next cleanup run resumes queued storage debt and removes the remaining eligible generation',
     );
 
@@ -274,7 +274,7 @@ SQL,
     ]);
     requireCleanup(
         str_contains($repeat, 'Queued 0 generation(s) / 0 derivative object(s)')
-        && str_contains($repeat, 'storage deleted=0 failed=0 pending=0'),
+        && str_contains($repeat, 'storage resolved=0 failed=0 pending=0'),
         'repeated cleanup is idempotent',
     );
 
