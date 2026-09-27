@@ -14,6 +14,7 @@ final readonly class GenerateImageDerivatives
         private MediaDerivativeRepository $derivatives,
         private ImageDerivativeGenerator $generator,
         private MediaStorage $storage,
+        private MediaDerivativeRegenerationLock $regenerationLock,
         private array $profiles,
         private int $processingVersion,
     ) {
@@ -43,6 +44,15 @@ final readonly class GenerateImageDerivatives
     }
 
     public function regenerate(MediaAsset $media): int
+    {
+        return $this->regenerationLock->synchronized(
+            $media->id,
+            'image',
+            fn (): int => $this->regenerateLocked($media),
+        );
+    }
+
+    private function regenerateLocked(MediaAsset $media): int
     {
         $nextVersion = max(
             $this->processingVersion,
