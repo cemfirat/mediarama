@@ -298,6 +298,96 @@ final class GenerateImageDerivativesRegenerationTest extends TestCase
         self::assertStringContainsString('/v3/thumbnail.webp', $storage->deleted[0]->key);
     }
 
+    public function testPersistenceFailureCleansEveryGeneratedArtifact(): void
+    {
+        $asset = $this->imageAsset();
+
+        $repository = new class implements MediaDerivativeRepository {
+            public function save(MediaDerivative $derivative): void
+            {
+                throw new \LogicException('Versioned regeneration must use batch persistence.');
+            }
+
+            public function saveAll(array $derivatives): void
+            {
+                throw new \RuntimeException('Synthetic batch persistence failure.');
+            }
+
+            public function find(
+                Uuid $mediaId,
+                string $kind,
+                string $profile,
+                int $processingVersion,
+            ): ?MediaDerivative {
+                return null;
+            }
+
+            public function latestProcessingVersion(Uuid $mediaId, string $kind): int
+            {
+                return 7;
+            }
+        };
+
+        $generator = new class implements ImageDerivativeGenerator {
+            public function generate(
+                MediaAsset $media,
+                ImageDerivativeProfile $profile,
+                int $processingVersion,
+            ): MediaDerivative {
+                $now = new DateTimeImmutable();
+
+                return new MediaDerivative(
+                    Uuid::v7(),
+                    $media->id,
+                    'image',
+                    $profile->name,
+                    $processingVersion,
+                    new StorageObjectId(
+                        'media',
+                        sprintf(
+                            'derivatives/%s/v%d/%s.webp',
+                            $media->id->toRfc4122(),
+                            $processingVersion,
+                            $profile->name,
+                        ),
+                    ),
+                    'image/webp',
+                    100,
+                    64,
+                    64,
+                    null,
+                    [],
+                    $now,
+                    $now,
+                );
+            }
+        };
+
+        $storage = $this->trackingStorage();
+        $service = new GenerateImageDerivatives(
+            $repository,
+            $generator,
+            $storage,
+            $this->immediateLock(),
+            [
+                new ImageDerivativeProfile('thumbnail', 480, 480),
+                new ImageDerivativeProfile('preview', 1600, 1600),
+            ],
+            1,
+        );
+
+        try {
+            $service->regenerate($asset);
+            self::fail('Expected batch persistence to fail.');
+        } catch (\RuntimeException $error) {
+            self::assertSame('Synthetic batch persistence failure.', $error->getMessage());
+        }
+
+        self::assertCount(2, $storage->deleted);
+        self::assertStringContainsString('/v8/thumbnail.webp', $storage->deleted[0]->key);
+        self::assertStringContainsString('/v8/preview.webp', $storage->deleted[1]->key);
+    }
+
     private function imageAsset(): MediaAsset
     {
         return MediaAsset::create(
