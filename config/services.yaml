@@ -148,7 +148,7 @@ services:
     Mediarama\Media\Infrastructure\Image\ImageWatermarkConfiguration:
         arguments:
             $assetPath: '%env(IMAGE_WATERMARK_ASSET_PATH)%'
-            $widthPercent: '%env(int:IMAGE_WATERMARK_WIDTH_PERCENT)%'
+            $sizePercent: '%env(int:IMAGE_WATERMARK_SIZE_PERCENT)%'
             $opacityPercent: '%env(int:IMAGE_WATERMARK_OPACITY_PERCENT)%'
             $marginPercent: '%env(int:IMAGE_WATERMARK_MARGIN_PERCENT)%'
             $gravity: '%env(IMAGE_WATERMARK_GRAVITY)%'
