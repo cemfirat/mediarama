@@ -300,6 +300,12 @@ PHP
 REPEAT_STATUS="$(curl --silent --show-error     --cookie "$SETUP_JAR"     --cookie-jar "$SETUP_JAR"     --output /tmp/setup-repeat.html     --write-out '%{http_code}'     --data-urlencode "_csrf_token=$SETUP_CSRF"     --data-urlencode "setup_token=$SETUP_TOKEN"     --data-urlencode 'username=setup-ci-second'     --data-urlencode "password=$PASSWORD"     --data-urlencode "password_confirmation=$PASSWORD"     --data-urlencode 'deployment_profile=public_publishing'     "$BASE_URL/setup")"
 expect_status 409 "$REPEAT_STATUS" "browser bootstrap write path fails closed after completion"
 
+if grep -F "$PASSWORD" /tmp/mediarama-setup-http.log || grep -F "$SETUP_TOKEN" /tmp/mediarama-setup-http.log; then
+    echo "FAIL browser setup leaked a credential into the application HTTP log"
+    exit 1
+fi
+echo "OK browser setup does not log administrator credentials or the setup token"
+
 kill "$SERVER_PID" 2>/dev/null || true
 wait "$SERVER_PID" 2>/dev/null || true
 trap 'reset_setup' EXIT
