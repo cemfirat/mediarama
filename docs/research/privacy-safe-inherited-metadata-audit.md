@@ -180,6 +180,63 @@ If title, description, creator or copyright remain, product wording must state t
 
 Full anonymization is not promised unless all retained free-form fields are also removed.
 
+## Real-format evidence — audit run #5
+
+Research workflow run **#5 / 36339338212** completed successfully on commit
+`536c83a845dba1182ba8b22cc6177824cbecd9e2`. The normal repository CI
+**#405** also passed on that exact commit.
+
+The candidate generated-copy scrub was:
+
+`-all= --ICC_Profile:all -CommonIFD0= -tagsfromfile @ -ColorSpaceTags -Orientation -PNG:Gamma -PNG:SRGBRendering`
+
+followed by explicit writes for the canonical fields intentionally retained by the research profile.
+
+The fixtures seeded GPS/location, creator/contact data, serial/device identifiers,
+XMP document identifiers, IPTC data where supported, arbitrary PNG text and
+orientation. JPEG/TIFF/WebP additionally carried a real sRGB ICC profile; PNG
+carried gamma and sRGB rendering-intent data.
+
+Observed evidence:
+
+| Format | Sensitive fixture values | Geometry / decode | Orientation | Color evidence | Remaining caveat |
+| --- | --- | --- | --- | --- | --- |
+| JPEG | no seeded leaks found | preserved | EXIF orientation preserved | real sRGB ICC profile preserved | expand vendor/MakerNotes fixture surface |
+| TIFF | no seeded leaks found | preserved | EXIF orientation preserved | real sRGB ICC profile preserved | ExifTool reports the expected minor warning that IFD0 itself cannot be deleted |
+| PNG | no seeded leaks found | preserved | EXIF orientation preserved | gamma 2.2 and sRGB rendering intent 0 preserved | add broader PNG textual/chromaticity fixtures |
+| WebP | no seeded leaks found | preserved | EXIF orientation preserved | real sRGB ICC profile preserved | expand RIFF-specific metadata fixtures |
+| AVIF | no seeded leaks found | preserved | embedded EXIF orientation preserved | EXIF color-space value preserved | real HEIF item rotation/mirroring and richer color-item evidence still required |
+| HEIC | no seeded leaks found | preserved | embedded EXIF orientation preserved | EXIF color-space value preserved | real HEIF item rotation/mirroring and richer color-item evidence still required |
+
+The result is strong evidence that an allowlisted scrub can work without pixel
+recompression for the current real-file fixtures. It is **not yet sufficient**
+to accept ADR-0014 because AVIF/HEIC item-property transforms and a broader
+vendor/private metadata surface are not yet proven.
+
+A later harness revision also verified that preserving ICC via
+`--ICC_Profile:all` avoids the transient ExifTool warning produced when the
+profile is deleted and copied back.
+
+### Implementation boundary discovered
+
+`ExifToolMetadataArguments` is shared by two fundamentally different writers:
+
+- `ExifToolMetadataWriter` starts from a byte-for-byte source copy and therefore needs inherited-metadata scrubbing;
+- `ExifToolXmpSidecarWriter` creates a fresh XMP file and therefore has no inherited source metadata to scrub.
+
+The future production implementation must **not** put `-all=`,
+`-tagsfromfile @` or other copy-scrub mechanics into the shared canonical
+argument builder. Doing so would couple the fresh RAW sidecar path to source-copy
+semantics it does not own.
+
+The cleaner boundary is:
+
+1. keep canonical field writes in the shared metadata-argument mapper;
+2. add a copy-only scrub strategy used by `ExifToolMetadataWriter`;
+3. let that scrub strategy be format-aware;
+4. keep `ExifToolXmpSidecarWriter` on fresh, canonical-only output;
+5. reuse the same scrub foundation later for authoritative Custom-copy selection (#88), without changing RAW sidecar mechanics.
+
 ## Required evidence before implementation is accepted
 
 For each writable embedded-copy format currently declared by Mediarama:
