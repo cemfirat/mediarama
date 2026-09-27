@@ -182,6 +182,18 @@ ADMIN_JAR=/tmp/admin-system.cookies
 rm -f "$ADMIN_JAR"
 expect_status 302 "$(login admin-ci-system "$ADMIN_JAR")" "system administrator can authenticate"
 
+ADMIN_DASHBOARD_STATUS="$(curl --silent --show-error \
+    --cookie "$ADMIN_JAR" \
+    --cookie-jar "$ADMIN_JAR" \
+    --dump-header /tmp/admin-system-dashboard.headers \
+    --output /tmp/admin-system-dashboard.html \
+    --write-out '%{http_code}' \
+    "$BASE_URL/admin")"
+expect_status 200 "$ADMIN_DASHBOARD_STATUS" "system administrator can enter admin dashboard"
+grep -i -F "x-robots-tag: noindex, nofollow" /tmp/admin-system-dashboard.headers
+grep -i -E '^cache-control:.*private' /tmp/admin-system-dashboard.headers
+grep -i -E '^cache-control:.*no-store' /tmp/admin-system-dashboard.headers
+
 SETTINGS_TOKEN="$(settings_csrf "$ADMIN_JAR" /tmp/admin-system-settings.html /tmp/admin-system-settings.headers)"
 grep -i -F "x-robots-tag: noindex, nofollow" /tmp/admin-system-settings.headers
 grep -i -E '^cache-control:.*private' /tmp/admin-system-settings.headers
