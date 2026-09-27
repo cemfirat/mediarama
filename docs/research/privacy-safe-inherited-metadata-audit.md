@@ -259,3 +259,30 @@ CI must seed representative sensitive source metadata, run the production scrub 
 7. unknown/arbitrary metadata used by the fixture does not silently survive when the policy says it must not.
 
 Only after this evidence should the Privacy-safe copy implementation move from denylist to allowlist/rebuild semantics.
+
+
+## Final research evidence — audit run #9
+
+The final research head `1d6aa9582715ac9b6e125b30aa2641c33611b3e5` passed:
+
+- normal repository CI **#409 / run 36339774236**;
+- dedicated Privacy-safe metadata audit **#9 / run 36339774240**.
+
+The final real-format harness verified the same scrub candidate against JPEG, TIFF, PNG, WebP, AVIF and HEIC.
+
+Observed final evidence:
+
+- all six outputs remained decodable;
+- source bytes remained unchanged;
+- no seeded sensitive fixture value survived;
+- intended title/description/creator/copyright values were rebuilt explicitly;
+- EXIF orientation remained stable;
+- JPEG/TIFF/WebP sRGB ICC evidence remained stable;
+- PNG gamma and sRGB rendering intent remained stable;
+- AVIF/HEIC used real HEIF item rotation and preserved the 270-degree QuickTime rotation through the scrub;
+- AVIF/HEIC geometry remained correctly rotated before and after;
+- TIFF emitted only the expected minor ExifTool warning that structural IFD0 itself cannot be deleted.
+
+This closes the research question strongly enough to proceed with a production copy-only allowlist implementation.
+
+The durable architecture decision is intentionally **not** stored as a second ADR in this research branch. The accepted production decision belongs with the implementation in PR #90 as `docs/adr/0014-privacy-safe-copy-allowlist.md`. This keeps one authoritative ADR number and avoids contradictory Proposed/Accepted ADRs.
