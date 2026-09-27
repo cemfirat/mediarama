@@ -165,6 +165,81 @@ Explicit regeneration never overwrites the currently published derivative identi
 
 A successful retry may detect the same valid object and avoid duplicate database records.
 
+### Derivative retention and garbage collection
+
+Versioned public derivative URLs are immutable while they exist, but historical
+processing versions are not permanent archival URLs.
+
+The default retention policy is deliberately conservative:
+
+- keep the newest **two** processing generations for each media/kind regardless of age;
+- a still-current/latest generation is therefore never eligible for cleanup;
+- an older generation becomes superseded when the next processing generation is created;
+- keep a superseded generation for at least **400 days** after that supersession point;
+- make both values deployment policy through
+  `DERIVATIVE_RETENTION_KEEP_GENERATIONS` and
+  `DERIVATIVE_RETENTION_GRACE_DAYS`.
+
+The public derivative controller currently sends
+`Cache-Control: public, max-age=31536000, immutable` (365 days). The 400-day
+default intentionally exceeds that nominal cache age from the supersession
+point, but it does **not** promise that every historical URL remains available
+forever. A client or intermediary may cache an old URL late in its grace
+period and continue serving that cached copy until its own cache entry expires;
+after Mediarama retires the relational derivative record, an uncached origin
+request for that historical version returns 404.
+
+Retention is the same logical policy for local and future object-storage
+adapters. A storage implementation may have different deletion mechanics, but
+must not shorten the application retention boundary.
+
+There is no manual derivative-generation pin in the first cleanup version. The
+newest-two guarantee plus the 400-day grace avoids introducing another
+lifecycle state before a real product need exists. If durable historical
+versions become a product requirement, pinning must become explicit persisted
+state rather than an implicit exception in cleanup code.
+
+#### SQL-first durable deletion queue
+
+Physical deletion is intentionally separated from relational retirement.
+
+For an eligible processing generation, one database transaction:
+
+1. removes all `media_derivatives` rows for that media/kind/version;
+2. inserts one durable `derivative_cleanup_jobs` row for every retired
+   storage object.
+
+Only after that transaction commits does maintenance delete physical objects.
+This preserves the general storage rule that SQL state changes first while
+preventing DB/object cleanup from silently diverging:
+
+- crash after SQL staging: the durable queue still owns the pending object;
+- storage deletion failure: the queue row remains for retry;
+- crash after physical deletion but before queue completion: the next run sees
+  the object is already absent and safely completes the queue row;
+- repeated cleanup is idempotent.
+
+The cleanup worker only physically deletes objects on the `media` disk whose
+keys match Mediarama's deterministic derivative namespace:
+
+`derivatives/{uuid}/v{positive-version}/{profile}.{extension}`
+
+An invalid or unexpected queued key is left visible for operator investigation
+and causes that cleanup run to report failure. Originals, uploads, imports and
+unknown/shared-bucket keys are never inferred from a prefix scan and never
+blindly deleted.
+
+#### Failed-generation orphans
+
+Regeneration already attempts to delete newly written derivative objects if
+generation or batch persistence fails. If that immediate physical delete also
+fails, the exact generated object is inserted into the same durable cleanup
+queue as a `failed_generation_orphan`.
+
+This reconciliation is based on an object Mediarama just generated and knows by
+its deterministic key; it does not scan a shared storage namespace looking for
+guessable orphans.
+
 ## Checksums
 
 Mediarama calculates SHA-256 for originals during ingestion.
