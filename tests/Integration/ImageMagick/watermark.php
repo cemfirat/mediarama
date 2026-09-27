@@ -191,7 +191,7 @@ try {
 
     $configuration = new ImageWatermarkConfiguration(
         assetPath: $watermarkPath,
-        widthPercent: 25,
+        sizePercent: 25,
         opacityPercent: 50,
         marginPercent: 10,
         gravity: 'southeast',
@@ -218,7 +218,7 @@ try {
     requireWatermark(($derivative->metadata['orientation_normalized'] ?? false) === true, 'orientation-normalized metadata is retained');
     requireWatermark(($derivative->metadata['watermarked'] ?? false) === true, 'derivative is marked watermarked');
     requireWatermark(($derivative->metadata['watermark_gravity'] ?? null) === 'southeast', 'watermark gravity is recorded');
-    requireWatermark(($derivative->metadata['watermark_width_percent'] ?? null) === 25, 'watermark width policy is recorded');
+    requireWatermark(($derivative->metadata['watermark_size_percent'] ?? null) === 25, 'watermark size policy is recorded');
     requireWatermark(($derivative->metadata['watermark_opacity_percent'] ?? null) === 50, 'watermark opacity policy is recorded');
     requireWatermark(($derivative->metadata['watermark_margin_percent'] ?? null) === 10, 'watermark margin policy is recorded');
     requireWatermark(
