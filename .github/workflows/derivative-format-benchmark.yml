@@ -241,7 +241,8 @@ jobs:
             --qualities=55,70,82,90 \
             --profiles=thumbnail:480x480,preview:1600x1600,large:2560x2560 \
             --corpus-id=imazen/imazen-26:pd-own-test-highres \
-            --corpus-revision="$IMAZEN26_SHA"
+            --corpus-revision="$IMAZEN26_SHA" \
+            --retain-dir=var/benchmarks/review-highres
 
       - name: Summarize benchmark curves
         run: |
