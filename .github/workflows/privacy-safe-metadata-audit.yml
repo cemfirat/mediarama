@@ -1,9 +1,6 @@
 name: Privacy-safe metadata audit
 
 on:
-  push:
-    branches:
-      - privacy/privacy-safe-inherited-metadata-audit-20260927
   pull_request:
     paths:
       - 'tests/Research/privacy-safe-inherited-metadata-audit.php'

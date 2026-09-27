@@ -191,7 +191,7 @@ $sensitiveValues = [
 
 try {
     echo "Privacy-safe inherited metadata research harness\n";
-    echo "Candidate scrub: -all= -CommonIFD0= -tagsfromfile @ -ColorSpaceTags -Orientation + explicit canonical writes\n";
+    echo "Candidate scrub: -all= -CommonIFD0= -tagsfromfile @ -ColorSpaceTags -Orientation -PNG:Gamma -PNG:SRGBRendering + explicit canonical writes\n";
 
     foreach ($formats as $name => $extension) {
         $source = $root.'/source-'.$name.'.'.$extension;
@@ -226,7 +226,7 @@ try {
             if ($name === 'png') {
                 $seed[] = '-PNG:Comment=PRIVATE-PNG-TEXT-87';
                 $seed[] = '-PNG:Gamma=2.2';
-                $seed[] = '-PNG:SRGBRendering=0';
+                $seed[] = '-PNG:SRGBRendering#=0';
             }
 
             $seed[] = '--';
@@ -253,6 +253,8 @@ try {
                 '@',
                 '-ColorSpaceTags',
                 '-Orientation',
+                '-PNG:Gamma',
+                '-PNG:SRGBRendering',
                 '-XMP-dc:Title=RETAINED-TITLE-87',
                 '-XMP-dc:Description=RETAINED-DESCRIPTION-87',
                 '-XMP-dc:Creator=RETAINED-CREATOR-87',
