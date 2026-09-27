@@ -24,12 +24,12 @@ The storage contract already requires relational state to change first and physi
 The standard cleanup policy is:
 
 - always retain the newest **three** processing generations per media/kind;
-- never remove a generation until its newest derivative record is at least **400 days** old;
-- a generation must satisfy **both** conditions before it is eligible;
+- once a generation falls outside those newest three, start a **400-day cleanup grace period**;
+- remove it only after that grace period has elapsed;
 - the current/latest generation therefore cannot be selected for cleanup;
 - cleanup is generation-aware: all profiles belonging to an eligible processing version are selected together.
 
-The 400-day default intentionally exceeds the current one-year immutable browser-cache lifetime. It provides a safety margin beyond `max-age=31536000` rather than allowing the cleanup clock to expire first.
+The grace clock starts only when enough newer generations exist to push the old generation outside the retained set. It is not based on the old generation's original creation date. The public gallery resolves the newest processing version, so old versions stop being emitted before this cleanup grace can begin. The 400-day default intentionally exceeds the current one-year immutable browser-cache lifetime and adds a safety margin beyond `max-age=31536000`.
 
 The defaults are operational policy, not hard-coded persistence semantics. The maintenance command exposes explicit retention/count options for controlled deployments, but its default invocation is preview-only.
 
@@ -77,7 +77,7 @@ Unexpected keys abort the database transaction. This keeps derivative maintenanc
 
 The current product does not add a manual “pin this old derivative generation forever” state.
 
-The combination of a 400-day grace period and three retained generations is the current public-cache safety contract. If a future product requirement treats derivative URLs as permanent archival references beyond that boundary, a first-class pin/reference model must be designed before shortening or bypassing retention.
+The combination of a 400-day grace period **after falling outside the newest-three set** and three retained generations is the current public-cache safety contract. If a future product requirement treats derivative URLs as permanent archival references beyond that boundary, a first-class pin/reference model must be designed before shortening or bypassing retention.
 
 Original media remains unaffected and immutable.
 
