@@ -58,7 +58,7 @@ final class CleanupSupersededDerivativesTest extends TestCase
         $service = new CleanupSupersededDerivatives($repository, $storage);
         $result = $service->run(new DateTimeImmutable('-400 days'), 3, 100, 100);
 
-        self::assertSame(2, $result->storageDeleted);
+        self::assertSame(2, $result->storageResolved);
         self::assertSame(1, $result->storageFailed);
         self::assertSame(1, $result->storagePending);
         self::assertSame([$ok->id->toRfc4122(), $missing->id->toRfc4122()], $repository->completed);
