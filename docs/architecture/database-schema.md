@@ -258,8 +258,14 @@ Aggregates are derived/cached, not the source of truth.
 - `temporary_storage_key text`
 - `status varchar`
 - `expires_at timestamptz`
+- `last_failure_code varchar nullable`
+- `last_failure_stage varchar nullable`
+- `last_failure_retryable boolean nullable`
+- `last_failed_at timestamptz nullable`
 - `created_at`
 - `updated_at`
+
+Failure metadata is all-null or all-present. It contains only stable sanitized application state, never arbitrary exception text, SQL, paths or stack traces.
 
 Parts need not be rows if the selected storage multipart mechanism owns part state. A DB table for parts should only be added if the implementation needs it.
 

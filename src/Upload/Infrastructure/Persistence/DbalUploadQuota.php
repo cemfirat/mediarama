@@ -98,6 +98,16 @@ SQL,
 
     public function commit(Uuid $sessionId): void
     {
+        $this->removeReservation($sessionId);
+    }
+
+    public function release(Uuid $sessionId): void
+    {
+        $this->removeReservation($sessionId);
+    }
+
+    private function removeReservation(Uuid $sessionId): void
+    {
         $this->connection->delete(
             'upload_quota_reservations',
             ['upload_session_id' => $sessionId->toRfc4122()],

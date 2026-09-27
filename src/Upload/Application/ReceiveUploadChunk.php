@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Mediarama\Upload\Application;
 
 use Mediarama\Upload\Domain\UploadChunk;
+use Mediarama\Upload\Domain\UploadFailureStage;
 use Mediarama\Upload\Domain\UploadStatus;
 use Symfony\Component\Uid\Uuid;
 
@@ -27,24 +28,63 @@ final readonly class ReceiveUploadChunk
         $session = $this->sessions->get($sessionId);
 
         if (!$session->userId->equals($actingUserId)) {
-            throw new \DomainException('Upload session does not belong to the acting user.');
+            throw UploadProblem::request(
+                'upload_not_found',
+                'Upload session is not accessible to the acting user.',
+            );
         }
 
         if ($session->isExpired()) {
-            throw new \DomainException('Upload session has expired.');
+            throw UploadProblem::request('upload_expired', 'Upload session has expired.');
         }
 
         if (!in_array($session->status, [UploadStatus::Created, UploadStatus::Uploading], true)) {
-            throw new \DomainException('Upload session is not accepting chunks.');
+            throw UploadProblem::request(
+                'upload_state_conflict',
+                'Upload session is not accepting chunks.',
+            );
         }
 
-        $this->policy->assertChunkSize($chunk->size);
+        try {
+            $this->policy->assertChunkSize($chunk->size);
 
-        if ($session->status === UploadStatus::Created) {
-            $session->begin();
+            if ($session->status === UploadStatus::Created) {
+                $session->begin();
+                $this->sessions->save($session);
+            }
+
+            $this->chunks->writeChunk($sessionId, $chunk, $stream);
+        } catch (UploadProblem $error) {
+            if ($error->failureStage !== null) {
+                $session->recordFailure(
+                    $error->publicCode,
+                    $error->failureStage,
+                    $error->retryable,
+                );
+                $this->sessions->save($session);
+            }
+
+            throw $error;
+        } catch (\RuntimeException $error) {
+            $problem = UploadProblem::retryable(
+                'upload_temporarily_unavailable',
+                UploadFailureStage::Acquisition,
+                'Chunk storage is temporarily unavailable.',
+                previous: $error,
+            );
+            $session->recordFailure(
+                $problem->publicCode,
+                UploadFailureStage::Acquisition,
+                true,
+            );
+            $this->sessions->save($session);
+
+            throw $problem;
+        }
+
+        if ($session->lastFailure !== null) {
+            $session->clearFailure();
             $this->sessions->save($session);
         }
-
-        $this->chunks->writeChunk($sessionId, $chunk, $stream);
     }
 }

@@ -22,6 +22,7 @@ final class UploadSession
         public readonly DateTimeImmutable $expiresAt,
         public readonly DateTimeImmutable $createdAt,
         public DateTimeImmutable $updatedAt,
+        public ?UploadFailure $lastFailure = null,
     ) {
         if ($expectedSize < 0) {
             throw new \InvalidArgumentException('Expected upload size must not be negative.');
@@ -53,6 +54,7 @@ final class UploadSession
             $now->add(new DateInterval('PT24H')),
             $now,
             $now,
+            null,
         );
     }
 
@@ -69,6 +71,7 @@ final class UploadSession
         DateTimeImmutable $expiresAt,
         DateTimeImmutable $createdAt,
         DateTimeImmutable $updatedAt,
+        ?UploadFailure $lastFailure = null,
     ): self {
         return new self(
             $id,
@@ -82,6 +85,7 @@ final class UploadSession
             $expiresAt,
             $createdAt,
             $updatedAt,
+            $lastFailure,
         );
     }
 
@@ -100,6 +104,7 @@ final class UploadSession
             throw new \DomainException('Upload session cannot be marked uploaded from its current state.');
         }
         $this->status = UploadStatus::Uploaded;
+        $this->clearFailure();
         $this->touch();
     }
 
@@ -118,6 +123,41 @@ final class UploadSession
             throw new \DomainException('Only a finalizing upload can complete.');
         }
         $this->status = UploadStatus::Completed;
+        $this->clearFailure();
+        $this->touch();
+    }
+
+    public function recordFailure(
+        string $code,
+        UploadFailureStage $stage,
+        bool $retryable,
+    ): void {
+        $this->lastFailure = new UploadFailure(
+            $code,
+            $stage,
+            $retryable,
+            new DateTimeImmutable(),
+        );
+        $this->touch();
+    }
+
+    public function failTerminal(string $code, UploadFailureStage $stage): void
+    {
+        if ($this->status === UploadStatus::Completed) {
+            throw new \DomainException('A completed upload cannot fail.');
+        }
+
+        $this->status = UploadStatus::Failed;
+        $this->recordFailure($code, $stage, false);
+    }
+
+    public function clearFailure(): void
+    {
+        if ($this->lastFailure === null) {
+            return;
+        }
+
+        $this->lastFailure = null;
         $this->touch();
     }
 

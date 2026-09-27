@@ -10,7 +10,6 @@ use Mediarama\Upload\Application\UploadSessionRepository;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Attribute\Route;
-use Symfony\Component\Uid\Uuid;
 
 final readonly class UploadStatusController
 {
@@ -24,17 +23,26 @@ final readonly class UploadStatusController
     #[Route('/api/uploads/{id}', name: 'upload_status', methods: ['GET'])]
     public function __invoke(string $id, Request $request): JsonResponse
     {
-        $session = $this->sessions->get(Uuid::fromString($id));
+        $session = $this->sessions->get(UploadRequestId::parse($id));
         $actor = $this->currentUser->requireUser()->id;
 
         if (!$session->userId->equals($actor)) {
-            throw new \DomainException('Upload session does not belong to the acting user.');
+            throw \Mediarama\Upload\Application\UploadProblem::request(
+                'upload_not_found',
+                'Upload session is not accessible to the acting user.',
+            );
         }
 
         return new JsonResponse([
             'id' => $session->id->toRfc4122(),
             'status' => $session->status->value,
             'expected_size' => $session->expectedSize,
+            'failure' => $session->lastFailure === null ? null : [
+                'code' => $session->lastFailure->code,
+                'stage' => $session->lastFailure->stage->value,
+                'retryable' => $session->lastFailure->retryable,
+                'failed_at' => $session->lastFailure->failedAt->format(DATE_ATOM),
+            ],
             'chunks' => array_map(static fn ($chunk): array => [
                 'index' => $chunk->index,
                 'offset' => $chunk->offset,
