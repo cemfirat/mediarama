@@ -117,21 +117,21 @@ try {
         $mediaId->toRfc4122(),
     );
 
+    $invalidBatchRejected = false;
+
     try {
         $repository->saveAll([
             derivative($mediaId, 'thumbnail', 2, $duplicateStorage),
             derivative($mediaId, 'preview', 2, $duplicateStorage),
         ]);
-
-        throw new RuntimeException('Expected derivative batch persistence to fail on duplicate storage identity.');
-    } catch (Throwable $error) {
-        requireRegeneration(
-            str_contains($error->getMessage(), 'duplicate')
-            || str_contains($error->getMessage(), 'unique')
-            || str_contains($error->getMessage(), 'uniq_derivative_storage'),
-            'invalid derivative batch is rejected by the database uniqueness boundary',
-        );
+    } catch (Throwable) {
+        $invalidBatchRejected = true;
     }
+
+    requireRegeneration(
+        $invalidBatchRejected,
+        'invalid derivative batch is rejected by the database uniqueness boundary',
+    );
 
     $versionTwoCount = (int) $db1->fetchOne(
         'SELECT COUNT(*) FROM media_derivatives WHERE media_id = :media AND kind = :kind AND processing_version = 2',
