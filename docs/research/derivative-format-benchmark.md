@@ -18,9 +18,11 @@ ImageMagick documents that supported formats can depend on optional delegate lib
 
 - https://imagemagick.org/formats/
 
-The WebP encoder has codec-specific options and ImageMagick maps its quality setting into WebP behavior that is not equivalent to JPEG's quality scale:
+WebP is measured through Mediarama's production `cwebp` backend, not through ImageMagick's WebP writer. cwebp defines `-q 0..100` directly for lossy RGB quality, while its other encoder controls remain codec-specific:
 
-- https://imagemagick.org/webp/
+- https://developers.google.com/speed/webp/docs/cwebp
+
+This distinction is deliberate. Representative run #1 exposed that ImageMagick 6.9.12-98 can encode WebP successfully while ignoring the requested lossy quality. Benchmark and production WebP paths must therefore share the explicit cwebp adapter.
 
 ImageMagick's compare tool supports objective distortion metrics including PSNR, and current ImageMagick documentation also defines SSIM and its tuning parameters. The runtime's available metrics can differ, so the harness detects them rather than assuming them:
 
@@ -70,12 +72,14 @@ For every source it:
 2. uses only the checksum-derived source ID in the report;
 3. creates a stripped, auto-oriented, fit-inside lossless PNG reference per profile;
 4. probes each requested encoder with a real write rather than inferring capability from an extension;
-5. encodes every supported format across the requested quality curve;
-6. records output bytes, actual output dimensions and wall-clock encode duration;
-7. records SSIM and PSNR when the installed ImageMagick compare runtime exposes them;
-8. deletes all temporary benchmark images after the report is written.
+5. routes WebP through Mediarama's `CwebpEncoder`, matching the production derivative backend;
+6. encodes every supported format across the requested quality curve;
+7. records output bytes, actual output dimensions and wall-clock encode duration;
+8. records SSIM and PSNR when the installed ImageMagick compare runtime exposes them;
+9. records the cwebp runtime version;
+10. deletes all temporary benchmark images after the report is written.
 
-The same finite ImageMagick resource envelope used by the application is applied to benchmark conversion and comparison processes.
+The same finite ImageMagick resource envelope used by the application is applied to benchmark preparation and comparison processes. WebP encoding receives only the bounded lossless PNG reference and uses the same cwebp subprocess timeout/backend as production.
 
 ## Report privacy
 
@@ -117,6 +121,8 @@ A final codec setting should be chosen from comparable-quality regions, not from
 ## Representative corpus gate
 
 The CI smoke fixture proves that the harness executes and reports correctly. It is deliberately not product evidence.
+
+The smoke gate also requires the requested WebP quality points to produce a non-flat output-size curve. This is a regression sentinel for the exact class of silent no-op quality failure discovered in ImageMagick 6.9.12-98.
 
 Before closing #74, run the harness on a reviewed, legally usable photo corpus that includes at minimum:
 
