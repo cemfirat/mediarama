@@ -18,6 +18,8 @@ A child therefore cannot become public through its own flag while a parent remai
 
 Public gallery reads and public media search must use this same boundary rather than copying slightly different visibility rules.
 
+Site-level public publishing is an additional gate defined by ADR-0015. A Collection being structurally `public` does not force an installation configured as a private workspace to expose anonymous public routes.
+
 ## Published media
 
 Public collection pages only return media that are:
@@ -40,6 +42,16 @@ Allowed public profiles are currently `thumbnail`, `preview` and `large`.
 Before streaming a derivative, Mediarama rechecks that the media is still reachable through an effectively public collection and still published/ready. The immutable original has no public route.
 
 Derivative URLs carry a processing version and may therefore use long-lived immutable caching.
+
+## Search-engine discovery
+
+Access/publication and search indexing are separate concerns.
+
+A resource can be publicly reachable while carrying an effective `noindex` policy. Conversely, an `index` preference never overrides private/restricted access, unpublished moderation state or disabled site-level public publishing.
+
+Collection pages and MediaAsset pages own their index preference independently. MediaAsset SEO does not inherit from Collection membership because one asset may belong to multiple Collections.
+
+Implementation details live in `docs/architecture/publication-indexing.md` and ADR-0015.
 
 ## Privacy boundary
 
