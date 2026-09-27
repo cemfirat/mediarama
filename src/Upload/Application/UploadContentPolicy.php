@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Mediarama\Upload\Application;
 
+use Mediarama\Media\Domain\MediaType;
 use Mediarama\Upload\Domain\UploadFailureStage;
 
 final readonly class UploadContentPolicy
@@ -16,6 +17,14 @@ final readonly class UploadContentPolicy
     public function assertAllowed(InspectedContent $content): void
     {
         $this->assertMimeAllowed($content->mimeType);
+
+        if ($content->mediaType === MediaType::Document) {
+            throw UploadProblem::terminal(
+                'media_type_not_allowed',
+                UploadFailureStage::Finalization,
+                'Generic document uploads are not enabled.',
+            );
+        }
     }
 
     public function assertMimeAllowed(string $mimeType): void
