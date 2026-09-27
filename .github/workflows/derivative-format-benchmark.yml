@@ -7,7 +7,6 @@ on:
       - '.github/workflows/derivative-format-benchmark.yml'
       - 'bin/benchmark-derivative-formats'
       - 'bin/summarize-derivative-format-benchmark'
-      - 'docs/research/derivative-format-benchmark.md'
       - 'tests/Integration/ImageMagick/derivative-format-benchmark.sh'
 
 permissions:

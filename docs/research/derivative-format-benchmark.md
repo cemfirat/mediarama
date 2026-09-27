@@ -148,7 +148,7 @@ The repository contains a separate benchmark workflow at:
 
 `.github/workflows/derivative-format-benchmark.yml`
 
-It is intentionally separate from normal CI. It can be run manually, and it also runs when the benchmark implementation/workflow itself changes.
+It is intentionally separate from normal CI. It can be run manually, and it also runs when benchmark implementation, workflow or integration-test code changes. Documentation-only edits do not automatically spend the representative-corpus benchmark budget.
 
 The workflow pins two external evidence repositories:
 
