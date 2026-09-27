@@ -17,7 +17,7 @@ final readonly class ImageMagickWatermarkRenderer
      *   watermarked: true,
      *   watermark_fingerprint: string,
      *   watermark_gravity: string,
-     *   watermark_width_percent: int,
+     *   watermark_size_percent: int,
      *   watermark_opacity_percent: int,
      *   watermark_margin_percent: int
      * }
@@ -39,9 +39,13 @@ final readonly class ImageMagickWatermarkRenderer
 
         [$width, $height] = $this->dimensions($intermediatePath);
 
-        $watermarkWidth = max(
+        $watermarkMaximumWidth = max(
             1,
-            (int) round($width * ($this->configuration->widthPercent() / 100)),
+            (int) round($width * ($this->configuration->sizePercent() / 100)),
+        );
+        $watermarkMaximumHeight = max(
+            1,
+            (int) round($height * ($this->configuration->sizePercent() / 100)),
         );
         $margin = max(
             0,
@@ -56,7 +60,7 @@ final readonly class ImageMagickWatermarkRenderer
             '-alpha',
             'set',
             '-resize',
-            $watermarkWidth.'x',
+            sprintf('%dx%d', $watermarkMaximumWidth, $watermarkMaximumHeight),
             '-channel',
             'A',
             '-evaluate',
@@ -86,7 +90,7 @@ final readonly class ImageMagickWatermarkRenderer
             'watermarked' => true,
             'watermark_fingerprint' => $this->configuration->fingerprintFromAssetHash($assetHashBefore),
             'watermark_gravity' => $this->configuration->gravity(),
-            'watermark_width_percent' => $this->configuration->widthPercent(),
+            'watermark_size_percent' => $this->configuration->sizePercent(),
             'watermark_opacity_percent' => $this->configuration->opacityPercent(),
             'watermark_margin_percent' => $this->configuration->marginPercent(),
         ];
