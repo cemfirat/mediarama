@@ -30,7 +30,13 @@ final class RegenerateMediaDerivativesCommand extends Command
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $version = ($this->regenerate)(Uuid::fromString((string) $input->getArgument('media-id')));
+        try {
+            $version = ($this->regenerate)(Uuid::fromString((string) $input->getArgument('media-id')));
+        } catch (\DomainException $error) {
+            $output->writeln('<error>'.$error->getMessage().'</error>');
+
+            return Command::FAILURE;
+        }
 
         $output->writeln(sprintf(
             'Image derivatives regenerated as processing version %d.',
