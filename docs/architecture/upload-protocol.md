@@ -80,7 +80,9 @@ For migrated Coppermine albums, these collection rules are created only when bot
 
 This preserves the source's album-level upload switch instead of treating a global `media.upload` capability as permission to upload everywhere.
 
-This is the current ACL foundation; richer sharing/access semantics remain separate hardening work.
+Upload authorization delegates this decision to the shared actor-aware Collection access policy. `collection.media.add` remains independent from `collection.view`; an upload grant does not implicitly expose a private Collection.
+
+Broader view/sharing semantics are documented in `docs/architecture/collection-access.md`.
 
 ## Current authentication boundary
 
