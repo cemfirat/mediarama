@@ -47,9 +47,6 @@ INSERT INTO storage_cleanup_jobs (
 ON CONFLICT (storage_disk, storage_key) DO UPDATE SET
     reason = EXCLUDED.reason,
     metadata = EXCLUDED.metadata,
-    status = 'pending',
-    claimed_at = NULL,
-    last_error = NULL,
     updated_at = EXCLUDED.updated_at
 RETURNING id, storage_disk, storage_key
 SQL,
