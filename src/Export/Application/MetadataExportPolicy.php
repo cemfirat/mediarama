@@ -28,6 +28,16 @@ final readonly class MetadataExportPolicy
         }
 
         if ($profile === MetadataExportProfile::Custom) {
+            if (!array_is_list($includedFields)) {
+                throw new \InvalidArgumentException('Custom export fields must be a list.');
+            }
+
+            foreach ($includedFields as $field) {
+                if (!is_string($field) || $field === '') {
+                    throw new \InvalidArgumentException('Custom export field names must be non-empty strings.');
+                }
+            }
+
             if (count(array_unique($includedFields)) !== count($includedFields)) {
                 throw new \InvalidArgumentException('Custom export fields must not contain duplicates.');
             }
