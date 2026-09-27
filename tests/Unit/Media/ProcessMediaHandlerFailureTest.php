@@ -13,6 +13,7 @@ use Mediarama\Media\Application\InspectMediaMetadata;
 use Mediarama\Media\Application\InspectedMetadata;
 use Mediarama\Media\Application\MediaAssetRepository;
 use Mediarama\Media\Application\MediaDerivativeRepository;
+use Mediarama\Media\Application\MediaDerivativeRegenerationLock;
 use Mediarama\Media\Application\MediaStorage;
 use Mediarama\Media\Application\StoredObject;
 use Mediarama\Media\Application\MediaMetadataInspector;
@@ -149,10 +150,19 @@ final class ProcessMediaHandlerFailureTest extends TestCase
             }
         };
 
+
+        $regenerationLock = new class implements MediaDerivativeRegenerationLock {
+            public function synchronized(Uuid $mediaId, string $kind, callable $operation): mixed
+            {
+                return $operation();
+            }
+        };
+
         $images = new GenerateImageDerivatives(
             $derivatives,
             $generator,
             $storage,
+            $regenerationLock,
             [new ImageDerivativeProfile('test', 64, 64)],
             1,
         );
