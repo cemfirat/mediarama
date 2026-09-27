@@ -28,9 +28,7 @@ final readonly class DbalMediaDerivativeRepository implements MediaDerivativeRep
             return;
         }
 
-        $this->connection->beginTransaction();
-
-        try {
+        $this->connection->transactional(function () use ($derivatives): void {
             foreach ($derivatives as $derivative) {
                 if (!$derivative instanceof MediaDerivative) {
                     throw new \InvalidArgumentException('Derivative batch contains an invalid value.');
@@ -38,15 +36,7 @@ final readonly class DbalMediaDerivativeRepository implements MediaDerivativeRep
 
                 $this->upsert($derivative);
             }
-
-            $this->connection->commit();
-        } catch (\Throwable $error) {
-            if ($this->connection->isTransactionActive()) {
-                $this->connection->rollBack();
-            }
-
-            throw $error;
-        }
+        });
     }
 
     public function find(Uuid $mediaId, string $kind, string $profile, int $processingVersion): ?MediaDerivative
