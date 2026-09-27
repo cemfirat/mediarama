@@ -28,6 +28,8 @@ use Mediarama\Upload\Infrastructure\Persistence\DbalUploadFinalizationCriticalSe
 use Mediarama\Upload\Infrastructure\Persistence\DbalUploadFinalizationRepository;
 use Mediarama\Upload\Infrastructure\Persistence\DbalUploadQuota;
 use Mediarama\Upload\Infrastructure\Persistence\DbalUploadSessionRepository;
+use Mediarama\Upload\Domain\UploadFailureCode;
+use Mediarama\Upload\Domain\UploadProblem;
 use Mediarama\Upload\Domain\UploadSession;
 use Symfony\Component\Messenger\Bridge\Doctrine\Transport\DoctrineTransport;
 use Symfony\Component\Messenger\Bridge\Doctrine\Transport\PostgreSqlConnection as DoctrineMessengerPostgreSqlConnection;
@@ -193,6 +195,7 @@ function finalizer(
     string $storageRoot,
     ?string $barrierDirectory = null,
     ?string $workerName = null,
+    ?MessageBusInterface $bus = null,
 ): FinalizeUpload {
     $storage = new LocalMediaStorage($storageRoot);
 
@@ -207,7 +210,7 @@ function finalizer(
         new DbalUploadFinalizationRepository($db),
         new DbalUploadQuota($db, 0),
         new DbalUploadFinalizationCriticalSection($db),
-        doctrineTransportBus($db),
+        $bus ?? doctrineTransportBus($db),
     );
 }
 
@@ -282,11 +285,25 @@ function verifyCompletedScenario(
 ): void {
     $id = $session->id->toRfc4122();
     $sessionRow = $db->fetchAssociative(
-        'SELECT status, temporary_storage_key FROM upload_sessions WHERE id = :id',
+        <<<'SQL'
+SELECT
+    status,
+    temporary_storage_key,
+    last_failure_code,
+    last_failure_stage,
+    last_failure_retryable,
+    last_failed_at
+FROM upload_sessions
+WHERE id = :id
+SQL,
         ['id' => $id],
     );
     requireCondition($sessionRow !== false, 'Upload session disappeared.');
     requireCondition($sessionRow['status'] === 'completed', 'Upload session did not reach completed.');
+    requireCondition($sessionRow['last_failure_code'] === null, 'Completed session kept stale failure code.');
+    requireCondition($sessionRow['last_failure_stage'] === null, 'Completed session kept stale failure stage.');
+    requireCondition($sessionRow['last_failure_retryable'] === null, 'Completed session kept stale retryable flag.');
+    requireCondition($sessionRow['last_failed_at'] === null, 'Completed session kept stale failure timestamp.');
 
     requireCondition(
         (int) $db->fetchOne('SELECT COUNT(*) FROM media_assets WHERE id = :id', ['id' => $id]) === 1,
@@ -554,7 +571,100 @@ try {
     requireCondition($asset->id->equals($afterMapping->id), 'Post-mapping legacy recovery changed MediaAsset identity.');
     verifyCompletedScenario($db, $storage, $afterMapping, 5);
 
-    // 6. Prove Symfony Doctrine Messenger's nested send does not escape
+    // 6. A Messenger failure after filesystem promotion must roll the DB
+    // transaction back, preserve the quota reservation and leave the session
+    // recoverably finalizing. The next request recovers from the deterministic
+    // permanent original and clears the retryable failure.
+    $interrupted = createUploadedSession(
+        $db,
+        $storage,
+        $userId,
+        $fixturePath,
+        'interrupted-dispatch.png',
+    );
+    $createdSessionIds[] = $interrupted->id;
+    $queueBeforeInterruption = queueCount($db);
+
+    $failingBus = new class implements MessageBusInterface {
+        public function dispatch(object $message, array $stamps = []): Envelope
+        {
+            throw new RuntimeException('intentional finalization dispatch failure');
+        }
+    };
+
+    $interruptionObserved = false;
+    try {
+        finalizer($db, $storageRoot, null, null, $failingBus)(
+            $interrupted->id,
+            $userId,
+        );
+    } catch (UploadProblem $problem) {
+        requireCondition(
+            $problem->failureCode === UploadFailureCode::FinalizationInterrupted,
+            'Unexpected failure code for Messenger interruption.',
+        );
+        requireCondition($problem->retryable, 'Finalization interruption must be retryable.');
+        $interruptionObserved = true;
+    }
+
+    requireCondition($interruptionObserved, 'Messenger interruption was not surfaced as UploadProblem.');
+
+    $interruptedRow = $db->fetchAssociative(
+        <<<'SQL'
+SELECT status, last_failure_code, last_failure_stage, last_failure_retryable
+FROM upload_sessions
+WHERE id = :id
+SQL,
+        ['id' => $interrupted->id->toRfc4122()],
+    );
+    requireCondition($interruptedRow !== false, 'Interrupted UploadSession disappeared.');
+    requireCondition($interruptedRow['status'] === 'finalizing', 'Interrupted session did not remain finalizing.');
+    requireCondition(
+        $interruptedRow['last_failure_code'] === UploadFailureCode::FinalizationInterrupted->value,
+        'Interrupted session did not persist the failure code.',
+    );
+    requireCondition($interruptedRow['last_failure_stage'] === 'finalization', 'Interrupted session failure stage is wrong.');
+    requireCondition(
+        in_array($interruptedRow['last_failure_retryable'], [true, 1, '1', 't', 'true'], true),
+        'Interrupted session did not persist retryable=true.',
+    );
+    requireCondition(
+        (int) $db->fetchOne(
+            'SELECT COUNT(*) FROM upload_quota_reservations WHERE upload_session_id = :id',
+            ['id' => $interrupted->id->toRfc4122()],
+        ) === 1,
+        'Retryable finalization interruption released quota.',
+    );
+    requireCondition(
+        (int) $db->fetchOne('SELECT COUNT(*) FROM media_assets WHERE id = :id', ['id' => $interrupted->id->toRfc4122()]) === 0,
+        'MediaAsset escaped the rolled-back finalization transaction.',
+    );
+    requireCondition(
+        (int) $db->fetchOne(
+            'SELECT COUNT(*) FROM upload_finalizations WHERE upload_session_id = :id',
+            ['id' => $interrupted->id->toRfc4122()],
+        ) === 0,
+        'Finalization mapping escaped the rolled-back transaction.',
+    );
+    requireCondition(
+        queueCount($db) === $queueBeforeInterruption,
+        'Failed Messenger dispatch changed the async queue.',
+    );
+
+    $interruptedPermanent = new StorageObjectId(
+        'media',
+        sprintf('originals/%s/source', $interrupted->id->toRfc4122()),
+    );
+    requireCondition(
+        $storage->exists($interruptedPermanent),
+        'Interrupted finalization did not retain the deterministic promoted original for retry.',
+    );
+
+    $asset = finalizer($db, $storageRoot)($interrupted->id, $userId);
+    requireCondition($asset->id->equals($interrupted->id), 'Interrupted retry changed MediaAsset identity.');
+    verifyCompletedScenario($db, $storage, $interrupted, 6);
+
+    // 7. Prove Symfony Doctrine Messenger's nested send does not escape
     // the outer finalization transaction on the shared DBAL connection.
     $queueBeforeRollbackProbe = queueCount($db);
     $transport = doctrineTransport($db);
@@ -597,6 +707,7 @@ try {
     echo "OK retry after promotion before MediaAsset persistence\n";
     echo "OK retry after MediaAsset persistence before mapping\n";
     echo "OK legacy mapping/session recovery dispatch\n";
+    echo "OK Messenger interruption remains retryable and recovers from permanent original\n";
     echo "OK Doctrine Messenger enqueue rolls back with finalization transaction\n";
 } finally {
     $db->executeStatement("DELETE FROM messenger_messages WHERE queue_name = 'async'");
