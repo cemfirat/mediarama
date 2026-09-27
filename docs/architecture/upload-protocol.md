@@ -61,6 +61,19 @@ Before committing, the promoted object's size and SHA-256 must still match the v
 
 The current deployment uses Symfony's Doctrine Messenger transport on the same PostgreSQL connection. CI must verify that queue insertion participates in the final database transaction; a future non-Doctrine transport requires an explicit outbox rather than assuming cross-system atomicity.
 
+## Observable failure state
+
+UploadSession persistence carries structured last-failure metadata:
+
+- stable failure code;
+- lifecycle stage;
+- retryable flag;
+- failure timestamp.
+
+The model deliberately stores no raw exception message or stack trace. Retryable failures do not automatically turn the session into `failed`; terminal failures do. A successful state transition clears stale failure metadata.
+
+Downstream MediaAsset processing has its own `processing_state` and remains a separate failure domain.
+
 ## Resume
 
 Clients query session status and only resend missing chunks.

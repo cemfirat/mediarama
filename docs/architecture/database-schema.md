@@ -255,6 +255,12 @@ Aggregates are derived/cached, not the source of truth.
 - `expires_at timestamptz`
 - `created_at`
 - `updated_at`
+- `last_failure_code varchar nullable`
+- `last_failure_stage varchar nullable`
+- `last_failure_retryable boolean nullable`
+- `last_failed_at timestamptz nullable`
+
+The four failure fields are all-null or all-populated. They store a sanitized machine-readable **last upload failure** only; raw exception text, stack traces, SQL and filesystem paths do not belong in the UploadSession row.
 
 Parts need not be rows if the selected storage multipart mechanism owns part state. A DB table for parts should only be added if the implementation needs it.
 

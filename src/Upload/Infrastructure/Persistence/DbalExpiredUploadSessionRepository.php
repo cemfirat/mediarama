@@ -7,6 +7,8 @@ namespace Mediarama\Upload\Infrastructure\Persistence;
 use DateTimeImmutable;
 use Doctrine\DBAL\Connection;
 use Mediarama\Upload\Application\ExpiredUploadSessionRepository;
+use Mediarama\Upload\Domain\UploadFailureCode;
+use Mediarama\Upload\Domain\UploadFailureStage;
 use Mediarama\Upload\Domain\UploadSession;
 use Mediarama\Upload\Domain\UploadStatus;
 use Symfony\Component\Uid\Uuid;
@@ -44,6 +46,10 @@ SQL,
             new DateTimeImmutable((string) $row['expires_at']),
             new DateTimeImmutable((string) $row['created_at']),
             new DateTimeImmutable((string) $row['updated_at']),
+            $row['last_failure_code'] !== null ? UploadFailureCode::from((string) $row['last_failure_code']) : null,
+            $row['last_failure_stage'] !== null ? UploadFailureStage::from((string) $row['last_failure_stage']) : null,
+            $row['last_failure_retryable'] !== null ? (bool) $row['last_failure_retryable'] : null,
+            $row['last_failed_at'] !== null ? new DateTimeImmutable((string) $row['last_failed_at']) : null,
         ), $rows);
     }
 
