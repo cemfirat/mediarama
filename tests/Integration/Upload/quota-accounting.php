@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 require dirname(__DIR__, 3).'/vendor/autoload.php';
 
-use DateTimeImmutable;
 use Doctrine\DBAL\Connection;
+use Doctrine\DBAL\ParameterType;
 use Doctrine\DBAL\DriverManager;
 use Doctrine\DBAL\Tools\DsnParser;
 use Mediarama\Media\Domain\MediaAsset;
@@ -190,20 +190,28 @@ try {
 
     foreach ([[$groupOne, 'quota-one'], [$groupTwo, 'quota-two']] as [$groupId, $slug]) {
         $now = new DateTimeImmutable();
-        $db->insert('groups', [
-            'id' => $groupId->toRfc4122(),
-            'slug' => $slug.'-'.substr(str_replace('-', '', $userId->toRfc4122()), 0, 8),
-            'name' => $slug,
-            'is_system' => false,
-            'created_at' => $now->format(DATE_ATOM),
-            'updated_at' => $now->format(DATE_ATOM),
-        ]);
-        $db->insert('user_groups', [
-            'user_id' => $userId->toRfc4122(),
-            'group_id' => $groupId->toRfc4122(),
-            'is_primary' => $groupId->equals($groupOne),
-            'created_at' => $now->format(DATE_ATOM),
-        ]);
+        $db->insert(
+            'groups',
+            [
+                'id' => $groupId->toRfc4122(),
+                'slug' => $slug.'-'.substr(str_replace('-', '', $userId->toRfc4122()), 0, 8),
+                'name' => $slug,
+                'is_system' => false,
+                'created_at' => $now->format(DATE_ATOM),
+                'updated_at' => $now->format(DATE_ATOM),
+            ],
+            ['is_system' => ParameterType::BOOLEAN],
+        );
+        $db->insert(
+            'user_groups',
+            [
+                'user_id' => $userId->toRfc4122(),
+                'group_id' => $groupId->toRfc4122(),
+                'is_primary' => $groupId->equals($groupOne),
+                'created_at' => $now->format(DATE_ATOM),
+            ],
+            ['is_primary' => ParameterType::BOOLEAN],
+        );
     }
 
     // Parent lock makes the race deterministic: both workers must wait on the
