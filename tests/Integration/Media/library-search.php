@@ -312,6 +312,9 @@ try {
     requireSearch(in_array($locatedOwned->toRfc4122(), $locationIds, true), 'location-presence filter keeps accessible owned media');
     requireSearch(!in_array($secretHidden->toRfc4122(), $locationIds, true), 'location-presence filter does not leak inaccessible media');
 
+    $noLocationIds = searchIds($search->search($viewer, new MediaSearchCriteria(hasLocation: false, limit: 200)));
+    requireSearch(!in_array($privateHidden->toRfc4122(), $noLocationIds, true), 'location-absence filter does not bypass authorization');
+
     echo "Authenticated library media search integration checks passed.".PHP_EOL;
 } finally {
     foreach (array_reverse($collections) as $collectionId) {
