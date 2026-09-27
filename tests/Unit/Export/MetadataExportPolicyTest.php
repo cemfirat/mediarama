@@ -21,6 +21,28 @@ final class MetadataExportPolicyTest extends TestCase
         );
     }
 
+    public function testRejectsAssociativeCustomFieldInput(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Custom export fields must be a list.');
+
+        new MetadataExportPolicy(
+            MetadataExportProfile::Custom,
+            ['field' => 'title'],
+        );
+    }
+
+    public function testRejectsNonStringCustomFieldNames(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Custom export field names must be non-empty strings.');
+
+        new MetadataExportPolicy(
+            MetadataExportProfile::Custom,
+            ['title', 123],
+        );
+    }
+
     public function testRejectsDuplicateCustomFields(): void
     {
         $this->expectException(\InvalidArgumentException::class);
