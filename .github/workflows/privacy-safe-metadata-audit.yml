@@ -1,0 +1,47 @@
+name: Privacy-safe metadata audit
+
+on:
+  push:
+    branches:
+      - privacy/privacy-safe-inherited-metadata-audit-20260927
+  pull_request:
+    paths:
+      - 'tests/Research/privacy-safe-inherited-metadata-audit.php'
+      - 'docs/research/privacy-safe-inherited-metadata-audit.md'
+      - 'docs/adr/0014-privacy-safe-inherited-metadata.md'
+      - '.github/workflows/privacy-safe-metadata-audit.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: Real-format inherited metadata research
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    env:
+      EXIFTOOL_BINARY: exiftool
+      IMAGEMAGICK_BINARY: convert
+      IMAGEMAGICK_IDENTIFY_BINARY: identify
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          coverage: none
+          extensions: pdo_pgsql, pdo_mysql
+          tools: composer:v2
+
+      - name: Install runtime tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y exiftool imagemagick libheif-examples libheif-plugin-aomdec libheif-plugin-aomenc libheif-plugin-libde265 libheif-plugin-x265
+
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Run non-gating real-format metadata audit
+        run: php tests/Research/privacy-safe-inherited-metadata-audit.php
