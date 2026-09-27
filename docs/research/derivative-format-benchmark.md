@@ -142,6 +142,67 @@ AVIF input decoding does not prove AVIF output encoding.
 
 The harness probes AVIF output independently. If the deployed ImageMagick runtime cannot produce a real AVIF file, the report records the encoder as unsupported. Mediarama must not expose an AVIF derivative profile until there is an explicit, production-supported encoder path with matching runtime tests and deployment documentation.
 
+## Representative GitHub benchmark
+
+The repository contains a separate benchmark workflow at:
+
+`.github/workflows/derivative-format-benchmark.yml`
+
+It is intentionally separate from normal CI. It can be run manually, and it also runs when benchmark implementation, workflow or integration-test code changes. Documentation-only edits do not automatically spend the representative-corpus benchmark budget.
+
+The workflow pins two external evidence repositories:
+
+- `imazen/codec-corpus` at `8e10d4d765667c1c49d74413878fc4bfb46dcf8d`;
+- `imazen/imazen-26` at `fb09068fd09ba971d3e7bdf9695f2454a77aa9b6`.
+
+No third-party image is copied into Mediarama Git history.
+
+The evidence set is:
+
+### GB82
+
+- 25 images;
+- CC0 1.0;
+- 576 × 576;
+- portraits/facial detail, landscapes, low-contrast gradients/skies, digital noise, fine textures, low-light and rendered graphics;
+- measured at 480 px and native 576 px profile bounds.
+
+### CLIC 2025 final holdout
+
+- 30 lossless PNG photographs;
+- approximately 2048 px long edge;
+- Unsplash License;
+- source corpus designates this as its final holdout;
+- measured at Mediarama's 480 / 1600 / 2560 maximum profile bounds without upscaling.
+
+### imazen-26 high-resolution PD-own supplement
+
+Six canonical test-split camera photographs are selected from the `PD-own` photo categories and downloaded from the corpus's public R2 storage only after manifest validation:
+
+- 1059 — colorful sailboat detail, 2841 × 3788 portrait;
+- 1237 — person/interior mixed detail, 4000 × 3000;
+- 1407 — rocky coastline/natural texture, 8160 × 6120;
+- 1477 — ocean sunset/sky gradients, 4000 × 3000;
+- 1499 — snowy forest/fine natural texture, 4000 × 3000;
+- 1607 — food/high-ISO texture, 4000 × 3000.
+
+The workflow verifies pinned revisions, source licenses/provenance, canonical test-split membership, JPEG source format, a minimum 2560 px short side, and every downloaded high-resolution source SHA-256 before benchmarking. The JPEG-only high-resolution supplement deliberately isolates derivative-codec measurement from HEIC container/depth-image decoder behavior; HEIC decoding is covered separately by Mediarama's real-format integration gate.
+
+The high-resolution supplement directly exercises the full 2560 px Mediarama `large` bound and removes the need to extrapolate from the approximately 2048 px CLIC corpus.
+
+The workflow produces raw JSON per corpus, aggregate JSON, a Markdown curve table in the GitHub job summary, and one retained GitHub Actions artifact containing the evidence files.
+
+The aggregate report contains corpus revision, source counts, ImageMagick/cwebp runtime provenance and, per corpus/profile/codec/quality point:
+
+- successful/failed sample count;
+- encoder backend;
+- median and mean bytes;
+- median/mean encode duration;
+- mean SSIM where supported;
+- mean PSNR where supported.
+
+The summary deliberately does not select a winner.
+
 ## Decision gate
 
 Do not change current public profile formats from this benchmark branch.

@@ -37,6 +37,9 @@ function benchmarkOptions(): array
         'identify-binary::',
         'compare-binary::',
         'cwebp-binary::',
+        'corpus-id::',
+        'corpus-revision::',
+        'retain-dir::',
         'help',
     ]);
 
@@ -61,6 +64,9 @@ Optional:
   --identify-binary=identify
   --compare-binary=compare
   --cwebp-binary=cwebp
+  --corpus-id=imazen/codec-corpus:gb82
+  --corpus-revision=<pinned source commit>
+  --retain-dir=/path/to/review-output
 
 The benchmark does not modify Mediarama production profiles. It creates temporary
 lossless references, probes each requested encoder, records bytes/encode time and
@@ -397,6 +403,20 @@ try {
     if ($limit < 0) {
         throw new InvalidArgumentException('Benchmark limit cannot be negative.');
     }
+
+    $corpusId = isset($options['corpus-id']) ? trim((string) $options['corpus-id']) : '';
+    $corpusRevision = isset($options['corpus-revision']) ? trim((string) $options['corpus-revision']) : '';
+
+    foreach (['corpus ID' => $corpusId, 'corpus revision' => $corpusRevision] as $label => $value) {
+        if (strlen($value) > 200 || preg_match('/[\x00-\x1F\x7F]/', $value) === 1) {
+            throw new InvalidArgumentException('Benchmark '.$label.' contains invalid control characters or is too long.');
+        }
+    }
+
+    $retainDirectory = isset($options['retain-dir']) ? trim((string) $options['retain-dir']) : '';
+    if ($retainDirectory !== '' && str_contains($retainDirectory, "\0")) {
+        throw new InvalidArgumentException('Benchmark retain directory contains a NUL byte.');
+    }
 } catch (InvalidArgumentException $error) {
     benchmarkFail($error->getMessage());
 }
@@ -434,6 +454,13 @@ if ($sources === []) {
     benchmarkFail('No supported image files were found in the benchmark input directory.');
 }
 
+if ($retainDirectory !== '') {
+    if (!is_dir($retainDirectory) && !mkdir($retainDirectory, 0770, true) && !is_dir($retainDirectory)) {
+        benchmarkFail('Unable to create benchmark retain directory.');
+    }
+    $retainDirectory = realpath($retainDirectory) ?: $retainDirectory;
+}
+
 $temporaryRoot = sys_get_temp_dir().'/mediarama-format-benchmark-'.bin2hex(random_bytes(8));
 if (!mkdir($temporaryRoot, 0700, true) && !is_dir($temporaryRoot)) {
     benchmarkFail('Unable to create benchmark temporary directory.');
@@ -463,6 +490,10 @@ try {
         'schema_version' => 2,
         'generated_at' => (new DateTimeImmutable())->format(DATE_ATOM),
         'purpose' => 'Mediarama derivative-format benchmark; not production profile configuration',
+        'corpus' => [
+            'id' => $corpusId !== '' ? $corpusId : null,
+            'revision' => $corpusRevision !== '' ? $corpusRevision : null,
+        ],
         'privacy' => [
             'source_paths_included' => false,
             'embedded_metadata_copied_to_outputs' => false,
@@ -561,6 +592,18 @@ try {
 
             $referenceInfo = benchmarkIdentify($imageMagick, $reference);
 
+            if ($retainDirectory !== '') {
+                $retainedReference = sprintf(
+                    '%s/%s-%s-reference.png',
+                    $retainDirectory,
+                    $sourceId,
+                    $profileName,
+                );
+                if (!copy($reference, $retainedReference)) {
+                    throw new RuntimeException('Unable to retain benchmark reference image.');
+                }
+            }
+
             foreach ($formats as $format) {
                 if (!($capabilities[$format]['supported'] ?? false)) {
                     $report['samples'][] = [
@@ -606,6 +649,21 @@ try {
                         $bytes = filesize($candidate);
                         if ($bytes === false || $bytes < 1) {
                             throw new RuntimeException('Encoder produced an empty candidate.');
+                        }
+
+                        if ($retainDirectory !== '') {
+                            $retainedCandidate = sprintf(
+                                '%s/%s-%s-%s-q%d.%s',
+                                $retainDirectory,
+                                $sourceId,
+                                $profileName,
+                                $format,
+                                $quality,
+                                $extension,
+                            );
+                            if (!copy($candidate, $retainedCandidate)) {
+                                throw new RuntimeException('Unable to retain benchmark candidate image.');
+                            }
                         }
 
                         $sample = [

@@ -8,6 +8,9 @@ set -euo pipefail
 ROOT="$(mktemp -d /tmp/mediarama-format-benchmark-smoke.XXXXXX)"
 INPUT="$ROOT/input"
 REPORT="$ROOT/report.json"
+SUMMARY_JSON="$ROOT/summary.json"
+SUMMARY_MD="$ROOT/summary.md"
+RETAIN="$ROOT/review"
 
 cleanup() {
   rm -rf "$ROOT"
@@ -19,9 +22,12 @@ mkdir -p "$INPUT"
 "$IMAGEMAGICK_BINARY"   -size 640x360   "gradient:#1f2a44-#e5bf8c"   -fill '#f8f8f8'   -draw 'rectangle 40,40 240,160'   -fill '#202020'   -draw 'circle 440,180 510,180'   "$INPUT/smoke-source.png"
 
 php bin/benchmark-derivative-formats   --input-dir="$INPUT"   --output="$REPORT"   --formats=webp,jpeg,avif   --qualities=70,82   --profiles=smoke:320x320   --limit=1   --convert-binary="$IMAGEMAGICK_BINARY"   --identify-binary="$IMAGEMAGICK_IDENTIFY_BINARY"   --compare-binary="${IMAGEMAGICK_COMPARE_BINARY:-compare}" \
-  --cwebp-binary="$CWEBP_BINARY"
+  --cwebp-binary="$CWEBP_BINARY" \
+  --corpus-id="mediarama-ci-smoke" \
+  --corpus-revision="synthetic-v2" \
+  --retain-dir="$RETAIN"
 
-REPORT="$REPORT" INPUT="$INPUT" php <<'PHP'
+REPORT="$REPORT" INPUT="$INPUT" RETAIN="$RETAIN" php <<'PHP'
 <?php
 
 declare(strict_types=1);
@@ -47,6 +53,11 @@ function requireBenchmarkSmoke(bool $condition, string $message): void
 
 requireBenchmarkSmoke(($report['schema_version'] ?? null) === 2, 'benchmark report schema is versioned');
 requireBenchmarkSmoke(count($report['sources'] ?? []) === 1, 'benchmark reports one smoke source');
+requireBenchmarkSmoke(
+    ($report['corpus']['id'] ?? null) === 'mediarama-ci-smoke'
+    && ($report['corpus']['revision'] ?? null) === 'synthetic-v2',
+    'benchmark records corpus provenance',
+);
 requireBenchmarkSmoke(
     ($report['privacy']['source_paths_included'] ?? null) === false,
     'benchmark report declares source paths excluded',
@@ -131,5 +142,87 @@ if ($avifSupported) {
     );
 }
 
+$retainedFiles = glob((string) getenv('RETAIN').'/*');
+requireBenchmarkSmoke(is_array($retainedFiles), 'retained benchmark output can be listed');
+requireBenchmarkSmoke(
+    count($retainedFiles) === 1 + count($ok),
+    'retained output contains one reference plus every successful codec candidate',
+);
+
+$sourceId = (string) ($report['sources'][0]['source_id'] ?? '');
+requireBenchmarkSmoke(
+    is_file((string) getenv('RETAIN').'/'.$sourceId.'-smoke-reference.png'),
+    'retained output contains the lossless review reference',
+);
+
+foreach ($ok as $sample) {
+    $extension = ($sample['format'] ?? null) === 'jpeg' ? 'jpg' : (string) ($sample['format'] ?? '');
+    $candidate = sprintf(
+        '%s/%s-%s-%s-q%d.%s',
+        (string) getenv('RETAIN'),
+        $sourceId,
+        (string) ($sample['profile'] ?? ''),
+        (string) ($sample['format'] ?? ''),
+        (int) ($sample['quality'] ?? 0),
+        $extension,
+    );
+    requireBenchmarkSmoke(is_file($candidate), 'successful sample has retained review candidate');
+}
+
 echo "Derivative-format benchmark smoke checks passed.".PHP_EOL;
+PHP
+
+php bin/summarize-derivative-format-benchmark \
+  --report="smoke:$REPORT" \
+  --markdown="$SUMMARY_MD" \
+  --json="$SUMMARY_JSON"
+
+SUMMARY_JSON="$SUMMARY_JSON" SUMMARY_MD="$SUMMARY_MD" php <<'PHP'
+<?php
+
+declare(strict_types=1);
+
+$summary = json_decode(
+    (string) file_get_contents((string) getenv('SUMMARY_JSON')),
+    true,
+    flags: JSON_THROW_ON_ERROR,
+);
+$markdown = (string) file_get_contents((string) getenv('SUMMARY_MD'));
+
+if (($summary['schema_version'] ?? null) !== 2) {
+    throw new RuntimeException('Benchmark summary schema is not versioned.');
+}
+if (count($summary['reports'] ?? []) !== 1) {
+    throw new RuntimeException('Benchmark summary did not retain one source report.');
+}
+if (($summary['reports'][0]['corpus']['id'] ?? null) !== 'mediarama-ci-smoke') {
+    throw new RuntimeException('Benchmark summary lost corpus provenance.');
+}
+
+$aggregates = $summary['aggregates'] ?? [];
+$webp = array_values(array_filter(
+    $aggregates,
+    static fn (array $row): bool => ($row['format'] ?? null) === 'webp',
+));
+$jpeg = array_values(array_filter(
+    $aggregates,
+    static fn (array $row): bool => ($row['format'] ?? null) === 'jpeg',
+));
+
+if (count($webp) !== 2 || count($jpeg) !== 2) {
+    throw new RuntimeException('Benchmark summary lost WebP/JPEG quality curve rows.');
+}
+foreach ($webp as $row) {
+    if (($row['encoder_backend'] ?? null) !== 'cwebp') {
+        throw new RuntimeException('Benchmark summary lost the production WebP encoder backend.');
+    }
+}
+if (!str_contains($markdown, 'Mediarama derivative-format benchmark')
+    || !str_contains($markdown, 'cwebp')
+    || !str_contains($markdown, 'WEBP')
+    || !str_contains($markdown, 'JPEG')) {
+    throw new RuntimeException('Benchmark Markdown summary is incomplete.');
+}
+
+echo "Derivative-format benchmark summary checks passed.".PHP_EOL;
 PHP
