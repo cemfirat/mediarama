@@ -28,6 +28,13 @@ security:
 
 when@prod:
     security:
+        firewalls:
+            main:
+                login_throttling:
+                    max_attempts: 5
+                    interval: '1 minute'
+                    cache_pool: 'cache.rate_limiter'
+
         access_control:
             - { path: ^/login$, roles: PUBLIC_ACCESS }
             - { path: ^/api/auth/csrf$, roles: ROLE_USER }
