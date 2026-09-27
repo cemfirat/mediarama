@@ -6,7 +6,6 @@ namespace Mediarama\Export\Infrastructure;
 
 use Mediarama\Export\Application\MetadataExportPolicy;
 use Mediarama\Export\Application\MetadataWriter;
-use Mediarama\Export\Domain\MetadataExportProfile;
 use Mediarama\Media\Domain\MediaAsset;
 use Mediarama\Media\Infrastructure\Metadata\ExifToolProcess;
 
