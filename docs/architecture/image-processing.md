@@ -115,3 +115,5 @@ The same integration gate also verifies a JPEG carrying EXIF orientation 6 and e
 - display output no longer carries source orientation or GPS metadata after the derivative strip step.
 
 AVIF/HEIC/HEIF source fixtures are encoded independently with libheif so the test does not depend on ImageMagick being able to encode the same input format it is supposed to decode.
+
+The CI runtime installs explicit libheif decoder plugins for both AV1 and HEVC. This is intentional: container support alone is insufficient when the deployed libheif build has codec plugins split into separate packages. Production images advertising AVIF/HEIC/HEIF support must provide equivalent decoders.
