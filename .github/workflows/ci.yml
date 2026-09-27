@@ -88,6 +88,7 @@ jobs:
           coverage: none
           extensions: pdo_pgsql, pdo_mysql
           tools: composer:v2
+          ini-values: variables_order=EGPCS
 
       - uses: actions/setup-node@v4
         with:
@@ -104,6 +105,21 @@ jobs:
       - name: Install dependencies
         run: composer install --no-interaction --prefer-dist --no-progress
 
+      - name: Verify PHP exposes real environment variables
+        run: |
+          php -r '
+          if (strpos((string) ini_get("variables_order"), "E") === false) {
+              fwrite(STDERR, "PHP variables_order does not expose environment variables.\n");
+              exit(1);
+          }
+          $url = $_ENV["DATABASE_URL"] ?? null;
+          if (!is_string($url) || parse_url($url, PHP_URL_USER) !== "mediarama") {
+              fwrite(STDERR, "CI DATABASE_URL is not visible through PHP environment variables.\n");
+              exit(1);
+          }
+          echo "OK PHP environment precedence\n";
+          '
+
       - name: Verify ImageMagick application resource envelope
         run: php tests/Integration/ImageMagick/resource-limits.php
 
@@ -112,11 +128,20 @@ jobs:
 
       - name: Build UIkit frontend
         run: |
-          npm install --no-audit --no-fund
+          npm ci --no-audit --no-fund
           npm run build
           test -s public/build/app.css
           test -s public/build/uikit.min.js
           test -s public/build/uikit-icons.min.js
+
+      - name: Verify dependency install is reproducible
+        run: |
+          STATUS="$(git status --porcelain -- composer.lock symfony.lock package-lock.json package.json .env config)"
+          if [ -n "$STATUS" ]; then
+            echo "Dependency installation changed committed project state:"
+            printf '%s\n' "$STATUS"
+            exit 1
+          fi
 
       - name: Lint PHP
         run: find src tests migrations -name '*.php' -print0 | xargs -0 -n1 php -l
@@ -158,8 +183,17 @@ jobs:
       - name: Show migration status
         run: php bin/console doctrine:migrations:status
 
+      - name: Validate production security container
+        run: APP_ENV=prod APP_DEBUG=0 php bin/console lint:container
+
+      - name: Verify production authentication boundary
+        run: tests/Integration/Security/http-authentication.sh
+
       - name: Run unit tests
         run: vendor/bin/phpunit
+
+      - name: Verify concurrent upload finalization and crash recovery
+        run: php tests/Integration/Upload/finalize-concurrency.php
 
       - name: Prepare Coppermine 1.6 fixture
         run: |
@@ -319,6 +353,200 @@ jobs:
               exit(1);
           }
           echo "OK runtime album upload permission denies source-disabled album".PHP_EOL;
+          PHP
+
+      - name: Verify public gallery visibility and derivative delivery
+        run: |
+          php <<'PHP'
+          <?php
+          require 'vendor/autoload.php';
+
+          $dsn = new Doctrine\DBAL\Tools\DsnParser([
+              'postgresql' => 'pdo_pgsql',
+              'postgres' => 'pdo_pgsql',
+          ]);
+          $db = Doctrine\DBAL\DriverManager::getConnection($dsn->parse((string) getenv('DATABASE_URL')));
+
+          $db->executeStatement(
+              "UPDATE collections
+               SET visibility = 'public',
+                   password_protected = FALSE,
+                   password_reset_required = FALSE
+               WHERE title IN ('Fixture Category', 'Fixture Album')"
+          );
+          $db->executeStatement(
+              "UPDATE media_assets
+               SET moderation_state = 'published'
+               WHERE title = 'Fixture Photo'"
+          );
+
+          file_put_contents('/tmp/public_category_id', (string) $db->fetchOne(
+              "SELECT id FROM collections WHERE title = 'Fixture Category'"
+          ));
+          file_put_contents('/tmp/public_collection_id', (string) $db->fetchOne(
+              "SELECT id FROM collections WHERE title = 'Fixture Album'"
+          ));
+          file_put_contents('/tmp/public_media_id', (string) $db->fetchOne(
+              "SELECT id FROM media_assets WHERE title = 'Fixture Photo'"
+          ));
+          file_put_contents('/tmp/public_thumbnail_version', (string) $db->fetchOne(
+              "SELECT MAX(processing_version)
+               FROM media_derivatives
+               WHERE media_id = (SELECT id FROM media_assets WHERE title = 'Fixture Photo')
+                 AND kind = 'image'
+                 AND profile = 'thumbnail'"
+          ));
+
+          $effective = (int) $db->fetchOne(
+              "SELECT COUNT(*)
+               FROM effective_public_collections
+               WHERE collection_id IN (
+                   SELECT id FROM collections WHERE title IN ('Fixture Category', 'Fixture Album')
+               )"
+          );
+          if ($effective !== 2) {
+              fwrite(STDERR, "Expected category and album in effective public view.\n");
+              exit(1);
+          }
+          PHP
+
+          php -S 127.0.0.1:8080 -t public public/index.php >/tmp/mediarama-http.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" || true' EXIT
+          sleep 1
+
+          request_ok() {
+            local url="$1"
+            local output="$2"
+            if ! curl --fail --silent --show-error "$url" -o "$output"; then
+              echo "HTTP smoke request failed: $url"
+              cat /tmp/mediarama-http.log || true
+              exit 1
+            fi
+          }
+
+          expect_status() {
+            local expected="$1"
+            local url="$2"
+            local status
+            status="$(curl --silent --output /tmp/http-body --write-out '%{http_code}' "$url")"
+            if [ "$status" != "$expected" ]; then
+              echo "Expected HTTP $expected but got $status for $url"
+              cat /tmp/mediarama-http.log || true
+              cat /tmp/http-body || true
+              exit 1
+            fi
+          }
+
+          expect_search_count() {
+            local expected="$1"
+            local url="$2"
+            local output="$3"
+            request_ok "$url" "$output"
+            php -r '
+              $decoded = json_decode((string) file_get_contents($argv[2]), true, flags: JSON_THROW_ON_ERROR);
+              $actual = count($decoded["items"] ?? []);
+              if ($actual !== (int) $argv[1]) {
+                  fwrite(STDERR, "Expected ".$argv[1]." search items, got ".$actual.PHP_EOL);
+                  exit(1);
+              }
+            ' "$expected" "$output"
+          }
+
+          CATEGORY_ID="$(cat /tmp/public_category_id)"
+          COLLECTION_ID="$(cat /tmp/public_collection_id)"
+          MEDIA_ID="$(cat /tmp/public_media_id)"
+          THUMBNAIL_VERSION="$(cat /tmp/public_thumbnail_version)"
+
+          test -n "$CATEGORY_ID"
+          test -n "$COLLECTION_ID"
+          test -n "$MEDIA_ID"
+          test -n "$THUMBNAIL_VERSION"
+
+          request_ok "http://127.0.0.1:8080/collections" /tmp/collections.html
+          grep -F "Fixture Category" /tmp/collections.html
+
+          request_ok "http://127.0.0.1:8080/collections/$COLLECTION_ID" /tmp/collection.html
+          grep -F "Fixture Photo" /tmp/collection.html
+
+          expect_search_count 1 "http://127.0.0.1:8080/api/media?q=Fixture" /tmp/public-search.json
+          if ! curl --fail --silent --show-error \
+            -D /tmp/public-search.headers \
+            "http://127.0.0.1:8080/api/media?q=Fixture" \
+            -o /tmp/public-search-header-body.json; then
+            cat /tmp/mediarama-http.log || true
+            exit 1
+          fi
+          grep -i -F "x-robots-tag: noindex, nofollow" /tmp/public-search.headers
+          php -r '
+            $decoded = json_decode((string) file_get_contents("/tmp/public-search.json"), true, flags: JSON_THROW_ON_ERROR);
+            $item = $decoded["items"][0] ?? null;
+            if (!is_array($item) || ($item["title"] ?? null) !== "Fixture Photo") {
+                fwrite(STDERR, "Public search did not return the expected published item.".PHP_EOL);
+                exit(1);
+            }
+            foreach (["filename", "original_filename", "captured_at", "creator", "camera_make", "camera_model", "lens", "iso", "location_name", "latitude", "longitude"] as $forbidden) {
+                if (array_key_exists($forbidden, $item)) {
+                    fwrite(STDERR, "Public search leaked forbidden field: ".$forbidden.PHP_EOL);
+                    exit(1);
+                }
+            }
+          '
+          expect_search_count 0 "http://127.0.0.1:8080/api/media?q=sample.jpg" /tmp/public-search-filename.json
+
+          if ! curl --fail --silent --show-error \
+            -D /tmp/thumbnail.headers \
+            "http://127.0.0.1:8080/media/$MEDIA_ID/derivatives/v$THUMBNAIL_VERSION/thumbnail" \
+            -o /tmp/thumbnail.webp; then
+            cat /tmp/mediarama-http.log || true
+            exit 1
+          fi
+          grep -i -F "content-type: image/webp" /tmp/thumbnail.headers
+          test -s /tmp/thumbnail.webp
+
+          php <<'PHP'
+          <?php
+          require 'vendor/autoload.php';
+          $dsn = new Doctrine\DBAL\Tools\DsnParser(['postgresql' => 'pdo_pgsql', 'postgres' => 'pdo_pgsql']);
+          $db = Doctrine\DBAL\DriverManager::getConnection($dsn->parse((string) getenv('DATABASE_URL')));
+          $db->executeStatement(
+              "UPDATE collections SET password_protected = TRUE WHERE title = 'Fixture Category'"
+          );
+          PHP
+
+          expect_status 404 "http://127.0.0.1:8080/collections/$COLLECTION_ID"
+          expect_status 404 "http://127.0.0.1:8080/media/$MEDIA_ID/derivatives/v$THUMBNAIL_VERSION/thumbnail"
+          expect_search_count 0 "http://127.0.0.1:8080/api/media?q=Fixture" /tmp/private-parent-search.json
+
+          php <<'PHP'
+          <?php
+          require 'vendor/autoload.php';
+          $dsn = new Doctrine\DBAL\Tools\DsnParser(['postgresql' => 'pdo_pgsql', 'postgres' => 'pdo_pgsql']);
+          $db = Doctrine\DBAL\DriverManager::getConnection($dsn->parse((string) getenv('DATABASE_URL')));
+          $db->executeStatement(
+              "UPDATE collections SET password_protected = FALSE WHERE title = 'Fixture Category'"
+          );
+          $db->executeStatement(
+              "UPDATE media_assets SET moderation_state = 'pending_review' WHERE title = 'Fixture Photo'"
+          );
+          PHP
+
+          request_ok "http://127.0.0.1:8080/collections/$COLLECTION_ID" /tmp/moderated-collection.html
+          if grep -F "Fixture Photo" /tmp/moderated-collection.html; then
+            echo "Pending-review media leaked into public collection page."
+            exit 1
+          fi
+          expect_status 404 "http://127.0.0.1:8080/media/$MEDIA_ID/derivatives/v$THUMBNAIL_VERSION/thumbnail"
+          expect_search_count 0 "http://127.0.0.1:8080/api/media?q=Fixture" /tmp/pending-search.json
+
+          php <<'PHP'
+          <?php
+          require 'vendor/autoload.php';
+          $dsn = new Doctrine\DBAL\Tools\DsnParser(['postgresql' => 'pdo_pgsql', 'postgres' => 'pdo_pgsql']);
+          $db = Doctrine\DBAL\DriverManager::getConnection($dsn->parse((string) getenv('DATABASE_URL')));
+          $db->executeStatement(
+              "UPDATE media_assets SET moderation_state = 'published' WHERE title = 'Fixture Photo'"
+          );
           PHP
 
       - name: Verify Coppermine migration preflight blockers

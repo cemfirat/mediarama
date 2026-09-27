@@ -1,0 +1,4 @@
+framework:
+    property_info:
+        # Pin the Symfony 7.4 behavior explicitly before its default changes in 8.0.
+        with_constructor_extractor: true

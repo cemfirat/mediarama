@@ -17,6 +17,7 @@ use Mediarama\Upload\Application\FinalizeUpload;
 use Mediarama\Upload\Application\InspectedContent;
 use Mediarama\Upload\Application\UploadContentPolicy;
 use Mediarama\Upload\Application\UploadDestinationAuthorizer;
+use Mediarama\Upload\Application\UploadFinalizationCriticalSection;
 use Mediarama\Upload\Application\UploadFinalizationRepository;
 use Mediarama\Upload\Application\UploadSessionRepository;
 use Mediarama\Upload\Domain\UploadSession;
@@ -149,6 +150,17 @@ final class FinalizeUploadStructuralValidationTest extends TestCase
             }
         };
 
+        $criticalSection = new class implements UploadFinalizationCriticalSection {
+            public int $calls = 0;
+
+            public function run(Uuid $sessionId, callable $operation): mixed
+            {
+                ++$this->calls;
+
+                return $operation();
+            }
+        };
+
         $bus = new class implements MessageBusInterface {
             public int $dispatches = 0;
 
@@ -169,6 +181,7 @@ final class FinalizeUploadStructuralValidationTest extends TestCase
             $structure,
             $authorizer,
             $finalizations,
+            $criticalSection,
             $bus,
         );
 
@@ -185,6 +198,7 @@ final class FinalizeUploadStructuralValidationTest extends TestCase
         self::assertSame(0, $storage->promotions);
         self::assertSame(0, $media->saves);
         self::assertSame(0, $finalizations->remembers);
+        self::assertSame(0, $criticalSection->calls);
         self::assertSame(0, $bus->dispatches);
     }
 }

@@ -1,0 +1,55 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Collections · Mediarama{% endblock %}
+
+{% block body %}
+<header class="uk-margin-large-bottom">
+    <p class="uk-text-meta uk-margin-remove-bottom">Gallery</p>
+    <h1 class="uk-heading-small uk-margin-small-top">Collections</h1>
+    <p class="uk-text-lead uk-width-2xlarge">
+        Browse public photo and video collections.
+    </p>
+</header>
+
+{% if collections is empty %}
+    <div class="uk-placeholder uk-text-center">
+        No public collections yet.
+    </div>
+{% else %}
+    <div class="uk-child-width-1-2@s uk-child-width-1-3@l uk-grid-match" uk-grid>
+        {% for collection in collections %}
+            <div>
+                <a class="uk-card uk-card-default uk-card-hover uk-display-block uk-link-reset"
+                   href="{{ path('public_collection_show', {id: collection.id.toRfc4122()}) }}">
+                    {% if collection.coverMediaId and collection.coverThumbnailVersion %}
+                        <div class="uk-card-media-top">
+                            <img
+                                src="{{ path('public_media_derivative', {
+                                    id: collection.coverMediaId.toRfc4122(),
+                                    version: collection.coverThumbnailVersion,
+                                    profile: 'thumbnail'
+                                }) }}"
+                                alt=""
+                                loading="lazy"
+                                class="uk-width-1-1"
+                            >
+                        </div>
+                    {% endif %}
+                    <div class="uk-card-body">
+                        <h2 class="uk-card-title">{{ collection.title }}</h2>
+                        {% if collection.description %}
+                            <p>{{ collection.description }}</p>
+                        {% endif %}
+                        <p class="uk-text-meta uk-margin-remove-bottom">
+                            {{ collection.mediaCount }} media
+                            {% if collection.childCount > 0 %}
+                                · {{ collection.childCount }} subcollections
+                            {% endif %}
+                        </p>
+                    </div>
+                </a>
+            </div>
+        {% endfor %}
+    </div>
+{% endif %}
+{% endblock %}

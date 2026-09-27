@@ -1,0 +1,103 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}{{ collection.title }} · Mediarama{% endblock %}
+
+{% block body %}
+<nav aria-label="Breadcrumb">
+    <ul class="uk-breadcrumb">
+        <li><a href="{{ path('public_collections') }}">Collections</a></li>
+        <li><span>{{ collection.title }}</span></li>
+    </ul>
+</nav>
+
+<header class="uk-margin-large-bottom">
+    <h1 class="uk-heading-small">{{ collection.title }}</h1>
+    {% if collection.description %}
+        <p class="uk-text-lead uk-width-2xlarge">{{ collection.description }}</p>
+    {% endif %}
+</header>
+
+{% if children is not empty %}
+    <section class="uk-margin-large-bottom" aria-labelledby="subcollections-heading">
+        <h2 id="subcollections-heading" class="uk-h3">Subcollections</h2>
+        <div class="uk-child-width-1-2@s uk-child-width-1-3@l uk-grid-match" uk-grid>
+            {% for child in children %}
+                <div>
+                    <a class="uk-card uk-card-default uk-card-hover uk-display-block uk-link-reset"
+                       href="{{ path('public_collection_show', {id: child.id.toRfc4122()}) }}">
+                        {% if child.coverMediaId and child.coverThumbnailVersion %}
+                            <div class="uk-card-media-top">
+                                <img
+                                    src="{{ path('public_media_derivative', {
+                                        id: child.coverMediaId.toRfc4122(),
+                                        version: child.coverThumbnailVersion,
+                                        profile: 'thumbnail'
+                                    }) }}"
+                                    alt=""
+                                    loading="lazy"
+                                    class="uk-width-1-1"
+                                >
+                            </div>
+                        {% endif %}
+                        <div class="uk-card-body">
+                            <h3 class="uk-card-title">{{ child.title }}</h3>
+                            <p class="uk-text-meta">{{ child.mediaCount }} media</p>
+                        </div>
+                    </a>
+                </div>
+            {% endfor %}
+        </div>
+    </section>
+{% endif %}
+
+<section aria-labelledby="media-heading">
+    <h2 id="media-heading" class="uk-h3">Media</h2>
+
+    {% if media is empty %}
+        <div class="uk-placeholder uk-text-center">No published media in this collection yet.</div>
+    {% else %}
+        <div class="uk-child-width-1-2@s uk-child-width-1-3@m uk-child-width-1-4@xl" uk-grid uk-lightbox="animation: fade">
+            {% for item in media %}
+                <div>
+                    {% if item.mediaType == 'image' and item.thumbnailVersion %}
+                        {% set image %}
+                            <img
+                                src="{{ path('public_media_derivative', {
+                                    id: item.id.toRfc4122(),
+                                    version: item.thumbnailVersion,
+                                    profile: 'thumbnail'
+                                }) }}"
+                                alt="{{ item.title ?: 'Gallery image' }}"
+                                loading="lazy"
+                                class="uk-width-1-1"
+                            >
+                        {% endset %}
+
+                        {% if item.previewVersion %}
+                            <a
+                                href="{{ path('public_media_derivative', {
+                                    id: item.id.toRfc4122(),
+                                    version: item.previewVersion,
+                                    profile: 'preview'
+                                }) }}"
+                                data-caption="{{ item.title ?: '' }}"
+                                class="uk-display-block uk-link-reset"
+                            >{{ image|raw }}</a>
+                        {% else %}
+                            {{ image|raw }}
+                        {% endif %}
+                    {% else %}
+                        <div class="uk-placeholder uk-text-center">
+                            <span class="uk-text-meta">{{ item.mediaType }}</span>
+                        </div>
+                    {% endif %}
+
+                    {% if item.title %}
+                        <h3 class="uk-h5 uk-margin-small-top uk-margin-remove-bottom">{{ item.title }}</h3>
+                    {% endif %}
+                </div>
+            {% endfor %}
+        </div>
+    {% endif %}
+</section>
+{% endblock %}

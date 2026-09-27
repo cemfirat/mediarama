@@ -103,6 +103,10 @@ final readonly class LocalMediaStorage implements MediaStorage
         }
 
         if (!is_file($source)) {
+            if (is_file($target)) {
+                return $this->stat($permanent);
+            }
+
             throw new \DomainException('Temporary storage object not found.');
         }
 
@@ -111,7 +115,13 @@ final readonly class LocalMediaStorage implements MediaStorage
             throw new \RuntimeException('Unable to create permanent media directory.');
         }
 
-        if (!rename($source, $target)) {
+        if (!@rename($source, $target)) {
+            // Another finalizer may have won the rename race after the initial
+            // target check. Treat the deterministic target as the successful result.
+            if (is_file($target)) {
+                return $this->stat($permanent);
+            }
+
             throw new \RuntimeException('Unable to promote storage object.');
         }
 
@@ -126,6 +136,11 @@ final readonly class LocalMediaStorage implements MediaStorage
     public function temporaryUrl(StorageObjectId $id, DateTimeImmutable $expiresAt): ?string
     {
         return null;
+    }
+
+    public function localPath(StorageObjectId $id): string
+    {
+        return $this->path($id);
     }
 
     private function path(StorageObjectId $id): string
