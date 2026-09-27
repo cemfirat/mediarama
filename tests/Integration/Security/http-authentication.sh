@@ -307,6 +307,7 @@ php -r '
   $decoded = json_decode((string) file_get_contents("/tmp/auth-upload-body.json"), true, flags: JSON_THROW_ON_ERROR);
   $expected = [
       "error" => "upload_quota_exceeded",
+      "retryable" => false,
       "limit_bytes" => 4,
       "committed_bytes" => 0,
       "reserved_bytes" => 4,

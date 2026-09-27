@@ -41,7 +41,7 @@ After the MIME/type allow policy and expected-size check pass, Mediarama validat
 - audio must contain an audio stream recognized by FFprobe;
 - video must contain a video stream recognized by FFprobe.
 
-FFprobe runs through an argv-only process with a parent timeout plus bounded probe size and analyze duration. With the current local-storage adapter the validator probes the already assembled temporary file in place; it does not duplicate a potentially multi-gigabyte upload merely to validate it. A structural validation failure leaves the upload session in `uploaded`, keeps the temporary object retryable, and prevents immutable-original promotion, `MediaAsset` creation and background dispatch.
+FFprobe runs through an argv-only process with a parent timeout plus bounded probe size and analyze duration. With the current local-storage adapter the validator probes the already assembled temporary file in place; it does not duplicate a potentially multi-gigabyte upload merely to validate it. A structural validation failure is terminal for that UploadSession: the session moves to `failed`, stores only a sanitized failure code/stage/timestamp, releases its quota reservation, and prevents immutable-original promotion, `MediaAsset` creation and background dispatch. The failed session remains queryable by its owner until explicit abandon or expiry cleanup.
 
 
 ## Finalization idempotency and crash recovery
@@ -117,8 +117,32 @@ Successful finalization persists the MediaAsset and removes the reservation in t
 
 Coppermine `group_quota` values are imported from KiB to bytes. The normalized Mediarama policy preserves Coppermine's multi-group rule: any zero/unlimited group makes quota unlimited, otherwise the maximum finite group quota wins.
 
+## Failure lifecycle and public API
+
+Upload failure state is intentionally separate from downstream MediaAsset processing failure.
+
+`GET /api/uploads/{id}` returns a nullable `failure` object with only:
+
+- stable `code`;
+- lifecycle `stage` (`acquisition`, `assembly`, `finalization`);
+- `retryable` boolean;
+- `failed_at` timestamp.
+
+No raw exception message, stack trace, SQL or filesystem path is persisted or returned.
+
+Retryable acquisition/assembly failures such as checksum mismatch or incomplete chunks keep the current session state usable. A later successful chunk/assembly clears the stale failure record.
+
+Terminal content failures such as disallowed MIME, expected-size mismatch or decoder/probe rejection move the UploadSession to `failed` and release the uncommitted quota reservation. A terminal session is not reset to `uploaded`; retry means creating a new UploadSession.
+
+The `finalizing` state remains crash-recoverable. Missing/transient finalization storage is recorded as retryable and does not convert `finalizing` into `failed`.
+
+`DELETE /api/uploads/{id}` abandons `created`, `uploading`, `uploaded` or `failed` sessions, removes chunk/temporary data and deletes the session. The reservation FK cascade is the final idempotent release path. `finalizing` and `completed` sessions cannot be abandoned because that would violate deterministic finalization recovery.
+
+Downstream metadata/derivative failures remain solely in `media_assets.processing_state = failed`; they never retroactively change a completed UploadSession.
+
+Expected upload API problems use stable JSON error codes. Unknown/unexpected exceptions are not converted into client-visible internal diagnostics.
+
 ## Remaining hardening
 
-- observable retry/failure API (#37);
 - richer resource-scoped collection sharing/access policy;
 - full authenticated HTTP + PostgreSQL + filesystem upload-flow coverage beyond the existing finalization/security integration tests.
