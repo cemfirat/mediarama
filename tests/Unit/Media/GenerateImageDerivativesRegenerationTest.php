@@ -522,6 +522,11 @@ final class GenerateImageDerivativesRegenerationTest extends TestCase
             {
             }
 
+            public function isReferenced(StorageObjectId $storage): bool
+            {
+                return false;
+            }
+
             public function enqueueOrphan(MediaDerivative $derivative): void
             {
                 $this->orphaned[] = $derivative;
