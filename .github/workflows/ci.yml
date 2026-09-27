@@ -192,6 +192,9 @@ jobs:
       - name: Show migration status
         run: php bin/console doctrine:migrations:status
 
+      - name: Verify safe new-installation publication defaults
+        run: php tests/Integration/Platform/publication-settings.php
+
       - name: Verify derivative regeneration persistence and locking
         run: php tests/Integration/Media/derivative-regeneration.php
 
@@ -272,6 +275,8 @@ jobs:
 
       - name: Verify public gallery visibility and derivative delivery
         run: |
+          php bin/console mediarama:platform:deployment-profile public_publishing
+
           php <<'PHP'
           <?php
           require 'vendor/autoload.php';
