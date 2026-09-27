@@ -31,7 +31,7 @@ final readonly class DbalPlatformSettingsRepository implements PlatformSettingsR
 
         return new PlatformSettings(
             DeploymentProfile::from((string) $row['deployment_profile']),
-            (bool) $row['public_publishing_enabled'],
+            $this->toBoolean($row['public_publishing_enabled']),
             SearchIndexPolicy::from((string) $row['search_index_default']),
         );
     }
@@ -42,6 +42,19 @@ final readonly class DbalPlatformSettingsRepository implements PlatformSettingsR
         $this->save($settings);
 
         return $settings;
+    }
+
+    private function toBoolean(mixed $value): bool
+    {
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        return in_array(
+            strtolower((string) $value),
+            ['1', 't', 'true', 'yes', 'on'],
+            true,
+        );
     }
 
     public function save(PlatformSettings $settings): void
