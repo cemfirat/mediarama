@@ -24,7 +24,7 @@ final readonly class PublicDiscoveryPolicy
         $settings = $this->settings->get();
 
         return $settings->publicPublishingEnabled
-            && $settings->searchIndexDefault->resolve($settings->searchIndexDefault);
+            && $settings->searchIndexDefault === \Mediarama\Platform\Domain\SearchIndexPolicy::Index;
     }
 
     public function collectionIndexable(Uuid $collectionId): bool
