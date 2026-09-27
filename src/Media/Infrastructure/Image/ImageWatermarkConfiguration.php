@@ -100,12 +100,10 @@ final readonly class ImageWatermarkConfiguration
         return strtolower($this->gravity);
     }
 
-    public function fingerprint(): string
+    public function fingerprintFromAssetHash(string $assetHash): string
     {
-        $path = $this->assetPath();
-        $assetHash = hash_file('sha256', $path);
-        if ($assetHash === false) {
-            throw new \RuntimeException('Unable to fingerprint configured watermark asset.');
+        if (!preg_match('/^[a-f0-9]{64}$/', $assetHash)) {
+            throw new \InvalidArgumentException('Watermark asset hash must be a lowercase SHA-256 digest.');
         }
 
         return hash('sha256', implode('|', [
