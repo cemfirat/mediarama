@@ -86,11 +86,14 @@ SQL,
         );
     }
 
-    public function latestProcessingVersion(Uuid $mediaId): int
+    public function latestProcessingVersion(Uuid $mediaId, string $kind): int
     {
         $version = $this->connection->fetchOne(
-            'SELECT COALESCE(MAX(processing_version), 0) FROM media_derivatives WHERE media_id = :media',
-            ['media' => $mediaId->toRfc4122()],
+            'SELECT COALESCE(MAX(processing_version), 0) FROM media_derivatives WHERE media_id = :media AND kind = :kind',
+            [
+                'media' => $mediaId->toRfc4122(),
+                'kind' => $kind,
+            ],
         );
 
         return (int) $version;
