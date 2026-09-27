@@ -58,6 +58,13 @@ services:
     Mediarama\Platform\Application\SearchIndexPolicyRepository:
         alias: Mediarama\Platform\Infrastructure\Persistence\DbalSearchIndexPolicyRepository
 
+    Mediarama\Seo\Application\PublicSitemapQuery:
+        alias: Mediarama\Seo\Infrastructure\Persistence\DbalPublicSitemapQuery
+
+    Mediarama\Seo\Infrastructure\Http\PublicUrlGenerator:
+        arguments:
+            $baseUrl: '%env(PUBLIC_BASE_URL)%'
+
     Mediarama\Media\Infrastructure\Storage\LocalMediaStorage:
         arguments:
             $mediaRoot: '%env(resolve:MEDIA_STORAGE_PATH)%'
