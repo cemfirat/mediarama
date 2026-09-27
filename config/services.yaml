@@ -201,6 +201,13 @@ services:
         alias: Mediarama\Media\Infrastructure\Persistence\DbalPublicMediaSearch
 
 
+    Mediarama\Platform\Application\PlatformSettingsRepository:
+        alias: Mediarama\Platform\Infrastructure\Persistence\DbalPlatformSettingsRepository
+
+    Mediarama\Platform\Application\PublicIndexSubjectRepository:
+        alias: Mediarama\Platform\Infrastructure\Persistence\DbalPublicIndexSubjectRepository
+
+
     Mediarama\Security\Application\CurrentUser:
         alias: Mediarama\Security\Infrastructure\Http\RequestCurrentUser
 
