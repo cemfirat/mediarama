@@ -37,6 +37,8 @@ function benchmarkOptions(): array
         'identify-binary::',
         'compare-binary::',
         'cwebp-binary::',
+        'corpus-id::',
+        'corpus-revision::',
         'help',
     ]);
 
@@ -61,6 +63,8 @@ Optional:
   --identify-binary=identify
   --compare-binary=compare
   --cwebp-binary=cwebp
+  --corpus-id=imazen/codec-corpus:gb82
+  --corpus-revision=<pinned source commit>
 
 The benchmark does not modify Mediarama production profiles. It creates temporary
 lossless references, probes each requested encoder, records bytes/encode time and
@@ -397,6 +401,15 @@ try {
     if ($limit < 0) {
         throw new InvalidArgumentException('Benchmark limit cannot be negative.');
     }
+
+    $corpusId = isset($options['corpus-id']) ? trim((string) $options['corpus-id']) : '';
+    $corpusRevision = isset($options['corpus-revision']) ? trim((string) $options['corpus-revision']) : '';
+
+    foreach (['corpus ID' => $corpusId, 'corpus revision' => $corpusRevision] as $label => $value) {
+        if (strlen($value) > 200 || preg_match('/[\x00-\x1F\x7F]/', $value) === 1) {
+            throw new InvalidArgumentException('Benchmark '.$label.' contains invalid control characters or is too long.');
+        }
+    }
 } catch (InvalidArgumentException $error) {
     benchmarkFail($error->getMessage());
 }
@@ -463,6 +476,10 @@ try {
         'schema_version' => 2,
         'generated_at' => (new DateTimeImmutable())->format(DATE_ATOM),
         'purpose' => 'Mediarama derivative-format benchmark; not production profile configuration',
+        'corpus' => [
+            'id' => $corpusId !== '' ? $corpusId : null,
+            'revision' => $corpusRevision !== '' ? $corpusRevision : null,
+        ],
         'privacy' => [
             'source_paths_included' => false,
             'embedded_metadata_copied_to_outputs' => false,
