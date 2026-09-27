@@ -75,9 +75,9 @@ SQL,
             $params['captured_until'] = $c->capturedUntil->format(DATE_ATOM);
         }
         if ($c->hasLocation === true) {
-            $where[] = 'm.latitude IS NOT NULL AND m.longitude IS NOT NULL';
+            $where[] = '(m.latitude IS NOT NULL AND m.longitude IS NOT NULL)';
         } elseif ($c->hasLocation === false) {
-            $where[] = 'm.latitude IS NULL OR m.longitude IS NULL';
+            $where[] = '(m.latitude IS NULL OR m.longitude IS NULL)';
         }
 
         $params['limit'] = $c->limit;
