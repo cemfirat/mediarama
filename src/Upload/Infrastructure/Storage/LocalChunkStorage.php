@@ -101,6 +101,10 @@ final readonly class LocalChunkStorage implements ChunkStorage
 
             try {
                 $data = json_decode($encoded, true, flags: JSON_THROW_ON_ERROR);
+                if (!is_array($data)) {
+                    throw new \InvalidArgumentException('Chunk metadata must decode to an object.');
+                }
+
                 $chunks[] = new UploadChunk(
                     (int) ($data['index'] ?? -1),
                     (int) ($data['offset'] ?? -1),

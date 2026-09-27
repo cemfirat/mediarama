@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Mediarama\Media\Infrastructure\Image;
 
+use Mediarama\Media\Domain\MediaToolRejected;
+use Mediarama\Media\Domain\MediaToolUnavailable;
+use Symfony\Component\Process\Exception\ExceptionInterface as ProcessException;
 use Symfony\Component\Process\Process;
 
 final readonly class ImageMagickProcess
@@ -40,7 +43,16 @@ final readonly class ImageMagickProcess
             $this->limits->environment(),
         );
         $process->setTimeout($this->timeoutSeconds);
-        $process->run();
+
+        try {
+            $process->run();
+        } catch (ProcessException $error) {
+            throw new MediaToolUnavailable(
+                sprintf('ImageMagick %s process could not complete.', $operation),
+                0,
+                $error,
+            );
+        }
 
         if (!$process->isSuccessful()) {
             $details = trim($process->getErrorOutput());
@@ -48,12 +60,18 @@ final readonly class ImageMagickProcess
                 $details = trim($process->getOutput());
             }
 
-            throw new \RuntimeException(sprintf(
-                'ImageMagick %s failed with exit code %s%s',
+            $message = sprintf(
+                'ImageMagick %s rejected the input with exit code %s%s',
                 $operation,
                 (string) $process->getExitCode(),
                 $details === '' ? '.' : ': '.$details,
-            ));
+            );
+
+            if (in_array($process->getExitCode(), [126, 127], true)) {
+                throw new MediaToolUnavailable($message);
+            }
+
+            throw new MediaToolRejected($message);
         }
 
         return $process->getOutput();

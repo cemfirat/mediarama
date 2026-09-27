@@ -6,6 +6,8 @@ namespace Mediarama\Media\Infrastructure\Probe;
 
 use Mediarama\Media\Application\InspectImageFileGeometry;
 use Mediarama\Media\Application\ValidateStoredMediaStructure;
+use Mediarama\Media\Domain\MediaToolRejected;
+use Mediarama\Media\Domain\MediaToolUnavailable;
 use Mediarama\Media\Domain\MediaType;
 use Mediarama\Media\Domain\StorageObjectId;
 use Mediarama\Media\Infrastructure\Storage\LocalMediaStorage;
@@ -24,39 +26,22 @@ final readonly class LocalStoredMediaStructureValidator implements ValidateStore
         $path = $this->storage->localPath($object);
 
         if (!is_file($path) || !is_readable($path)) {
-            throw new \DomainException('Uploaded media is not available for structural validation.');
+            throw new MediaToolUnavailable('Uploaded media is not available for structural validation.');
         }
 
         match ($mediaType) {
-            MediaType::Image => $this->validateImage($path),
+            MediaType::Image => ($this->imageGeometry)($path),
             MediaType::Audio, MediaType::Video => $this->validateAv($path, $mediaType),
-            MediaType::Document => throw new \DomainException('Generic document uploads are not enabled.'),
+            MediaType::Document => throw new MediaToolRejected('Generic document uploads are not enabled.'),
         };
-    }
-
-    private function validateImage(string $path): void
-    {
-        try {
-            ($this->imageGeometry)($path);
-        } catch (\RuntimeException $error) {
-            throw new \DomainException('Uploaded image failed structural validation.', 0, $error);
-        }
     }
 
     private function validateAv(string $path, MediaType $mediaType): void
     {
-        try {
-            $streamTypes = $this->ffprobe->streamTypes($path);
-        } catch (\RuntimeException $error) {
-            throw new \DomainException(
-                sprintf('Uploaded %s failed structural validation.', $mediaType->value),
-                0,
-                $error,
-            );
-        }
+        $streamTypes = $this->ffprobe->streamTypes($path);
 
         if (!in_array($mediaType->value, $streamTypes, true)) {
-            throw new \DomainException(sprintf(
+            throw new MediaToolRejected(sprintf(
                 'Uploaded %s does not contain a %s stream.',
                 $mediaType->value,
                 $mediaType->value,

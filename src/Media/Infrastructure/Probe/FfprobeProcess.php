@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace Mediarama\Media\Infrastructure\Probe;
 
 use JsonException;
+use Mediarama\Media\Domain\MediaToolRejected;
+use Mediarama\Media\Domain\MediaToolUnavailable;
+use Symfony\Component\Process\Exception\ExceptionInterface as ProcessException;
 use Symfony\Component\Process\Process;
 
 final readonly class FfprobeProcess
@@ -39,7 +42,12 @@ final readonly class FfprobeProcess
             $path,
         ]);
         $process->setTimeout($this->timeoutSeconds);
-        $process->run();
+
+        try {
+            $process->run();
+        } catch (ProcessException $error) {
+            throw new MediaToolUnavailable('FFprobe process could not complete.', 0, $error);
+        }
 
         if (!$process->isSuccessful()) {
             $details = trim($process->getErrorOutput());
@@ -47,21 +55,27 @@ final readonly class FfprobeProcess
                 $details = trim($process->getOutput());
             }
 
-            throw new \RuntimeException(sprintf(
-                'FFprobe failed with exit code %s%s',
+            $message = sprintf(
+                'FFprobe rejected the input with exit code %s%s',
                 (string) $process->getExitCode(),
                 $details === '' ? '.' : ': '.substr($details, 0, 2000),
-            ));
+            );
+
+            if (in_array($process->getExitCode(), [126, 127], true)) {
+                throw new MediaToolUnavailable($message);
+            }
+
+            throw new MediaToolRejected($message);
         }
 
         try {
             $decoded = json_decode($process->getOutput(), true, flags: JSON_THROW_ON_ERROR);
         } catch (JsonException $error) {
-            throw new \RuntimeException('FFprobe returned invalid JSON.', 0, $error);
+            throw new MediaToolUnavailable('FFprobe returned invalid JSON.', 0, $error);
         }
 
         if (!is_array($decoded) || !isset($decoded['streams']) || !is_array($decoded['streams'])) {
-            throw new \RuntimeException('FFprobe response does not contain a streams array.');
+            throw new MediaToolUnavailable('FFprobe response does not contain a streams array.');
         }
 
         $types = [];

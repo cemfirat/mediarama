@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require dirname(__DIR__, 3).'/vendor/autoload.php';
 
+use Mediarama\Media\Domain\MediaToolRejected;
 use Mediarama\Media\Domain\MediaType;
 use Mediarama\Media\Domain\StorageObjectId;
 use Mediarama\Media\Infrastructure\Image\ImageMagickFileGeometryInspector;
@@ -24,11 +25,11 @@ function requireCondition(bool $condition, string $message): void
 }
 
 /** @param callable(): void $operation */
-function requireDomainFailure(callable $operation, string $message): void
+function requireMediaRejection(callable $operation, string $message): void
 {
     try {
         $operation();
-    } catch (DomainException) {
+    } catch (MediaToolRejected) {
         return;
     }
 
@@ -160,7 +161,7 @@ try {
     $badImageContent = $contentInspector->inspect($badImage);
     requireCondition($badImageContent->mimeType === 'image/png', 'Truncated image no longer looks like image/png to MIME detection.');
     $contentPolicy->assertAllowed($badImageContent);
-    requireDomainFailure(
+    requireMediaRejection(
         static fn () => $validator($badImage, $badImageContent->mediaType),
         'Truncated image passed structural validation.',
     );
@@ -178,18 +179,18 @@ try {
     $validator($validVideo, $validVideoContent->mediaType);
 
     $invalidAudio = storeFixture($storage, 'temporary/invalid-audio/source', $invalidAv);
-    requireDomainFailure(
+    requireMediaRejection(
         static fn () => $validator($invalidAudio, MediaType::Audio),
         'Invalid audio structure passed FFprobe validation.',
     );
 
     $invalidVideo = new StorageObjectId('media', 'temporary/invalid-audio/source');
-    requireDomainFailure(
+    requireMediaRejection(
         static fn () => $validator($invalidVideo, MediaType::Video),
         'Invalid video structure passed FFprobe validation.',
     );
 
-    requireDomainFailure(
+    requireMediaRejection(
         static fn () => $validator($validAudio, MediaType::Video),
         'Audio-only media passed validation as video.',
     );
