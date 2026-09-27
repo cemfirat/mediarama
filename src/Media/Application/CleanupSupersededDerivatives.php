@@ -50,7 +50,7 @@ final readonly class CleanupSupersededDerivatives
             $now->sub(new DateInterval('PT15M')),
         );
 
-        $deleted = 0;
+        $resolved = 0;
         $failed = 0;
 
         foreach ($jobs as $job) {
@@ -60,7 +60,7 @@ final readonly class CleanupSupersededDerivatives
                 }
 
                 $this->repository->completeStorageJob($job->id);
-                ++$deleted;
+                ++$resolved;
             } catch (\Throwable) {
                 $this->repository->failStorageJob($job->id, 'storage_delete_failed');
                 ++$failed;
@@ -69,7 +69,7 @@ final readonly class CleanupSupersededDerivatives
 
         return new DerivativeCleanupResult(
             $queued,
-            $deleted,
+            $resolved,
             $failed,
             $this->repository->pendingStorageJobCount(),
         );
