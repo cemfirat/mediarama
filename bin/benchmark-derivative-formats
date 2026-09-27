@@ -473,7 +473,25 @@ try {
         }
 
         $sourceId = substr($sourceHash, 0, 16);
-        $sourceInfo = benchmarkIdentify($imageMagick, $sourcePath);
+        $sourceExtension = strtolower(pathinfo($sourcePath, PATHINFO_EXTENSION));
+        $sourceSnapshot = sprintf(
+            '%s/%s-source.%s',
+            $temporaryRoot,
+            $sourceId,
+            $sourceExtension !== '' ? $sourceExtension : 'img',
+        );
+
+        if (!copy($sourcePath, $sourceSnapshot)) {
+            throw new RuntimeException('Unable to snapshot benchmark source #'.($sourceIndex + 1).'.');
+        }
+
+        $snapshotHash = hash_file('sha256', $sourceSnapshot);
+        if ($snapshotHash === false || !hash_equals($sourceHash, $snapshotHash)) {
+            @unlink($sourceSnapshot);
+            throw new RuntimeException('Benchmark source changed while it was being snapshotted.');
+        }
+
+        $sourceInfo = benchmarkIdentify($imageMagick, $sourceSnapshot);
 
         $report['sources'][] = [
             'source_id' => $sourceId,
@@ -493,7 +511,7 @@ try {
             );
 
             $imageMagick->convert([
-                $sourcePath.'[0]',
+                $sourceSnapshot.'[0]',
                 '-auto-orient',
                 '-strip',
                 '-thumbnail',
@@ -586,6 +604,8 @@ try {
 
             @unlink($reference);
         }
+
+        @unlink($sourceSnapshot);
     }
 
     $outputDirectory = dirname($outputPath);
