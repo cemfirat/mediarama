@@ -305,7 +305,8 @@ FIRST_SIZE="$FIRST_SIZE" php -r '
   $data = json_decode((string) file_get_contents($argv[1]), true, flags: JSON_THROW_ON_ERROR);
   $chunks = $data["chunks"] ?? null;
   if (($data["status"] ?? null) !== "uploading"
-      || ($data["failure"] ?? "missing") !== null
+      || !array_key_exists("failure", $data)
+      || $data["failure"] !== null
       || !is_array($chunks)
       || count($chunks) !== 1
       || ($chunks[0]["index"] ?? null) !== 0
