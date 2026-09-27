@@ -143,6 +143,27 @@ function auditFirst(array $metadata, array $keys): mixed
     return null;
 }
 
+/** @param array<string,mixed> $metadata @param list<string> $fragments
+ *  @return array<string,mixed>
+ */
+function auditMatchingKeys(array $metadata, array $fragments): array
+{
+    $matches = [];
+
+    foreach ($metadata as $key => $value) {
+        foreach ($fragments as $fragment) {
+            if (stripos($key, $fragment) !== false) {
+                $matches[$key] = $value;
+                break;
+            }
+        }
+    }
+
+    ksort($matches);
+
+    return $matches;
+}
+
 /** @param array<string,mixed> $metadata @param list<string> $needles
  *  @return list<string>
  */
@@ -197,7 +218,7 @@ $sensitiveValues = [
 
 try {
     echo "Privacy-safe inherited metadata research harness\n";
-    echo "Candidate scrub: -all= -CommonIFD0= -tagsfromfile @ -ColorSpaceTags -Orientation -PNG:Gamma -PNG:SRGBRendering + explicit canonical writes\n";
+    echo "Candidate scrub: -all= --ICC_Profile:all -CommonIFD0= -tagsfromfile @ -ColorSpaceTags -Orientation -PNG:Gamma -PNG:SRGBRendering + explicit canonical writes\n";
 
     foreach ($formats as $name => $extension) {
         $source = $root.'/source-'.$name.'.'.$extension;
@@ -268,6 +289,7 @@ try {
                 $exiftool,
                 '-overwrite_original',
                 '-all=',
+                '--ICC_Profile:all',
                 '-CommonIFD0=',
                 '-tagsfromfile',
                 '@',
@@ -314,6 +336,22 @@ try {
                 ]),
                 'quicktime_rotation_before' => auditFirst($before, ['QuickTime:Rotation']),
                 'quicktime_rotation_after' => auditFirst($after, ['QuickTime:Rotation']),
+                'transform_metadata_before' => auditMatchingKeys(
+                    $before,
+                    ['Orientation', 'Rotation', 'Mirroring'],
+                ),
+                'transform_metadata_after' => auditMatchingKeys(
+                    $after,
+                    ['Orientation', 'Rotation', 'Mirroring'],
+                ),
+                'color_metadata_before' => auditMatchingKeys(
+                    $before,
+                    ['ICC', 'Gamma', 'SRGBRendering', 'ColorSpace', 'ColorRepresentation'],
+                ),
+                'color_metadata_after' => auditMatchingKeys(
+                    $after,
+                    ['ICC', 'Gamma', 'SRGBRendering', 'ColorSpace', 'ColorRepresentation'],
+                ),
                 'icc_before' => auditFirst($before, [
                     'ICC-header:ProfileDescription',
                     'ICC_Profile:ProfileDescription',
