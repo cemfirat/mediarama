@@ -109,7 +109,9 @@ Effective quota policy is resolved in this order:
 
 A value of `0` is explicit unlimited. The default deployment value is also `0`, so accounting is active without imposing an arbitrary first-release storage cap.
 
-Session creation locks the user row and performs the usage check, reservation insert and UploadSession persistence in one transaction. Committed usage is derived from owned immutable MediaAssets; generated derivatives are not charged.
+Session creation locks the user row and performs the usage check, reservation insert and UploadSession persistence in one transaction. Committed usage is derived from owned immutable MediaAssets through an indexed `owner_id` lookup; generated derivatives are not charged.
+
+If a finite policy would be exceeded, `POST /api/uploads` returns HTTP `422` with stable error code `upload_quota_exceeded` plus the effective limit, committed bytes, reserved bytes and requested bytes. No UploadSession or reservation is persisted for the rejected request.
 
 Successful finalization persists the MediaAsset and removes the reservation in the same existing finalization transaction. Expired-session deletion releases reservations through the database FK cascade, so cleanup is idempotent after crashes.
 

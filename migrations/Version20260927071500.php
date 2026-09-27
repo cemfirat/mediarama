@@ -60,10 +60,14 @@ SQL);
         $this->addSql(
             'CREATE INDEX idx_upload_quota_reservations_user ON upload_quota_reservations (user_id)',
         );
+        $this->addSql(
+            'CREATE INDEX idx_media_assets_owner_quota ON media_assets (owner_id) WHERE owner_id IS NOT NULL',
+        );
     }
 
     public function down(Schema $schema): void
     {
+        $this->addSql('DROP INDEX idx_media_assets_owner_quota');
         $this->addSql('DROP TABLE upload_quota_reservations');
         $this->addSql('DROP TABLE group_storage_quotas');
         $this->addSql('DROP TABLE user_storage_quotas');
