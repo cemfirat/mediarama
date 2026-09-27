@@ -101,3 +101,19 @@ References:
 Derivative failure must leave the MediaAsset in a failed processing state and must not publish a partially processed asset.
 
 A retry with the same processing version is safe because completed profiles are detected and skipped.
+
+## Real-format integration coverage
+
+CI exercises the real derivative generator with actual encoded source files rather than parser-only or mocked media.
+
+The current runtime matrix covers JPEG, PNG, GIF, TIFF, WebP, AVIF, HEIC and HEIF sources and verifies that each can be decoded through the configured ImageMagick runtime and persisted as a bounded WebP display derivative.
+
+The same integration gate also verifies a JPEG carrying EXIF orientation 6 and embedded GPS metadata:
+
+- orientation is physically normalized in the generated derivative;
+- the immutable source checksum is unchanged;
+- display output no longer carries source orientation or GPS metadata after the derivative strip step.
+
+AVIF/HEIC/HEIF source fixtures are encoded independently with libheif so the test does not depend on ImageMagick being able to encode the same input format it is supposed to decode.
+
+The CI runtime installs explicit libheif decoder plugins for both AV1 and HEVC. This is intentional: container support alone is insufficient when the deployed libheif build has codec plugins split into separate packages. Production images advertising AVIF/HEIC/HEIF support must provide equivalent decoders.
