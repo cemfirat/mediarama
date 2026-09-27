@@ -240,6 +240,57 @@ This reconciliation is based on an object Mediarama just generated and knows by
 its deterministic key; it does not scan a shared storage namespace looking for
 guessable orphans.
 
+## Superseded derivative retention and cleanup
+
+Versioned derivative URLs are intentionally immutable. The public derivative controller currently sends:
+
+`Cache-Control: public, max-age=31536000, immutable`
+
+so a previously published derivative URL may remain cached for one year.
+
+Mediarama therefore does **not** delete an old derivative generation when a new one is published. Cleanup uses two independent safety rules:
+
+- keep the newest `DERIVATIVE_RETENTION_KEEP_GENERATIONS` processing generations for each `media_id + kind` regardless of age; the default is **2**;
+- an older generation becomes eligible only after it has been superseded for at least `DERIVATIVE_RETENTION_GRACE_DAYS`; the default is **400 days**.
+
+The 400-day default intentionally exceeds the current 365-day immutable cache lifetime. Deployments that increase the public/CDN cache lifetime must increase the cleanup grace window before running cleanup. The retention rule is storage-adapter independent: local and future S3-compatible deployments use the same relational eligibility decision.
+
+Cleanup is operator-triggered with:
+
+```bash
+php bin/console mediarama:media:cleanup-derivatives
+```
+
+Per-run work is bounded with `--version-limit` and `--delete-limit`.
+
+### Transaction and failure model
+
+Retiring a generation is deliberately two-phase:
+
+1. PostgreSQL selects only complete superseded processing-version groups that are outside the retention window and are not among the protected newest generations.
+2. In one SQL statement, the selected `media_derivatives` rows are removed and a durable `derivative_cleanup_jobs` row is created for every storage object.
+3. Only after that relational change commits does the maintenance service attempt physical object deletion.
+4. A successful or already-missing object completes its queue row.
+5. A storage failure leaves the queue row in place so a later maintenance run can retry.
+
+This preserves the architecture rule that SQL/public state changes before physical deletion while preventing the storage object from becoming untracked operational debt. A crash after relational retirement but before storage deletion is recoverable. A crash after storage deletion but before queue completion is also safe because storage deletion is idempotent.
+
+Only canonical Mediarama derivative keys under:
+
+`derivatives/{media-id}/v{processing-version}/{profile}.{format}`
+
+are eligible for physical deletion. A malformed or non-derivative queued key is left visible in the queue and is never deleted automatically.
+
+### Failed generation orphans
+
+Explicit regeneration first attempts to delete any derivative objects created by a generation that later fails. If immediate deletion itself fails, the known derivative object is written to the same durable cleanup queue. This handles the orphan objects Mediarama can identify without requiring broad bucket/filesystem enumeration.
+
+Mediarama does not blindly scan or delete unknown files from a shared storage namespace. Future object-store orphan inventory, if added, must remain constrained to Mediarama-owned derivative prefixes and must reconcile candidates against relational ownership before deletion.
+
+### Generation pinning
+
+The first retention lifecycle does not add a separate administrator pin flag. The safety contract is the protected newest-generation count plus the cache-aware grace period. If a deployment needs specific historical derivative generations to remain addressable beyond that policy, explicit generation pinning should be introduced as a separate persistence feature rather than encoded as an implicit cleanup exception.
+
 ## Checksums
 
 Mediarama calculates SHA-256 for originals during ingestion.
