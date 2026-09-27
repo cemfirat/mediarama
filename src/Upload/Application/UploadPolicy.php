@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Mediarama\Upload\Application;
 
+use Mediarama\Upload\Domain\UploadFailureStage;
+
 final readonly class UploadPolicy
 {
     public function __construct(
@@ -22,14 +24,21 @@ final readonly class UploadPolicy
     public function assertAssetSize(int $bytes): void
     {
         if ($bytes < 0 || $bytes > $this->maximumAssetBytes) {
-            throw new \DomainException('Asset exceeds the configured upload size limit.');
+            throw UploadProblem::request(
+                'asset_size_invalid',
+                'Asset exceeds the configured upload size limit.',
+            );
         }
     }
 
     public function assertChunkSize(int $bytes): void
     {
         if ($bytes <= 0 || $bytes > $this->maximumChunkBytes) {
-            throw new \DomainException('Chunk exceeds the configured upload chunk size limit.');
+            throw UploadProblem::retryable(
+                'chunk_size_invalid',
+                UploadFailureStage::Acquisition,
+                'Chunk exceeds the configured upload chunk size limit.',
+            );
         }
     }
 }

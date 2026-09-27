@@ -53,6 +53,11 @@ final class FinalizeUploadStructuralValidationTest extends TestCase
             {
                 return $this->session;
             }
+
+            public function delete(UploadSession $session): void
+            {
+                throw new \LogicException('Delete is not expected.');
+            }
         };
 
         $media = new class implements MediaAssetRepository {
@@ -153,6 +158,7 @@ final class FinalizeUploadStructuralValidationTest extends TestCase
 
         $quota = new class implements UploadQuota {
             public int $commits = 0;
+            public int $releases = 0;
 
             public function reserve(
                 Uuid $sessionId,
@@ -166,6 +172,11 @@ final class FinalizeUploadStructuralValidationTest extends TestCase
             public function commit(Uuid $sessionId): void
             {
                 ++$this->commits;
+            }
+
+            public function release(Uuid $sessionId): void
+            {
+                ++$this->releases;
             }
         };
 

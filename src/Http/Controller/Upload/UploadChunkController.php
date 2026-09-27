@@ -6,6 +6,7 @@ namespace Mediarama\Http\Controller\Upload;
 
 use Mediarama\Security\Application\CurrentUser;
 use Mediarama\Upload\Application\ReceiveUploadChunk;
+use Mediarama\Upload\Application\UploadProblem;
 use Mediarama\Upload\Domain\UploadChunk;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -21,24 +22,39 @@ final readonly class UploadChunkController
     #[Route('/api/uploads/{id}/chunks/{index}', name: 'upload_chunk', methods: ['PUT'])]
     public function __invoke(string $id, int $index, Request $request): JsonResponse
     {
-        $userId = $this->currentUser->requireUser()->id;
         $size = (int) $request->headers->get('Content-Length', '0');
         $offset = (int) $request->headers->get('Upload-Offset', '0');
         $checksum = strtolower((string) $request->headers->get('Upload-Checksum-SHA256', ''));
 
-        $stream = fopen('php://input', 'rb');
-        if ($stream === false) {
-            throw new \RuntimeException('Unable to read upload request body.');
+        try {
+            $sessionId = Uuid::fromString($id);
+            $chunk = new UploadChunk($index, $offset, $size, $checksum);
+        } catch (\Throwable) {
+            throw UploadProblem::request(
+                'invalid_upload_request',
+                'Upload chunk request metadata is invalid.',
+            );
         }
 
-        ($this->receive)(
-            Uuid::fromString($id),
-            $userId,
-            new UploadChunk($index, $offset, $size, $checksum),
-            $stream,
-        );
+        $stream = fopen('php://input', 'rb');
+        if ($stream === false) {
+            throw UploadProblem::retryable(
+                'upload_temporarily_unavailable',
+                \Mediarama\Upload\Domain\UploadFailureStage::Acquisition,
+                'Upload request body cannot be read.',
+            );
+        }
 
-        fclose($stream);
+        try {
+            ($this->receive)(
+                $sessionId,
+                $this->currentUser->requireUser()->id,
+                $chunk,
+                $stream,
+            );
+        } finally {
+            fclose($stream);
+        }
 
         return new JsonResponse(['accepted' => true], 202);
     }

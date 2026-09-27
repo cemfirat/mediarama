@@ -58,6 +58,7 @@ final class UploadApiExceptionSubscriber implements EventSubscriberInterface
         return match ($code) {
             'invalid_upload_request' => Response::HTTP_BAD_REQUEST,
             'upload_not_found' => Response::HTTP_NOT_FOUND,
+            'upload_destination_forbidden' => Response::HTTP_FORBIDDEN,
             'upload_expired' => Response::HTTP_GONE,
             'upload_state_conflict',
             'upload_incomplete' => Response::HTTP_CONFLICT,

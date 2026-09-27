@@ -66,6 +66,14 @@ SQL,
         );
     }
 
+    public function delete(UploadSession $session): void
+    {
+        $this->connection->delete(
+            'upload_sessions',
+            ['id' => $session->id->toRfc4122()],
+        );
+    }
+
     public function get(Uuid $id): UploadSession
     {
         $row = $this->connection->fetchAssociative(
