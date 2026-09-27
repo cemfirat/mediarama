@@ -104,7 +104,7 @@ Do not put the password in the command line, shell history, logs or process argu
 Supported options include:
 
 - `--email=<address>`;
-- `--profile=private_workspace|public_publishing|internal_isolated`;
+- `--deployment-profile=private_workspace|public_publishing|internal_isolated`;
 - `--password-stdin`;
 - `--recover-inactive` for deliberate server-side recovery of a matching inactive system administrator.
 

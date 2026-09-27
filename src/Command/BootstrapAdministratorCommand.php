@@ -35,7 +35,7 @@ final class BootstrapAdministratorCommand extends Command
             ->addArgument('username', InputArgument::REQUIRED, 'Administrator username.')
             ->addOption('email', null, InputOption::VALUE_REQUIRED, 'Optional administrator email.')
             ->addOption(
-                'profile',
+                'deployment-profile',
                 null,
                 InputOption::VALUE_REQUIRED,
                 'private_workspace, public_publishing or internal_isolated.',
@@ -57,7 +57,7 @@ final class BootstrapAdministratorCommand extends Command
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $profile = DeploymentProfile::tryFrom((string) $input->getOption('profile'));
+        $profile = DeploymentProfile::tryFrom((string) $input->getOption('deployment-profile'));
         if ($profile === null) {
             $output->writeln('<error>Unknown deployment profile.</error>');
 

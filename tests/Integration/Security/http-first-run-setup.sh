@@ -307,7 +307,7 @@ trap 'reset_setup' EXIT
 reset_setup
 create_admin_fixture setup-ci-imported password_reset_required a
 
-printf '%s\n' "$PASSWORD" | php bin/console mediarama:setup:bootstrap-admin     setup-ci-imported     --profile=internal_isolated     --password-stdin     > /tmp/setup-cli-imported.txt
+printf '%s\n' "$PASSWORD" | php bin/console mediarama:setup:bootstrap-admin     setup-ci-imported     --deployment-profile=internal_isolated     --password-stdin     > /tmp/setup-cli-imported.txt
 
 if grep -F "$PASSWORD" /tmp/setup-cli-imported.txt; then
     echo "FAIL CLI bootstrap exposed the password"
@@ -416,7 +416,7 @@ reset_setup
 create_admin_fixture setup-ci-existing active c
 
 set +e
-printf '%s\n' "$PASSWORD" | php bin/console mediarama:setup:bootstrap-admin     setup-ci-would-be-duplicate     --profile=public_publishing     --password-stdin     > /tmp/setup-cli-existing.txt 2>&1
+printf '%s\n' "$PASSWORD" | php bin/console mediarama:setup:bootstrap-admin     setup-ci-would-be-duplicate     --deployment-profile=public_publishing     --password-stdin     > /tmp/setup-cli-existing.txt 2>&1
 EXISTING_STATUS=$?
 set -e
 if [ "$EXISTING_STATUS" -ne 0 ]; then
