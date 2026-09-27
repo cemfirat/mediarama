@@ -118,6 +118,9 @@ jobs:
       - name: Verify ImageMagick application resource envelope
         run: php tests/Integration/ImageMagick/resource-limits.php
 
+      - name: Verify real image derivative formats
+        run: php tests/Integration/ImageMagick/real-format-derivatives.php
+
       - name: Verify real metadata format round trips
         run: php tests/Integration/Metadata/real-format-roundtrip.php
 
