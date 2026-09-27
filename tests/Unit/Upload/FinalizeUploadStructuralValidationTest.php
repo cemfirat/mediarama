@@ -19,6 +19,7 @@ use Mediarama\Upload\Application\UploadContentPolicy;
 use Mediarama\Upload\Application\UploadDestinationAuthorizer;
 use Mediarama\Upload\Application\UploadFinalizationCriticalSection;
 use Mediarama\Upload\Application\UploadFinalizationRepository;
+use Mediarama\Upload\Application\UploadProblem;
 use Mediarama\Upload\Application\UploadQuota;
 use Mediarama\Upload\Application\UploadSessionRepository;
 use Mediarama\Upload\Domain\UploadSession;
@@ -219,18 +220,23 @@ final class FinalizeUploadStructuralValidationTest extends TestCase
         try {
             $finalize($session->id, $userId);
             self::fail('Expected structural validation to reject the upload.');
-        } catch (\DomainException $error) {
-            self::assertSame('Uploaded image failed structural validation.', $error->getMessage());
+        } catch (UploadProblem $error) {
+            self::assertSame('invalid_media', $error->publicCode);
+            self::assertFalse($error->retryable);
+            self::assertTrue($error->terminal);
         }
 
         self::assertSame(1, $structure->calls);
-        self::assertSame(UploadStatus::Uploaded, $session->status);
-        self::assertSame(0, $sessions->saves);
+        self::assertSame(UploadStatus::Failed, $session->status);
+        self::assertSame('invalid_media', $session->lastFailure?->code);
+        self::assertFalse($session->lastFailure?->retryable ?? true);
+        self::assertSame(1, $sessions->saves);
         self::assertSame(0, $storage->promotions);
         self::assertSame(0, $media->saves);
         self::assertSame(0, $finalizations->remembers);
         self::assertSame(0, $quota->commits);
-        self::assertSame(0, $criticalSection->calls);
+        self::assertSame(1, $quota->releases);
+        self::assertSame(1, $criticalSection->calls);
         self::assertSame(0, $bus->dispatches);
     }
 }

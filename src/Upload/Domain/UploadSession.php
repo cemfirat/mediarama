@@ -153,7 +153,12 @@ final class UploadSession
 
     public function clearFailure(): void
     {
+        if ($this->lastFailure === null) {
+            return;
+        }
+
         $this->lastFailure = null;
+        $this->touch();
     }
 
     public function isExpired(DateTimeImmutable $now = new DateTimeImmutable()): bool

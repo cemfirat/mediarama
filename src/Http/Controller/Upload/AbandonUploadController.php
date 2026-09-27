@@ -6,7 +6,7 @@ namespace Mediarama\Http\Controller\Upload;
 
 use Mediarama\Security\Application\CurrentUser;
 use Mediarama\Upload\Application\AbandonUpload;
-use Symfony\Component\HttpFoundation\JsonResponse;
+use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Uid\Uuid;
@@ -20,13 +20,13 @@ final readonly class AbandonUploadController
     }
 
     #[Route('/api/uploads/{id}', name: 'upload_abandon', methods: ['DELETE'])]
-    public function __invoke(string $id, Request $request): JsonResponse
+    public function __invoke(string $id, Request $request): Response
     {
         ($this->abandon)(
             Uuid::fromString($id),
             $this->currentUser->requireUser()->id,
         );
 
-        return new JsonResponse(null, 204);
+        return new Response(status: Response::HTTP_NO_CONTENT);
     }
 }
