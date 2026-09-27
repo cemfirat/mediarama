@@ -78,6 +78,8 @@ jobs:
       IMAGE_WATERMARK_THUMBNAIL: false
       IMAGE_WATERMARK_PREVIEW: false
       IMAGE_WATERMARK_LARGE: false
+      DERIVATIVE_RETENTION_GRACE_DAYS: 400
+      DERIVATIVE_RETENTION_KEEP_GENERATIONS: 2
       UPLOAD_MAX_ASSET_BYTES: 2147483648
       UPLOAD_MAX_CHUNK_BYTES: 16777216
       UPLOAD_DEFAULT_QUOTA_BYTES: 0
@@ -192,6 +194,9 @@ jobs:
 
       - name: Verify derivative regeneration persistence and locking
         run: php tests/Integration/Media/derivative-regeneration.php
+
+      - name: Verify derivative retention and cleanup
+        run: php tests/Integration/Media/derivative-cleanup.php
 
       - name: Verify collection access policy
         run: php tests/Integration/Collection/access-policy.php

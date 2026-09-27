@@ -16,6 +16,7 @@ services:
             - '../src/Media/Application/ImageDerivativeProfile.php'
             - '../src/Media/Application/StoredObject.php'
             - '../src/Media/Application/InspectedMetadata.php'
+            - '../src/Media/Application/DerivativeCleanupJob.php'
             - '../src/Upload/Application/InspectedContent.php'
             - '../src/Export/Application/MetadataExportPolicy.php'
             - '../src/Security/Application/AuthenticatedUser.php'
@@ -119,6 +120,14 @@ services:
 
     Mediarama\Media\Application\MediaDerivativeRepository:
         alias: Mediarama\Media\Infrastructure\Persistence\DbalMediaDerivativeRepository
+
+    Mediarama\Media\Application\DerivativeCleanupRepository:
+        alias: Mediarama\Media\Infrastructure\Persistence\DbalDerivativeCleanupRepository
+
+    Mediarama\Media\Application\CleanupSupersededDerivatives:
+        arguments:
+            $graceDays: '%env(int:DERIVATIVE_RETENTION_GRACE_DAYS)%'
+            $keepNewestVersions: '%env(int:DERIVATIVE_RETENTION_KEEP_GENERATIONS)%'
 
     Mediarama\Media\Application\MediaDerivativeRegenerationLock:
         alias: Mediarama\Media\Infrastructure\Persistence\PostgresMediaDerivativeRegenerationLock
