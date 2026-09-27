@@ -45,6 +45,12 @@ services:
     Mediarama\Media\Application\MediaAssetRepository:
         alias: Mediarama\Media\Infrastructure\Persistence\DbalMediaAssetRepository
 
+    Mediarama\Platform\Application\PlatformSettingsRepository:
+        alias: Mediarama\Platform\Infrastructure\Persistence\DbalPlatformSettingsRepository
+
+    Mediarama\Platform\Application\SearchIndexPolicyRepository:
+        alias: Mediarama\Platform\Infrastructure\Persistence\DbalSearchIndexPolicyRepository
+
     Mediarama\Media\Infrastructure\Storage\LocalMediaStorage:
         arguments:
             $mediaRoot: '%env(resolve:MEDIA_STORAGE_PATH)%'
