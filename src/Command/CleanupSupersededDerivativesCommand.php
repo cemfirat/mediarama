@@ -66,6 +66,10 @@ final class CleanupSupersededDerivativesCommand extends Command
     {
         try {
             $days = $this->positiveInt($input->getOption('older-than-days'), 'older-than-days');
+            if ($days > 36500) {
+                throw new \InvalidArgumentException('--older-than-days must not exceed 36500.');
+            }
+
             $keep = $this->positiveInt($input->getOption('keep-versions'), 'keep-versions');
             $generationLimit = $this->positiveInt($input->getOption('generation-limit'), 'generation-limit');
             $storageLimit = $this->positiveInt($input->getOption('storage-limit'), 'storage-limit');
