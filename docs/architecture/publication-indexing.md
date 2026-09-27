@@ -177,13 +177,31 @@ The admin UI should state this clearly wherever search-engine exclusion can be c
 
 Sitemaps are generated from the same effective policy, not from raw records.
 
+The first production sitemap boundary is:
+
+- `/sitemap.xml` — a sitemap index;
+- `/sitemaps/collections-{page}.xml` — bounded Collection-page chunks;
+- 250 Collection pages per chunk so image extensions cannot inflate one XML file toward protocol size limits;
+- the public Collections root page is included only when the site default is `index`;
+- a Collection page is included only when it is effectively public and its own effective search-index policy is `index`;
+- image sitemap entries are emitted only for indexable image MediaAssets that are actually part of the first 120 media rendered on that Collection page;
+- image entries use the current public preview derivative when available, falling back to the thumbnail derivative;
+- sitemap URLs are built from deployment configuration `PUBLIC_BASE_URL`, not from an untrusted request `Host` header.
+
 Never include:
 
 - authenticated/private/restricted Collections;
-- unpublished media;
+- unpublished, non-ready or deleted media;
 - noindex Collection pages;
 - noindex MediaAsset pages/resources;
-- ad-hoc search/facet URLs.
+- ad-hoc search/facet URLs;
+- raw EXIF/IPTC/XMP/DICOM/vendor metadata.
+
+The implementation deliberately omits `lastmod` until Mediarama can calculate a truthful page-level modification time that includes membership/content changes. An inaccurate generation timestamp is worse than omitting the optional field.
+
+Video sitemap tags are also deliberately deferred. The current public gallery has no stable public video player/content route, so emitting video sitemap metadata now would fabricate a crawl target rather than describe a real public page. Add video sitemap support together with the public video presentation boundary.
+
+Sitemap output is unavailable when site public publishing is disabled. This is discovery behavior, not authorization; private content remains protected by the normal access policy regardless of crawler behavior.
 
 ## Bulk actions
 

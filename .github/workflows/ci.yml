@@ -47,6 +47,7 @@ jobs:
       APP_DEBUG: 0
       APP_SECRET: mediarama-ci-only
       MEDIARAMA_SETUP_TOKEN: mediarama-ci-first-run-token-2026-09-27-abcdef
+      PUBLIC_BASE_URL: http://127.0.0.1:8080
       DATABASE_URL: postgresql://mediarama:mediarama@127.0.0.1:5432/mediarama?serverVersion=18&charset=utf8
       MESSENGER_TRANSPORT_DSN: doctrine://default?queue_name=async&auto_setup=false
       MEDIA_STORAGE_PATH: /tmp/mediarama-media
@@ -481,6 +482,9 @@ jobs:
 
       - name: Verify publication and search-index HTTP policy
         run: bash tests/Integration/Platform/http-publication-index-policy.sh
+
+      - name: Verify sitemap discovery and privacy boundary
+        run: bash tests/Integration/Seo/http-sitemap-discovery.sh
 
       - name: Verify Coppermine 1.7 capability detection
         run: |
