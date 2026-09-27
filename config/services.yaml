@@ -145,6 +145,14 @@ services:
             $identifyBinary: '%env(IMAGEMAGICK_IDENTIFY_BINARY)%'
             $timeoutSeconds: '%env(float:IMAGEMAGICK_PROCESS_TIMEOUT_SECONDS)%'
 
+    Mediarama\Media\Infrastructure\Image\ImageWatermarkConfiguration:
+        arguments:
+            $assetPath: '%env(IMAGE_WATERMARK_ASSET_PATH)%'
+            $sizePercent: '%env(int:IMAGE_WATERMARK_SIZE_PERCENT)%'
+            $opacityPercent: '%env(int:IMAGE_WATERMARK_OPACITY_PERCENT)%'
+            $marginPercent: '%env(int:IMAGE_WATERMARK_MARGIN_PERCENT)%'
+            $gravity: '%env(IMAGE_WATERMARK_GRAVITY)%'
+
     Mediarama\Media\Application\InspectImageFileGeometry:
         alias: Mediarama\Media\Infrastructure\Image\ImageMagickFileGeometryInspector
 
@@ -153,15 +161,15 @@ services:
 
     mediarama.media.profile.thumbnail:
         class: Mediarama\Media\Application\ImageDerivativeProfile
-        arguments: ['thumbnail', 480, 480, 'webp', 82, false]
+        arguments: ['thumbnail', 480, 480, 'webp', 82, '%env(bool:IMAGE_WATERMARK_THUMBNAIL)%']
 
     mediarama.media.profile.preview:
         class: Mediarama\Media\Application\ImageDerivativeProfile
-        arguments: ['preview', 1600, 1600, 'webp', 84, false]
+        arguments: ['preview', 1600, 1600, 'webp', 84, '%env(bool:IMAGE_WATERMARK_PREVIEW)%']
 
     mediarama.media.profile.large:
         class: Mediarama\Media\Application\ImageDerivativeProfile
-        arguments: ['large', 2560, 2560, 'webp', 86, false]
+        arguments: ['large', 2560, 2560, 'webp', 86, '%env(bool:IMAGE_WATERMARK_LARGE)%']
 
     Mediarama\Media\Application\GenerateImageDerivatives:
         arguments:

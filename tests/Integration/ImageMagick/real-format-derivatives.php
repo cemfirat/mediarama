@@ -11,6 +11,8 @@ use Mediarama\Media\Domain\StorageObjectId;
 use Mediarama\Media\Infrastructure\Image\ImageMagickDerivativeGenerator;
 use Mediarama\Media\Infrastructure\Image\ImageMagickProcess;
 use Mediarama\Media\Infrastructure\Image\ImageMagickResourceLimits;
+use Mediarama\Media\Infrastructure\Image\ImageMagickWatermarkRenderer;
+use Mediarama\Media\Infrastructure\Image\ImageWatermarkConfiguration;
 use Mediarama\Media\Infrastructure\Metadata\ExifToolProcess;
 use Mediarama\Media\Infrastructure\Storage\LocalMediaStorage;
 use Symfony\Component\Process\Process;
@@ -164,7 +166,11 @@ $process = new ImageMagickProcess(
     45.0,
 );
 $storage = new LocalMediaStorage($storageRoot);
-$generator = new ImageMagickDerivativeGenerator($storage, $process);
+$generator = new ImageMagickDerivativeGenerator(
+    $storage,
+    $process,
+    new ImageMagickWatermarkRenderer($process, new ImageWatermarkConfiguration('')),
+);
 $profile = new ImageDerivativeProfile(
     'real-format-fixture',
     64,
