@@ -460,7 +460,7 @@ try {
     }
 
     $report = [
-        'schema_version' => 1,
+        'schema_version' => 2,
         'generated_at' => (new DateTimeImmutable())->format(DATE_ATOM),
         'purpose' => 'Mediarama derivative-format benchmark; not production profile configuration',
         'privacy' => [
@@ -482,6 +482,13 @@ try {
         ],
         'matrix' => [
             'formats' => $formats,
+            'encoder_backends' => array_combine(
+                $formats,
+                array_map(
+                    static fn (string $format): string => $format === 'webp' ? 'cwebp' : 'imagemagick',
+                    $formats,
+                ),
+            ),
             'qualities' => $qualities,
             'quality_note' => 'Numeric quality values are codec-specific curve samples, not equal-quality cross-codec points.',
             'profiles' => array_map(
@@ -560,6 +567,7 @@ try {
                         'source_id' => $sourceId,
                         'profile' => $profileName,
                         'format' => $format,
+                        'encoder_backend' => $format === 'webp' ? 'cwebp' : 'imagemagick',
                         'status' => 'unsupported',
                         'reason' => $capabilities[$format]['reason'] ?? 'Encoder unavailable.',
                     ];
@@ -606,6 +614,7 @@ try {
                             'reference_width' => $referenceInfo['width'],
                             'reference_height' => $referenceInfo['height'],
                             'format' => $format,
+                            'encoder_backend' => $format === 'webp' ? 'cwebp' : 'imagemagick',
                             'quality' => $quality,
                             'status' => 'ok',
                             'output_format' => $candidateInfo['format'],
@@ -625,6 +634,7 @@ try {
                             'source_id' => $sourceId,
                             'profile' => $profileName,
                             'format' => $format,
+                            'encoder_backend' => $format === 'webp' ? 'cwebp' : 'imagemagick',
                             'quality' => $quality,
                             'status' => 'failed',
                             'reason' => substr($error->getMessage(), 0, 500),
