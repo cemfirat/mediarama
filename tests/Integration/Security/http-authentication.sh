@@ -29,7 +29,7 @@ $users = [
     ['11111111-1111-4111-8111-111111111111', 'auth-ci-active', 'active'],
     ['22222222-2222-4222-8222-222222222222', 'auth-ci-inactive', 'inactive'],
     ['33333333-3333-4333-8333-333333333333', 'auth-ci-reset', 'password_reset_required'],
-    ['55555555-5555-4555-8555-555555555555', 'auth-ci-throttle', 'active'],
+    ['55555555-5555-4555-8555-555555555555', 'auth-ci-guard', 'active'],
 ];
 
 foreach ($users as [$id, $username, $status]) {
@@ -187,12 +187,12 @@ for round in 1 2; do
 
     for attempt in 1 2 3 4; do
         TOKEN="$(csrf_token "$THROTTLE_JAR" "/tmp/auth-throttle-reset-$round-$attempt.html")"
-        expect_status 302 "$(login_status auth-ci-throttle 'wrong-password' "$THROTTLE_JAR" "$TOKEN")" "throttle reset round $round failure $attempt redirects generically"
+        expect_status 302 "$(login_status auth-ci-guard 'wrong-password' "$THROTTLE_JAR" "$TOKEN")" "throttle reset round $round failure $attempt redirects generically"
         expect_status 401 "$(upload_status "$THROTTLE_JAR")" "throttle reset round $round failure $attempt does not authenticate"
     done
 
     TOKEN="$(csrf_token "$THROTTLE_JAR" "/tmp/auth-throttle-reset-$round-success.html")"
-    expect_status 302 "$(login_status auth-ci-throttle "$PASSWORD" "$THROTTLE_JAR" "$TOKEN")" "throttle reset round $round correct password redirects"
+    expect_status 302 "$(login_status auth-ci-guard "$PASSWORD" "$THROTTLE_JAR" "$TOKEN")" "throttle reset round $round correct password redirects"
     expect_status 403 "$(upload_status "$THROTTLE_JAR")" "throttle reset round $round success establishes authenticated session"
 done
 
@@ -203,12 +203,12 @@ rm -f "$THROTTLE_BLOCK_JAR"
 
 for attempt in 1 2 3 4 5; do
     TOKEN="$(csrf_token "$THROTTLE_BLOCK_JAR" "/tmp/auth-throttle-block-$attempt.html")"
-    expect_status 302 "$(login_status auth-ci-throttle 'wrong-password' "$THROTTLE_BLOCK_JAR" "$TOKEN")" "throttle blocking failure $attempt redirects generically"
+    expect_status 302 "$(login_status auth-ci-guard 'wrong-password' "$THROTTLE_BLOCK_JAR" "$TOKEN")" "throttle blocking failure $attempt redirects generically"
     expect_status 401 "$(upload_status "$THROTTLE_BLOCK_JAR")" "throttle blocking failure $attempt does not authenticate"
 done
 
 TOKEN="$(csrf_token "$THROTTLE_BLOCK_JAR" /tmp/auth-throttle-block-correct.html)"
-expect_status 302 "$(login_status auth-ci-throttle "$PASSWORD" "$THROTTLE_BLOCK_JAR" "$TOKEN")" "throttled correct password uses generic redirect"
+expect_status 302 "$(login_status auth-ci-guard "$PASSWORD" "$THROTTLE_BLOCK_JAR" "$TOKEN")" "throttled correct password uses generic redirect"
 expect_status 401 "$(upload_status "$THROTTLE_BLOCK_JAR")" "correct credentials are blocked after five failed attempts"
 
 curl --fail --silent --show-error \
@@ -235,7 +235,7 @@ APP_ENV=prod APP_DEBUG=0 php bin/console cache:pool:clear cache.rate_limiter --n
 
 rm -f "$THROTTLE_BLOCK_JAR"
 TOKEN="$(csrf_token "$THROTTLE_BLOCK_JAR" /tmp/auth-throttle-after-clear.html)"
-expect_status 302 "$(login_status auth-ci-throttle "$PASSWORD" "$THROTTLE_BLOCK_JAR" "$TOKEN")" "correct credentials redirect after limiter cache clear"
+expect_status 302 "$(login_status auth-ci-guard "$PASSWORD" "$THROTTLE_BLOCK_JAR" "$TOKEN")" "correct credentials redirect after limiter cache clear"
 expect_status 403 "$(upload_status "$THROTTLE_BLOCK_JAR")" "correct credentials authenticate after limiter cache clear"
 
 NO_CSRF_JAR=/tmp/auth-no-csrf.cookies
