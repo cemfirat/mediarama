@@ -18,25 +18,28 @@ final readonly class ImageMagickDerivativeGenerator implements ImageDerivativeGe
     public function __construct(
         private MediaStorage $storage,
         private ImageMagickProcess $process,
+        private ImageMagickWatermarkRenderer $watermarks,
     ) {
     }
 
     public function generate(MediaAsset $media, ImageDerivativeProfile $profile, int $processingVersion): MediaDerivative
     {
-        if ($profile->watermark) {
-            throw new \LogicException('Watermarked derivative profiles are not implemented yet.');
-        }
-
         $source = $this->storage->read($media->original);
         $input = tempnam(sys_get_temp_dir(), 'mediarama-image-in-');
         $output = tempnam(sys_get_temp_dir(), 'mediarama-image-out-');
+        $intermediate = $profile->watermark
+            ? tempnam(sys_get_temp_dir(), 'mediarama-image-watermark-base-')
+            : null;
 
-        if ($input === false || $output === false) {
+        if ($input === false || $output === false || ($profile->watermark && $intermediate === false)) {
             if (is_string($input)) {
                 @unlink($input);
             }
             if (is_string($output)) {
                 @unlink($output);
+            }
+            if (is_string($intermediate)) {
+                @unlink($intermediate);
             }
             fclose($source);
 
@@ -61,16 +64,45 @@ final readonly class ImageMagickDerivativeGenerator implements ImageDerivativeGe
                 fclose($source);
             }
 
-            $arguments = [
-                $input.'[0]',
-                '-auto-orient',
-                '-strip',
-                '-thumbnail', sprintf('%dx%d>', $profile->maximumWidth, $profile->maximumHeight),
-                '-quality', (string) $profile->quality,
-                $outputWithExtension,
+            $metadata = [
+                'orientation_normalized' => true,
+                'watermarked' => false,
             ];
 
-            $this->process->convert($arguments);
+            if ($profile->watermark) {
+                if (!is_string($intermediate)) {
+                    throw new \LogicException('Watermark intermediate path was not allocated.');
+                }
+
+                $this->process->convert([
+                    $input.'[0]',
+                    '-auto-orient',
+                    '-strip',
+                    '-thumbnail',
+                    sprintf('%dx%d>', $profile->maximumWidth, $profile->maximumHeight),
+                    'miff:'.$intermediate,
+                ]);
+
+                $metadata = [
+                    'orientation_normalized' => true,
+                    ...$this->watermarks->render(
+                        $intermediate,
+                        $outputWithExtension,
+                        $profile->quality,
+                    ),
+                ];
+            } else {
+                $this->process->convert([
+                    $input.'[0]',
+                    '-auto-orient',
+                    '-strip',
+                    '-thumbnail',
+                    sprintf('%dx%d>', $profile->maximumWidth, $profile->maximumHeight),
+                    '-quality',
+                    (string) $profile->quality,
+                    $outputWithExtension,
+                ]);
+            }
 
             $imageInfo = getimagesize($outputWithExtension);
             if ($imageInfo === false) {
@@ -113,10 +145,7 @@ final readonly class ImageMagickDerivativeGenerator implements ImageDerivativeGe
                 (int) $imageInfo[0],
                 (int) $imageInfo[1],
                 null,
-                [
-                    'orientation_normalized' => true,
-                    'watermarked' => false,
-                ],
+                $metadata,
                 $now,
                 $now,
             );
@@ -124,6 +153,9 @@ final readonly class ImageMagickDerivativeGenerator implements ImageDerivativeGe
             @unlink($input);
             @unlink($output);
             @unlink($outputWithExtension);
+            if (is_string($intermediate)) {
+                @unlink($intermediate);
+            }
         }
     }
 }
