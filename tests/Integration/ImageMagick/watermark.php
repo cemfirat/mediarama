@@ -8,6 +8,7 @@ use Mediarama\Media\Application\ImageDerivativeProfile;
 use Mediarama\Media\Domain\MediaAsset;
 use Mediarama\Media\Domain\MediaType;
 use Mediarama\Media\Domain\StorageObjectId;
+use Mediarama\Media\Infrastructure\Image\CwebpEncoder;
 use Mediarama\Media\Infrastructure\Image\ImageMagickDerivativeGenerator;
 use Mediarama\Media\Infrastructure\Image\ImageMagickProcess;
 use Mediarama\Media\Infrastructure\Image\ImageMagickResourceLimits;
@@ -86,10 +87,12 @@ function regionMean(ImageMagickProcess $process, string $path, string $geometry)
     return (float) $raw;
 }
 
+$cwebpBinary = trim((string) getenv('CWEBP_BINARY'));
 $convertBinary = trim((string) getenv('IMAGEMAGICK_BINARY'));
 $identifyBinary = trim((string) getenv('IMAGEMAGICK_IDENTIFY_BINARY'));
 $exiftoolBinary = trim((string) getenv('EXIFTOOL_BINARY'));
 
+requireWatermark($cwebpBinary !== '', 'CWEBP_BINARY must be configured.');
 requireWatermark($convertBinary !== '', 'IMAGEMAGICK_BINARY is configured');
 requireWatermark($identifyBinary !== '', 'IMAGEMAGICK_IDENTIFY_BINARY is configured');
 requireWatermark($exiftoolBinary !== '', 'EXIFTOOL_BINARY is configured');
@@ -203,10 +206,12 @@ try {
     $expectedWatermarkFingerprint = $configuration->fingerprintFromAssetHash($watermarkAssetHash);
 
     $renderer = new ImageMagickWatermarkRenderer($imageMagick, $configuration);
+    $webp = new CwebpEncoder($cwebpBinary, 60.0);
     $generator = new ImageMagickDerivativeGenerator(
         $storage,
         $imageMagick,
         $renderer,
+        $webp,
     );
     $profile = new ImageDerivativeProfile(
         'watermark-fixture',
@@ -223,6 +228,8 @@ try {
     requireWatermark($derivative->height === 100, 'watermarked derivative height matches resized source');
     requireWatermark(($derivative->metadata['orientation_normalized'] ?? false) === true, 'orientation-normalized metadata is retained');
     requireWatermark(($derivative->metadata['watermarked'] ?? false) === true, 'derivative is marked watermarked');
+    requireWatermark(($derivative->metadata['encoder'] ?? null) === 'cwebp', 'watermarked derivative records cwebp backend');
+    requireWatermark(($derivative->metadata['encoder_quality'] ?? null) === 90, 'watermarked derivative records cwebp quality');
     requireWatermark(($derivative->metadata['watermark_gravity'] ?? null) === 'southeast', 'watermark gravity is recorded');
     requireWatermark(($derivative->metadata['watermark_size_percent'] ?? null) === 25, 'watermark size policy is recorded');
     requireWatermark(($derivative->metadata['watermark_opacity_percent'] ?? null) === 50, 'watermark opacity policy is recorded');
@@ -282,6 +289,7 @@ try {
             $imageMagick,
             new ImageWatermarkConfiguration(''),
         ),
+        $webp,
     );
 
     try {

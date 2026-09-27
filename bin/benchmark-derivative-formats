@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Mediarama\Media\Infrastructure\Image\CwebpEncoder;
 use Mediarama\Media\Infrastructure\Image\ImageMagickProcess;
 use Mediarama\Media\Infrastructure\Image\ImageMagickResourceLimits;
 use Symfony\Component\Process\Process;
@@ -35,6 +36,7 @@ function benchmarkOptions(): array
         'convert-binary::',
         'identify-binary::',
         'compare-binary::',
+        'cwebp-binary::',
         'help',
     ]);
 
@@ -58,6 +60,7 @@ Optional:
   --convert-binary=convert|magick
   --identify-binary=identify
   --compare-binary=compare
+  --cwebp-binary=cwebp
 
 The benchmark does not modify Mediarama production profiles. It creates temporary
 lossless references, probes each requested encoder, records bytes/encode time and
@@ -217,24 +220,37 @@ function benchmarkRun(
 /** @return array{supported: bool, reason: ?string} */
 function benchmarkEncoderCapability(
     ImageMagickProcess $imageMagick,
+    CwebpEncoder $webp,
     string $format,
     string $temporaryRoot,
 ): array {
     $extension = $format === 'jpeg' ? 'jpg' : $format;
     $probe = $temporaryRoot.'/encoder-probe.'.$extension;
+    $probeInput = $temporaryRoot.'/encoder-probe.png';
 
     try {
         $imageMagick->convert([
             '-size',
-            '8x8',
-            'xc:white',
+            '64x64',
+            'gradient:#203040-#e0b070',
             '-strip',
-            '-quality',
-            '75',
-            $format.':'.$probe,
+            'png:'.$probeInput,
         ]);
+
+        if ($format === 'webp') {
+            $webp->encode($probeInput, $probe, 75);
+        } else {
+            $imageMagick->convert([
+                $probeInput,
+                '-strip',
+                '-quality',
+                '75',
+                $format.':'.$probe,
+            ]);
+        }
     } catch (Throwable $error) {
         @unlink($probe);
+        @unlink($probeInput);
 
         return [
             'supported' => false,
@@ -244,6 +260,7 @@ function benchmarkEncoderCapability(
 
     $supported = is_file($probe) && filesize($probe) !== false && filesize($probe) > 0;
     @unlink($probe);
+    @unlink($probeInput);
 
     return [
         'supported' => $supported,
@@ -387,6 +404,7 @@ try {
 $convertBinary = trim((string) ($options['convert-binary'] ?? benchmarkEnv('IMAGEMAGICK_BINARY', 'magick')));
 $identifyBinary = trim((string) ($options['identify-binary'] ?? benchmarkEnv('IMAGEMAGICK_IDENTIFY_BINARY', 'identify')));
 $compareBinary = trim((string) ($options['compare-binary'] ?? benchmarkEnv('IMAGEMAGICK_COMPARE_BINARY', 'compare')));
+$cwebpBinary = trim((string) ($options['cwebp-binary'] ?? benchmarkEnv('CWEBP_BINARY', 'cwebp')));
 
 $limits = new ImageMagickResourceLimits(
     memory: benchmarkEnv('IMAGEMAGICK_LIMIT_MEMORY', '256MiB'),
@@ -406,6 +424,10 @@ $imageMagick = new ImageMagickProcess(
     $identifyBinary,
     (float) benchmarkEnv('IMAGEMAGICK_PROCESS_TIMEOUT_SECONDS', '60'),
 );
+$webp = new CwebpEncoder(
+    $cwebpBinary,
+    (float) benchmarkEnv('CWEBP_PROCESS_TIMEOUT_SECONDS', '60'),
+);
 
 $sources = benchmarkSources($inputDirectory, $limit);
 if ($sources === []) {
@@ -420,18 +442,25 @@ if (!mkdir($temporaryRoot, 0700, true) && !is_dir($temporaryRoot)) {
 try {
     $version = benchmarkRun([$convertBinary, '-version'], [], 15.0);
     $compareMetrics = benchmarkCompareMetrics($compareBinary, $limits);
+    $cwebpVersion = null;
+    try {
+        $cwebpVersion = $webp->version();
+    } catch (Throwable) {
+        // Encoder capability below records the actionable failure when WebP is requested.
+    }
 
     $capabilities = [];
     foreach ($formats as $format) {
         $capabilities[$format] = benchmarkEncoderCapability(
             $imageMagick,
+            $webp,
             $format,
             $temporaryRoot,
         );
     }
 
     $report = [
-        'schema_version' => 1,
+        'schema_version' => 2,
         'generated_at' => (new DateTimeImmutable())->format(DATE_ATOM),
         'purpose' => 'Mediarama derivative-format benchmark; not production profile configuration',
         'privacy' => [
@@ -448,9 +477,18 @@ try {
             'identify_binary' => $identifyBinary,
             'compare_binary' => $compareBinary,
             'compare_metrics' => $compareMetrics,
+            'cwebp_binary' => $cwebpBinary,
+            'cwebp_version' => $cwebpVersion,
         ],
         'matrix' => [
             'formats' => $formats,
+            'encoder_backends' => array_combine(
+                $formats,
+                array_map(
+                    static fn (string $format): string => $format === 'webp' ? 'cwebp' : 'imagemagick',
+                    $formats,
+                ),
+            ),
             'qualities' => $qualities,
             'quality_note' => 'Numeric quality values are codec-specific curve samples, not equal-quality cross-codec points.',
             'profiles' => array_map(
@@ -529,6 +567,7 @@ try {
                         'source_id' => $sourceId,
                         'profile' => $profileName,
                         'format' => $format,
+                        'encoder_backend' => $format === 'webp' ? 'cwebp' : 'imagemagick',
                         'status' => 'unsupported',
                         'reason' => $capabilities[$format]['reason'] ?? 'Encoder unavailable.',
                     ];
@@ -550,13 +589,17 @@ try {
 
                     $started = hrtime(true);
                     try {
-                        $imageMagick->convert([
-                            $reference,
-                            '-strip',
-                            '-quality',
-                            (string) $quality,
-                            $format.':'.$candidate,
-                        ]);
+                        if ($format === 'webp') {
+                            $webp->encode($reference, $candidate, $quality);
+                        } else {
+                            $imageMagick->convert([
+                                $reference,
+                                '-strip',
+                                '-quality',
+                                (string) $quality,
+                                $format.':'.$candidate,
+                            ]);
+                        }
                         $durationMs = (hrtime(true) - $started) / 1_000_000;
 
                         $candidateInfo = benchmarkIdentify($imageMagick, $candidate);
@@ -571,6 +614,7 @@ try {
                             'reference_width' => $referenceInfo['width'],
                             'reference_height' => $referenceInfo['height'],
                             'format' => $format,
+                            'encoder_backend' => $format === 'webp' ? 'cwebp' : 'imagemagick',
                             'quality' => $quality,
                             'status' => 'ok',
                             'output_format' => $candidateInfo['format'],
@@ -590,6 +634,7 @@ try {
                             'source_id' => $sourceId,
                             'profile' => $profileName,
                             'format' => $format,
+                            'encoder_backend' => $format === 'webp' ? 'cwebp' : 'imagemagick',
                             'quality' => $quality,
                             'status' => 'failed',
                             'reason' => substr($error->getMessage(), 0, 500),

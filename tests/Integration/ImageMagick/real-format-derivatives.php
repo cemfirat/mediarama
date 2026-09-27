@@ -8,6 +8,7 @@ use Mediarama\Media\Application\ImageDerivativeProfile;
 use Mediarama\Media\Domain\MediaAsset;
 use Mediarama\Media\Domain\MediaType;
 use Mediarama\Media\Domain\StorageObjectId;
+use Mediarama\Media\Infrastructure\Image\CwebpEncoder;
 use Mediarama\Media\Infrastructure\Image\ImageMagickDerivativeGenerator;
 use Mediarama\Media\Infrastructure\Image\ImageMagickProcess;
 use Mediarama\Media\Infrastructure\Image\ImageMagickResourceLimits;
@@ -131,10 +132,12 @@ function storeFormatFixture(
     );
 }
 
+$cwebpBinary = trim((string) getenv('CWEBP_BINARY'));
 $convertBinary = trim((string) getenv('IMAGEMAGICK_BINARY'));
 $identifyBinary = trim((string) getenv('IMAGEMAGICK_IDENTIFY_BINARY'));
 $exiftoolBinary = trim((string) getenv('EXIFTOOL_BINARY'));
 
+requireFormatCondition($cwebpBinary !== '', 'CWEBP_BINARY must be configured.');
 requireFormatCondition($convertBinary !== '', 'IMAGEMAGICK_BINARY must be configured.');
 requireFormatCondition($identifyBinary !== '', 'IMAGEMAGICK_IDENTIFY_BINARY must be configured.');
 requireFormatCondition($exiftoolBinary !== '', 'EXIFTOOL_BINARY must be configured.');
@@ -170,6 +173,7 @@ $generator = new ImageMagickDerivativeGenerator(
     $storage,
     $process,
     new ImageMagickWatermarkRenderer($process, new ImageWatermarkConfiguration('')),
+    new CwebpEncoder($cwebpBinary, 60.0),
 );
 $profile = new ImageDerivativeProfile(
     'real-format-fixture',
@@ -217,6 +221,8 @@ try {
         requireFormatCondition($derivative->byteSize > 0, $name.' derivative is empty.');
         requireFormatCondition($derivative->metadata['orientation_normalized'] ?? false, $name.' derivative is not marked orientation-normalized.');
         requireFormatCondition(($derivative->metadata['watermarked'] ?? true) === false, $name.' derivative was unexpectedly marked watermarked.');
+        requireFormatCondition(($derivative->metadata['encoder'] ?? null) === 'cwebp', $name.' derivative did not record the cwebp backend.');
+        requireFormatCondition(($derivative->metadata['encoder_quality'] ?? null) === 82, $name.' derivative did not record the cwebp quality.');
         requireFormatCondition($storage->exists($derivative->storage), $name.' derivative was not persisted.');
 
         $after = $storage->stat($asset->original);

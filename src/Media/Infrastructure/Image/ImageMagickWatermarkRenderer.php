@@ -22,10 +22,9 @@ final readonly class ImageMagickWatermarkRenderer
      *   watermark_margin_percent: int
      * }
      */
-    public function render(
+    public function renderLossless(
         string $intermediatePath,
         string $outputPath,
-        int $quality,
     ): array {
         if (!is_file($intermediatePath)) {
             throw new \InvalidArgumentException('Watermark intermediate image does not exist.');
@@ -73,9 +72,7 @@ final readonly class ImageMagickWatermarkRenderer
                 'Over',
                 '-composite',
                 '-strip',
-                '-quality',
-                (string) $quality,
-                $outputPath,
+                'png:'.$outputPath,
             ]);
 
             return [

@@ -19,6 +19,7 @@ final readonly class ImageMagickDerivativeGenerator implements ImageDerivativeGe
         private MediaStorage $storage,
         private ImageMagickProcess $process,
         private ImageMagickWatermarkRenderer $watermarks,
+        private CwebpEncoder $webp,
     ) {
     }
 
@@ -27,19 +28,23 @@ final readonly class ImageMagickDerivativeGenerator implements ImageDerivativeGe
         $source = $this->storage->read($media->original);
         $input = tempnam(sys_get_temp_dir(), 'mediarama-image-in-');
         $output = tempnam(sys_get_temp_dir(), 'mediarama-image-out-');
+        $prepared = ($profile->format === 'webp' || $profile->watermark)
+            ? tempnam(sys_get_temp_dir(), 'mediarama-image-prepared-')
+            : null;
         $intermediate = $profile->watermark
             ? tempnam(sys_get_temp_dir(), 'mediarama-image-watermark-base-')
             : null;
 
-        if ($input === false || $output === false || ($profile->watermark && $intermediate === false)) {
-            if (is_string($input)) {
-                @unlink($input);
-            }
-            if (is_string($output)) {
-                @unlink($output);
-            }
-            if (is_string($intermediate)) {
-                @unlink($intermediate);
+        if (
+            $input === false
+            || $output === false
+            || (($profile->format === 'webp' || $profile->watermark) && $prepared === false)
+            || ($profile->watermark && $intermediate === false)
+        ) {
+            foreach ([$input, $output, $prepared, $intermediate] as $temporary) {
+                if (is_string($temporary)) {
+                    @unlink($temporary);
+                }
             }
             fclose($source);
 
@@ -70,8 +75,8 @@ final readonly class ImageMagickDerivativeGenerator implements ImageDerivativeGe
             ];
 
             if ($profile->watermark) {
-                if (!is_string($intermediate)) {
-                    throw new \LogicException('Watermark intermediate path was not allocated.');
+                if (!is_string($intermediate) || !is_string($prepared)) {
+                    throw new \LogicException('Watermark processing paths were not allocated.');
                 }
 
                 $this->process->convert([
@@ -80,17 +85,59 @@ final readonly class ImageMagickDerivativeGenerator implements ImageDerivativeGe
                     '-strip',
                     '-thumbnail',
                     sprintf('%dx%d>', $profile->maximumWidth, $profile->maximumHeight),
+                    '-colorspace',
+                    'sRGB',
                     'miff:'.$intermediate,
                 ]);
 
                 $metadata = [
                     'orientation_normalized' => true,
-                    ...$this->watermarks->render(
+                    ...$this->watermarks->renderLossless(
                         $intermediate,
-                        $outputWithExtension,
-                        $profile->quality,
+                        $prepared,
                     ),
                 ];
+            } elseif ($profile->format === 'webp') {
+                if (!is_string($prepared)) {
+                    throw new \LogicException('WebP preparation path was not allocated.');
+                }
+
+                $this->process->convert([
+                    $input.'[0]',
+                    '-auto-orient',
+                    '-strip',
+                    '-thumbnail',
+                    sprintf('%dx%d>', $profile->maximumWidth, $profile->maximumHeight),
+                    '-colorspace',
+                    'sRGB',
+                    'png:'.$prepared,
+                ]);
+            }
+
+            if ($profile->format === 'webp') {
+                if (!is_string($prepared)) {
+                    throw new \LogicException('WebP preparation path was not allocated.');
+                }
+
+                $this->webp->encode(
+                    $prepared,
+                    $outputWithExtension,
+                    $profile->quality,
+                );
+                $metadata['encoder'] = 'cwebp';
+                $metadata['encoder_quality'] = $profile->quality;
+            } elseif ($profile->watermark) {
+                if (!is_string($prepared)) {
+                    throw new \LogicException('Watermark preparation path was not allocated.');
+                }
+
+                $this->process->convert([
+                    $prepared.'[0]',
+                    '-strip',
+                    '-quality',
+                    (string) $profile->quality,
+                    $outputWithExtension,
+                ]);
             } else {
                 $this->process->convert([
                     $input.'[0]',
@@ -153,6 +200,9 @@ final readonly class ImageMagickDerivativeGenerator implements ImageDerivativeGe
             @unlink($input);
             @unlink($output);
             @unlink($outputWithExtension);
+            if (is_string($prepared)) {
+                @unlink($prepared);
+            }
             if (is_string($intermediate)) {
                 @unlink($intermediate);
             }
