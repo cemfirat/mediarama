@@ -35,7 +35,7 @@ WITH generations AS (
         media_id,
         kind,
         processing_version,
-        MIN(created_at) AS generated_at
+        MAX(GREATEST(created_at, updated_at)) AS generated_at
     FROM media_derivatives
     GROUP BY media_id, kind, processing_version
 ),
