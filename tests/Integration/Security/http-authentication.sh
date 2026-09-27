@@ -176,6 +176,7 @@ expect_status 401 "$(anonymous_endpoint_status POST "/api/uploads/$PROTECTED_ID/
 expect_status 401 "$(anonymous_endpoint_status DELETE "/api/uploads/$PROTECTED_ID")" "anonymous upload abandon is rejected"
 
 expect_status 401 "$(anonymous_endpoint_status GET "/api/auth/csrf")" "anonymous API CSRF token request is rejected"
+expect_status 401 "$(anonymous_endpoint_status GET "/api/library/media")" "anonymous library media search is rejected"
 
 FORGED_STATUS="$(upload_status "" "X-Mediarama-User: $ACTIVE_ID")"
 expect_status 401 "$FORGED_STATUS" "forged development actor header is ignored in prod"
@@ -253,6 +254,11 @@ expect_status 302 "$(login_status auth-ci-active "$PASSWORD" "$ACTIVE_JAR" "$ACT
 UPLOAD_CSRF="$(api_csrf_token "$ACTIVE_JAR" /tmp/auth-upload-csrf.json)"
 expect_status 403 "$(upload_status "$ACTIVE_JAR")" "authenticated upload without CSRF token is rejected"
 expect_status 201 "$(upload_status "$ACTIVE_JAR" "X-CSRF-Token: $UPLOAD_CSRF")" "authenticated active user can create upload session with CSRF token"
+
+LIBRARY_SEARCH_STATUS="$(curl --silent --show-error --cookie "$ACTIVE_JAR" --cookie-jar "$ACTIVE_JAR" --dump-header /tmp/auth-library-search.headers --output /tmp/auth-library-search.json --write-out '%{http_code}' "$BASE_URL/api/library/media?q=auth-ci")"
+expect_status 200 "$LIBRARY_SEARCH_STATUS" "authenticated active user can access library media search"
+grep -i -F "cache-control: no-store" /tmp/auth-library-search.headers
+grep -i -F "x-robots-tag: noindex, nofollow" /tmp/auth-library-search.headers
 
 UPLOAD_ID="$(php -r '
   $decoded = json_decode((string) file_get_contents("/tmp/auth-upload-body.json"), true, flags: JSON_THROW_ON_ERROR);
