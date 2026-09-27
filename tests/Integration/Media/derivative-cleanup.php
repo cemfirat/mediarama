@@ -12,6 +12,7 @@ use Mediarama\Media\Domain\MediaDerivative;
 use Mediarama\Media\Domain\StorageObjectId;
 use Mediarama\Media\Infrastructure\Persistence\DbalDerivativeCleanupRepository;
 use Mediarama\Media\Infrastructure\Persistence\DbalMediaDerivativeRepository;
+use Mediarama\Media\Infrastructure\Persistence\PostgresMediaDerivativeRegenerationLock;
 use Mediarama\Media\Infrastructure\Storage\LocalMediaStorage;
 use Symfony\Component\Uid\Uuid;
 
@@ -87,6 +88,7 @@ $cleanupRepository = new DbalDerivativeCleanupRepository($db);
 $cleanup = new CleanupSupersededDerivatives(
     $cleanupRepository,
     $storage,
+    new PostgresMediaDerivativeRegenerationLock($db),
     400,
     2,
 );
