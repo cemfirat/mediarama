@@ -6,6 +6,7 @@ require dirname(__DIR__, 3).'/vendor/autoload.php';
 
 use Mediarama\Export\Application\MetadataExportPolicy;
 use Mediarama\Export\Domain\MetadataExportProfile;
+use Mediarama\Export\Infrastructure\ExifToolMetadataArguments;
 use Mediarama\Export\Infrastructure\ExifToolMetadataWriter;
 use Mediarama\Media\Domain\MediaAsset;
 use Mediarama\Media\Domain\MediaType;
@@ -148,7 +149,7 @@ $formats = [
 $process = new ExifToolProcess($exiftoolBinary, 30.0);
 $parser = new ExifToolMetadataParser();
 $inspector = new LocalExifToolInspector($process, $parser, $root);
-$writer = new ExifToolMetadataWriter($process);
+$writer = new ExifToolMetadataWriter($process, new ExifToolMetadataArguments());
 
 try {
     foreach ($formats as $name => $format) {

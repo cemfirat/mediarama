@@ -121,6 +121,9 @@ jobs:
       - name: Verify real metadata format round trips
         run: php tests/Integration/Metadata/real-format-roundtrip.php
 
+      - name: Verify RAW XMP sidecar export
+        run: php tests/Integration/Metadata/raw-xmp-sidecar.php
+
       - name: Verify upload structural media validation
         run: php tests/Integration/Upload/structural-validation.php
 
