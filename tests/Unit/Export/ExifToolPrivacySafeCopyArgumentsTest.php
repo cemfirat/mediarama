@@ -14,11 +14,14 @@ final class ExifToolPrivacySafeCopyArgumentsTest extends TestCase
         $arguments = (new ExifToolPrivacySafeCopyArguments())->build();
 
         self::assertSame('-all=', $arguments[0]);
+        self::assertContains('-CommonIFD0=', $arguments);
         self::assertContains('--ICC_Profile:all', $arguments);
         self::assertContains('-TagsFromFile', $arguments);
         self::assertContains('@', $arguments);
         self::assertContains('-ColorSpaceTags', $arguments);
         self::assertContains('-Orientation', $arguments);
+        self::assertContains('-PNG:Gamma', $arguments);
+        self::assertContains('-PNG:SRGBRendering', $arguments);
         self::assertContains('-XResolution', $arguments);
         self::assertContains('-YResolution', $arguments);
         self::assertContains('-ResolutionUnit', $arguments);
