@@ -26,8 +26,18 @@ final readonly class DbalPlatformSettingsRepository implements PlatformSettingsR
             throw new \LogicException('Platform settings singleton is missing.');
         }
 
+        $publicPublishing = filter_var(
+            $row['public_publishing_enabled'],
+            FILTER_VALIDATE_BOOLEAN,
+            FILTER_NULL_ON_FAILURE,
+        );
+
+        if ($publicPublishing === null) {
+            throw new \UnexpectedValueException('Invalid persisted public-publishing setting.');
+        }
+
         return new PlatformSettings(
-            publicPublishingEnabled: (bool) $row['public_publishing_enabled'],
+            publicPublishingEnabled: $publicPublishing,
             searchIndexDefault: SearchIndexPolicy::from((string) $row['search_index_default']),
         );
     }
