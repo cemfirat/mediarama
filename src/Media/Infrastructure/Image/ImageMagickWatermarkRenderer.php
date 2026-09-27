@@ -31,69 +31,92 @@ final readonly class ImageMagickWatermarkRenderer
             throw new \InvalidArgumentException('Watermark intermediate image does not exist.');
         }
 
+        [$assetSnapshot, $assetHash] = $this->snapshotAsset();
+
+        try {
+            [$width, $height] = $this->dimensions($intermediatePath);
+
+            $watermarkMaximumWidth = max(
+                1,
+                (int) round($width * ($this->configuration->sizePercent() / 100)),
+            );
+            $watermarkMaximumHeight = max(
+                1,
+                (int) round($height * ($this->configuration->sizePercent() / 100)),
+            );
+            $margin = max(
+                0,
+                (int) round(min($width, $height) * ($this->configuration->marginPercent() / 100)),
+            );
+            $opacity = $this->configuration->opacityPercent() / 100;
+
+            $this->process->convert([
+                $intermediatePath,
+                '(',
+                $assetSnapshot,
+                '-alpha',
+                'set',
+                '-resize',
+                sprintf('%dx%d', $watermarkMaximumWidth, $watermarkMaximumHeight),
+                '-channel',
+                'A',
+                '-evaluate',
+                'multiply',
+                rtrim(rtrim(sprintf('%.4F', $opacity), '0'), '.'),
+                '+channel',
+                ')',
+                '-gravity',
+                $this->configuration->imageMagickGravity(),
+                '-geometry',
+                $this->configuration->geometryOffset($margin),
+                '-compose',
+                'Over',
+                '-composite',
+                '-strip',
+                '-quality',
+                (string) $quality,
+                $outputPath,
+            ]);
+
+            return [
+                'watermarked' => true,
+                'watermark_fingerprint' => $this->configuration->fingerprintFromAssetHash($assetHash),
+                'watermark_gravity' => $this->configuration->gravity(),
+                'watermark_size_percent' => $this->configuration->sizePercent(),
+                'watermark_opacity_percent' => $this->configuration->opacityPercent(),
+                'watermark_margin_percent' => $this->configuration->marginPercent(),
+            ];
+        } finally {
+            @unlink($assetSnapshot);
+        }
+    }
+
+    /** @return array{0: string, 1: string} */
+    private function snapshotAsset(): array
+    {
         $assetPath = $this->configuration->assetPath();
-        $assetHashBefore = hash_file('sha256', $assetPath);
-        if ($assetHashBefore === false) {
-            throw new \RuntimeException('Unable to fingerprint configured watermark asset before rendering.');
+        $bytes = file_get_contents($assetPath);
+        if ($bytes === false || $bytes === '') {
+            throw new \RuntimeException('Unable to read configured watermark asset.');
         }
 
-        [$width, $height] = $this->dimensions($intermediatePath);
-
-        $watermarkMaximumWidth = max(
-            1,
-            (int) round($width * ($this->configuration->sizePercent() / 100)),
-        );
-        $watermarkMaximumHeight = max(
-            1,
-            (int) round($height * ($this->configuration->sizePercent() / 100)),
-        );
-        $margin = max(
-            0,
-            (int) round(min($width, $height) * ($this->configuration->marginPercent() / 100)),
-        );
-        $opacity = $this->configuration->opacityPercent() / 100;
-
-        $this->process->convert([
-            $intermediatePath,
-            '(',
-            $assetPath,
-            '-alpha',
-            'set',
-            '-resize',
-            sprintf('%dx%d', $watermarkMaximumWidth, $watermarkMaximumHeight),
-            '-channel',
-            'A',
-            '-evaluate',
-            'multiply',
-            rtrim(rtrim(sprintf('%.4F', $opacity), '0'), '.'),
-            '+channel',
-            ')',
-            '-gravity',
-            $this->configuration->imageMagickGravity(),
-            '-geometry',
-            $this->configuration->geometryOffset($margin),
-            '-compose',
-            'Over',
-            '-composite',
-            '-strip',
-            '-quality',
-            (string) $quality,
-            $outputPath,
-        ]);
-
-        $assetHashAfter = hash_file('sha256', $assetPath);
-        if ($assetHashAfter === false || !hash_equals($assetHashBefore, $assetHashAfter)) {
-            throw new \RuntimeException('Configured watermark asset changed while the derivative was being rendered.');
+        $snapshot = tempnam(sys_get_temp_dir(), 'mediarama-watermark-asset-');
+        if ($snapshot === false) {
+            throw new \RuntimeException('Unable to allocate watermark asset snapshot.');
         }
 
-        return [
-            'watermarked' => true,
-            'watermark_fingerprint' => $this->configuration->fingerprintFromAssetHash($assetHashBefore),
-            'watermark_gravity' => $this->configuration->gravity(),
-            'watermark_size_percent' => $this->configuration->sizePercent(),
-            'watermark_opacity_percent' => $this->configuration->opacityPercent(),
-            'watermark_margin_percent' => $this->configuration->marginPercent(),
-        ];
+        try {
+            $written = file_put_contents($snapshot, $bytes, LOCK_EX);
+            if ($written === false || $written !== strlen($bytes)) {
+                throw new \RuntimeException('Unable to persist watermark asset snapshot.');
+            }
+        } catch (\Throwable $error) {
+            @unlink($snapshot);
+
+            throw $error;
+        }
+
+        return [$snapshot, hash('sha256', $bytes)];
     }
 
     /** @return array{0: int, 1: int} */
