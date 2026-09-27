@@ -74,6 +74,8 @@ The model deliberately stores no raw exception message or stack trace. Retryable
 
 Expected upload problems are mapped centrally to sanitized JSON responses rather than exposing exception messages. Chunk checksum/size and incomplete-assembly problems remain retryable and are persisted on the session. Requests for another user's upload deliberately use the same `upload_not_found` response as a missing session.
 
+Finalization distinguishes decoder/probe rejection from tool availability at the process boundary. A decoder-rejected asset is terminal: the session becomes `failed` and its quota reservation is released in the same PostgreSQL critical section. A missing/timeout/unavailable validation tool is retryable and keeps the reservation. A deterministic finalization source that has disappeared is terminal; storage-promotion interruption remains retryable.
+
 Downstream MediaAsset processing has its own `processing_state` and remains a separate failure domain.
 
 ## Resume

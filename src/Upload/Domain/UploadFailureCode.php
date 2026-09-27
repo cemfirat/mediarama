@@ -17,6 +17,7 @@ enum UploadFailureCode: string
     case MediaInvalid = 'upload_media_invalid';
     case MediaSizeMismatch = 'upload_media_size_mismatch';
     case FinalizationStorageUnavailable = 'upload_finalization_storage_unavailable';
+    case FinalizationSourceMissing = 'upload_finalization_source_missing';
     case IntegrityMismatch = 'upload_integrity_mismatch';
     case FinalizationInterrupted = 'upload_finalization_interrupted';
 
@@ -34,6 +35,7 @@ enum UploadFailureCode: string
             self::MediaInvalid,
             self::MediaSizeMismatch => UploadFailureStage::Validation,
             self::FinalizationStorageUnavailable,
+            self::FinalizationSourceMissing,
             self::IntegrityMismatch,
             self::FinalizationInterrupted => UploadFailureStage::Finalization,
         };
@@ -54,6 +56,7 @@ enum UploadFailureCode: string
             self::MediaTypeNotAllowed,
             self::MediaInvalid,
             self::MediaSizeMismatch,
+            self::FinalizationSourceMissing,
             self::IntegrityMismatch => false,
         };
     }
@@ -78,6 +81,7 @@ enum UploadFailureCode: string
             self::MediaTypeNotAllowed => 'This media type is not allowed for upload.',
             self::MediaInvalid => 'The uploaded media is not structurally valid.',
             self::MediaSizeMismatch => 'The uploaded media size does not match the upload session.',
+            self::FinalizationSourceMissing => 'The upload source is no longer available.',
             self::IntegrityMismatch => 'The finalized upload failed its integrity check.',
         };
     }

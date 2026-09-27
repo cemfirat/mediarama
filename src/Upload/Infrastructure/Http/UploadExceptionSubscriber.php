@@ -67,6 +67,7 @@ final readonly class UploadExceptionSubscriber
                 UploadFailureCode::InspectionUnavailable,
                 UploadFailureCode::FinalizationStorageUnavailable,
                 UploadFailureCode::FinalizationInterrupted => Response::HTTP_SERVICE_UNAVAILABLE,
+                UploadFailureCode::FinalizationSourceMissing => Response::HTTP_GONE,
                 UploadFailureCode::IntegrityMismatch => Response::HTTP_INTERNAL_SERVER_ERROR,
                 UploadFailureCode::ChunkSizeInvalid,
                 UploadFailureCode::ChunkSizeMismatch,

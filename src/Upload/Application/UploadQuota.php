@@ -28,4 +28,12 @@ interface UploadQuota
      * the temporary reservation rather than incrementing a second counter.
      */
     public function commit(Uuid $sessionId): void;
+
+    /**
+     * Release a reservation without creating committed usage.
+     *
+     * This is idempotent and is used for terminally failed or explicitly
+     * abandoned upload sessions.
+     */
+    public function release(Uuid $sessionId): void;
 }

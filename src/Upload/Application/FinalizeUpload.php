@@ -10,7 +10,11 @@ use Mediarama\Media\Application\ProcessMedia;
 use Mediarama\Media\Application\StoredObject;
 use Mediarama\Media\Application\ValidateStoredMediaStructure;
 use Mediarama\Media\Domain\MediaAsset;
+use Mediarama\Media\Domain\MediaToolRejected;
+use Mediarama\Media\Domain\MediaToolUnavailable;
 use Mediarama\Media\Domain\StorageObjectId;
+use Mediarama\Upload\Domain\UploadFailureCode;
+use Mediarama\Upload\Domain\UploadProblem;
 use Mediarama\Upload\Domain\UploadSession;
 use Mediarama\Upload\Domain\UploadStatus;
 use Symfony\Component\Messenger\MessageBusInterface;
@@ -81,12 +85,17 @@ final readonly class FinalizeUpload
 
         if ($session->status === UploadStatus::Uploaded) {
             if ($session->isExpired()) {
-                throw new \DomainException('Upload session has expired.');
+                throw UploadProblem::expired();
             }
 
             // Keep all expensive work outside the database row lock.
-            $this->authorizer->assertCanUpload($actingUserId, $session->targetCollectionId);
-            $content = $this->inspectAndValidate($temporary, $session);
+            try {
+                $this->authorizer->assertCanUpload($actingUserId, $session->targetCollectionId);
+                $content = $this->inspectAndValidate($temporary, $session);
+            } catch (UploadProblem $problem) {
+                $this->recordFailure($sessionId, $actingUserId, $problem);
+                throw $problem;
+            }
 
             $existing = $this->criticalSection->run(
                 $sessionId,
@@ -101,7 +110,7 @@ final readonly class FinalizeUpload
 
                     if ($locked->status === UploadStatus::Uploaded) {
                         if ($locked->isExpired()) {
-                            throw new \DomainException('Upload session has expired.');
+                            throw UploadProblem::expired();
                         }
 
                         // Re-check authorization immediately before claiming the
@@ -121,9 +130,7 @@ final readonly class FinalizeUpload
                         return null;
                     }
 
-                    throw new \DomainException(
-                        'Upload session cannot enter finalization from its current state.',
-                    );
+                    throw UploadProblem::invalidState();
                 },
             );
 
@@ -131,9 +138,7 @@ final readonly class FinalizeUpload
                 return $existing;
             }
         } elseif ($session->status !== UploadStatus::Finalizing) {
-            throw new \DomainException(
-                'Upload session cannot be finalized from its current state.',
-            );
+            throw UploadProblem::invalidState();
         }
 
         // A retry after successful promotion may no longer have the temporary
@@ -146,19 +151,36 @@ final readonly class FinalizeUpload
         }
 
         if (!$this->storage->exists($validationObject)) {
-            throw new \DomainException(
-                'Upload finalization cannot recover because neither temporary nor permanent media exists.',
-            );
+            $problem = UploadProblem::fromFailure(UploadFailureCode::FinalizationSourceMissing);
+            $this->recordFailure($sessionId, $actingUserId, $problem);
+            throw $problem;
         }
 
         if ($content === null) {
-            $content = $this->inspectAndValidate($validationObject, $session);
+            try {
+                $content = $this->inspectAndValidate($validationObject, $session);
+            } catch (UploadProblem $problem) {
+                $this->recordFailure($sessionId, $actingUserId, $problem);
+                throw $problem;
+            }
         }
 
         // LocalMediaStorage promotion is idempotent for the deterministic target.
         // A concurrent winner or a previous crashed request may already have moved it.
-        $stored = $this->storage->promote($temporary, $permanent);
-        $this->assertStoredObjectMatchesInspection($stored, $content);
+        try {
+            $stored = $this->storage->promote($temporary, $permanent);
+            $this->assertStoredObjectMatchesInspection($stored, $content);
+        } catch (UploadProblem $problem) {
+            $this->recordFailure($sessionId, $actingUserId, $problem);
+            throw $problem;
+        } catch (\Throwable $error) {
+            $problem = UploadProblem::fromFailure(
+                UploadFailureCode::FinalizationStorageUnavailable,
+                $error,
+            );
+            $this->recordFailure($sessionId, $actingUserId, $problem);
+            throw $problem;
+        }
 
         return $this->criticalSection->run(
             $sessionId,
@@ -183,9 +205,7 @@ final readonly class FinalizeUpload
                     // rolled back the claim while storage promotion succeeded.
                     $locked->beginFinalization();
                 } elseif ($locked->status !== UploadStatus::Finalizing) {
-                    throw new \DomainException(
-                        'Upload session cannot complete finalization from its current state.',
-                    );
+                    throw UploadProblem::invalidState();
                 }
 
                 $asset = MediaAsset::createWithId(
@@ -222,14 +242,31 @@ final readonly class FinalizeUpload
         StorageObjectId $object,
         UploadSession $session,
     ): InspectedContent {
-        $content = $this->inspector->inspect($object);
+        try {
+            $content = $this->inspector->inspect($object);
+        } catch (UploadProblem $problem) {
+            throw $problem;
+        } catch (\Throwable $error) {
+            throw UploadProblem::fromFailure(UploadFailureCode::InspectionUnavailable, $error);
+        }
+
         $this->contentPolicy->assertAllowed($content);
 
         if ($content->byteSize !== $session->expectedSize) {
-            throw new \DomainException('Received upload size does not match expected size.');
+            throw UploadProblem::fromFailure(UploadFailureCode::MediaSizeMismatch);
         }
 
-        ($this->structureValidator)($object, $content->mediaType);
+        try {
+            ($this->structureValidator)($object, $content->mediaType);
+        } catch (MediaToolRejected $error) {
+            throw UploadProblem::fromFailure(UploadFailureCode::MediaInvalid, $error);
+        } catch (MediaToolUnavailable $error) {
+            throw UploadProblem::fromFailure(UploadFailureCode::InspectionUnavailable, $error);
+        } catch (UploadProblem $problem) {
+            throw $problem;
+        } catch (\Throwable $error) {
+            throw UploadProblem::fromFailure(UploadFailureCode::InspectionUnavailable, $error);
+        }
 
         return $content;
     }
@@ -244,7 +281,49 @@ final readonly class FinalizeUpload
     private function assertOwner(UploadSession $session, Uuid $actingUserId): void
     {
         if (!$session->userId->equals($actingUserId)) {
-            throw new \DomainException('Upload session does not belong to the acting user.');
+            throw UploadProblem::sessionNotFound();
+        }
+    }
+
+    private function recordFailure(
+        Uuid $sessionId,
+        Uuid $actingUserId,
+        UploadProblem $problem,
+    ): void {
+        if ($problem->failureCode === null) {
+            return;
+        }
+
+        try {
+            $this->criticalSection->run(
+                $sessionId,
+                function () use ($sessionId, $actingUserId, $problem): void {
+                    $locked = $this->sessions->get($sessionId);
+                    $this->assertOwner($locked, $actingUserId);
+
+                    if ($this->existingAsset($sessionId) !== null) {
+                        return;
+                    }
+
+                    if (!in_array(
+                        $locked->status,
+                        [UploadStatus::Uploaded, UploadStatus::Finalizing],
+                        true,
+                    )) {
+                        return;
+                    }
+
+                    $locked->recordFailure($problem->failureCode);
+                    if ($problem->failureCode->isTerminal()) {
+                        $this->quota->release($sessionId);
+                    }
+                    $this->sessions->save($locked);
+                },
+            );
+        } catch (UploadProblem $recordingProblem) {
+            throw $recordingProblem;
+        } catch (\Throwable $error) {
+            throw UploadProblem::fromFailure(UploadFailureCode::FinalizationInterrupted, $error);
         }
     }
 
@@ -253,18 +332,14 @@ final readonly class FinalizeUpload
         InspectedContent $content,
     ): void {
         if ($stored->byteSize !== $content->byteSize) {
-            throw new \RuntimeException(
-                'Promoted original size differs from the validated upload.',
-            );
+            throw UploadProblem::fromFailure(UploadFailureCode::IntegrityMismatch);
         }
 
         if (
             $stored->checksum === null
             || !hash_equals($content->sha256, $stored->checksum)
         ) {
-            throw new \RuntimeException(
-                'Promoted original checksum differs from the validated upload.',
-            );
+            throw UploadProblem::fromFailure(UploadFailureCode::IntegrityMismatch);
         }
     }
 }
