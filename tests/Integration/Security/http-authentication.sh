@@ -251,14 +251,49 @@ ACTIVE_JAR=/tmp/auth-active.cookies
 rm -f "$ACTIVE_JAR"
 ACTIVE_TOKEN="$(csrf_token "$ACTIVE_JAR" /tmp/auth-active-login.html)"
 expect_status 302 "$(login_status auth-ci-active "$PASSWORD" "$ACTIVE_JAR" "$ACTIVE_TOKEN")" "active user login redirects after success"
+
+LIBRARY_STATUS="$(curl --silent --show-error \
+    --cookie "$ACTIVE_JAR" \
+    --cookie-jar "$ACTIVE_JAR" \
+    --dump-header /tmp/auth-library-search.headers \
+    --output /tmp/auth-library-search.json \
+    --write-out '%{http_code}' \
+    "$BASE_URL/api/library/media?q=auth-ci")"
+expect_status 200 "$LIBRARY_STATUS" "authenticated active user can query library media search"
+grep -i -F "x-robots-tag: noindex, nofollow" /tmp/auth-library-search.headers
+grep -i -E '^cache-control:.*private' /tmp/auth-library-search.headers
+grep -i -E '^cache-control:.*no-store' /tmp/auth-library-search.headers
+php -r '
+  $decoded = json_decode((string) file_get_contents("/tmp/auth-library-search.json"), true, flags: JSON_THROW_ON_ERROR);
+  if (!isset($decoded["items"]) || !is_array($decoded["items"])) {
+      fwrite(STDERR, "Authenticated library search response has no items array.".PHP_EOL);
+      exit(1);
+  }
+  foreach ($decoded["items"] as $item) {
+      foreach (["latitude", "longitude", "metadata", "storage_key"] as $forbidden) {
+          if (array_key_exists($forbidden, $item)) {
+              fwrite(STDERR, "Library search leaked forbidden field: ".$forbidden.PHP_EOL);
+              exit(1);
+          }
+      }
+  }
+  echo "OK authenticated library search uses the private metadata DTO boundary".PHP_EOL;
+'
+
+INVALID_LIBRARY_STATUS="$(curl --silent --show-error     --cookie "$ACTIVE_JAR"     --cookie-jar "$ACTIVE_JAR"     --output /tmp/auth-library-invalid.json     --write-out '%{http_code}'     "$BASE_URL/api/library/media?iso_min=not-a-number")"
+expect_status 400 "$INVALID_LIBRARY_STATUS" "invalid library search filter returns stable client error"
+php -r '
+  $decoded = json_decode((string) file_get_contents("/tmp/auth-library-invalid.json"), true, flags: JSON_THROW_ON_ERROR);
+  if ($decoded !== ["error" => "invalid_search_query"]) {
+      fwrite(STDERR, "Unexpected invalid library-search payload: ".json_encode($decoded).PHP_EOL);
+      exit(1);
+  }
+  echo "OK invalid library search payload is stable".PHP_EOL;
+'
+
 UPLOAD_CSRF="$(api_csrf_token "$ACTIVE_JAR" /tmp/auth-upload-csrf.json)"
 expect_status 403 "$(upload_status "$ACTIVE_JAR")" "authenticated upload without CSRF token is rejected"
 expect_status 201 "$(upload_status "$ACTIVE_JAR" "X-CSRF-Token: $UPLOAD_CSRF")" "authenticated active user can create upload session with CSRF token"
-
-LIBRARY_SEARCH_STATUS="$(curl --silent --show-error --cookie "$ACTIVE_JAR" --cookie-jar "$ACTIVE_JAR" --dump-header /tmp/auth-library-search.headers --output /tmp/auth-library-search.json --write-out '%{http_code}' "$BASE_URL/api/library/media?q=auth-ci")"
-expect_status 200 "$LIBRARY_SEARCH_STATUS" "authenticated active user can access library media search"
-grep -i -E '^cache-control:.*no-store' /tmp/auth-library-search.headers
-grep -i -F "x-robots-tag: noindex, nofollow" /tmp/auth-library-search.headers
 
 UPLOAD_ID="$(php -r '
   $decoded = json_decode((string) file_get_contents("/tmp/auth-upload-body.json"), true, flags: JSON_THROW_ON_ERROR);

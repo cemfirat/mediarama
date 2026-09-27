@@ -1,58 +1,105 @@
 # Media Search
 
-Status: authenticated/public split implemented
+Status: actor-aware PostgreSQL implementation
 
-Mediarama does not read embedded metadata from media files during normal search. Search uses PostgreSQL fields populated during ingestion and metadata extraction.
+Mediarama does not read embedded metadata from media files during normal search.
 
-## Public search
+Search uses PostgreSQL fields populated during ingestion and metadata extraction. Public discovery and authenticated library search are deliberately separate query/DTO boundaries.
 
-`GET /api/media` is the deliberately small anonymous discovery boundary.
+## Public discovery API
 
-It returns only media that are:
+`GET /api/media`
+
+This endpoint remains anonymously reachable and intentionally minimal.
+
+It uses `PublicMediaSearch` and only returns media that are:
 
 - not deleted;
-- fully processed (`ready`);
-- published;
+- processing state `ready`;
+- moderation state `published`;
 - reachable through `effective_public_collections`.
 
-The public DTO omits original filenames, camera details and exact GPS coordinates. The endpoint supports text, limit and offset only and remains `noindex`.
+The public DTO exposes deliberate presentation fields only. It does not expose original filenames, camera metadata, exact GPS coordinates, storage keys or raw embedded metadata.
 
-## Authenticated library search
+Supported query parameters are currently:
 
-`GET /api/library/media` requires a real authenticated actor in production.
+- `q`;
+- `limit`;
+- `offset`.
 
-The query applies authorization in SQL before any result DTO is produced. A media asset is eligible when:
+The response carries `X-Robots-Tag: noindex, nofollow`; deliberate indexable gallery/SEO pages are a separate concern.
 
-- the actor owns the MediaAsset; or
-- the asset belongs to at least one Collection in the actor-visible recursive Collection set.
+## Authenticated library API
 
-The Collection set reuses `CollectionAccessSql::authenticatedVisibleCollectionsCte()`, so full ancestor visibility, private owner-only behavior, authenticated Collections, restricted user/group grants and fail-closed migrated password state stay consistent with the shared Collection access policy.
+`GET /api/library/media`
 
-For a non-owner reaching media through a `public` Collection, the MediaAsset must also be `published`. Owners may still find their own pending/draft media. An inaccessible membership never hides the same MediaAsset when another membership is accessible.
+Production requires `ROLE_USER`.
 
-Structured filters are applied only after the actor visibility predicate, so metadata filters cannot be used to enumerate inaccessible media.
+The query is actor-aware before any result DTO is produced. A ready MediaAsset is eligible when either:
 
-Supported library filters:
+1. the actor owns the MediaAsset; or
+2. the MediaAsset belongs to at least one Collection in the shared `actor_visible_collections` set.
+
+For a membership that is itself effectively public, a non-owner only receives the media after `moderation_state = published`. For non-public shared Collections, ordinary viewers may work with draft/pending items but do not receive foreign `rejected` media. Media owners and Collection owners may still inspect their own/managed rejected items. Non-public authenticated/restricted Collection access remains a library capability rather than public publication.
+
+That visible Collection set is provided by the Collection access boundary and enforces full hierarchy, owner, public/authenticated/private/restricted visibility, password-migration and user/group ACL rules.
+
+A membership in an inaccessible Collection does not hide a MediaAsset that is independently reachable through another visible Collection.
+
+The library response may expose normalized internal library metadata such as filename/camera/lens/location name, but it still does not expose exact latitude/longitude, raw EXIF/IPTC/XMP or storage paths.
+
+The response is private/no-store and noindex.
+
+## Full text
+
+The `LibraryMediaSearch` query uses the stored PostgreSQL `search_document` generated from:
+
+- title;
+- description;
+- creator;
+- copyright;
+- camera make/model;
+- lens;
+- location name;
+- original filename.
+
+A GIN index backs full-text queries. The `simple` text-search configuration is intentionally language-neutral because one installation may contain multilingual collections.
+
+## Structured library filters
+
+The authenticated library query supports:
 
 - `q`;
 - `creator`;
 - `camera_make`;
 - `camera_model`;
 - `lens`;
-- `iso_min` / `iso_max`;
-- `captured_from` / `captured_until`;
+- `iso_min`;
+- `iso_max`;
+- `captured_from`;
+- `captured_until`;
 - `has_location`;
-- `limit` / `offset`.
+- `limit`;
+- `offset`.
 
-The authenticated result may include the original filename and normalized photographic metadata such as camera/lens/ISO and `location_name`. Exact latitude/longitude are not returned.
+Authorization remains part of the SQL query regardless of which metadata filter is used.
 
-## Full text
+## Indexes
 
-The rich library query uses the stored PostgreSQL `search_document` plus an original-filename fallback. The `simple` text-search configuration remains language-neutral for multilingual libraries.
+Relevant PostgreSQL indexes include:
+
+- GIN `search_document`;
+- creator;
+- camera make/model;
+- captured time;
+- MediaAsset owner;
+- active Collection parent relationships;
+- reverse `collection_media(media_id, collection_id)` membership lookup.
 
 ## Next steps
 
 - collection/tag filters;
 - rating/label filters;
-- cursor pagination for large libraries;
-- faceting for camera/lens/date/location.
+- cursor pagination for very large libraries;
+- faceting for camera/lens/date/location;
+- UI integration for authenticated library search.
