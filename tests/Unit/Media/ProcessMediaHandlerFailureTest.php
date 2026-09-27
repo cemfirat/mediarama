@@ -177,6 +177,11 @@ final class ProcessMediaHandlerFailureTest extends TestCase
             {
             }
 
+            public function isReferenced(StorageObjectId $storage): bool
+            {
+                return false;
+            }
+
             public function enqueueOrphan(MediaDerivative $derivative): void
             {
             }
