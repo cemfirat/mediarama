@@ -23,13 +23,13 @@ final readonly class ImageWatermarkConfiguration
 
     public function __construct(
         private string $assetPath,
-        private int $widthPercent = 18,
+        private int $sizePercent = 18,
         private int $opacityPercent = 35,
         private int $marginPercent = 2,
         private string $gravity = 'southeast',
     ) {
-        if ($widthPercent < 1 || $widthPercent > 50) {
-            throw new \InvalidArgumentException('Watermark width percent must be between 1 and 50.');
+        if ($sizePercent < 1 || $sizePercent > 50) {
+            throw new \InvalidArgumentException('Watermark size percent must be between 1 and 50.');
         }
 
         if ($opacityPercent < 1 || $opacityPercent > 100) {
@@ -75,9 +75,9 @@ final readonly class ImageWatermarkConfiguration
         return $path;
     }
 
-    public function widthPercent(): int
+    public function sizePercent(): int
     {
-        return $this->widthPercent;
+        return $this->sizePercent;
     }
 
     public function opacityPercent(): int
@@ -122,7 +122,7 @@ final readonly class ImageWatermarkConfiguration
 
         return hash('sha256', implode('|', [
             $assetHash,
-            (string) $this->widthPercent,
+            (string) $this->sizePercent,
             (string) $this->opacityPercent,
             (string) $this->marginPercent,
             $this->gravity(),
