@@ -125,7 +125,8 @@ try {
         $privacyPath,
     ]));
 
-    requireSidecar($privacy->title === 'RAW Sidecar Current', 'privacy-safe sidecar retains descriptive metadata');
+    requireSidecar($privacy->title === 'RAW Sidecar Current', 'privacy-safe sidecar retains non-location descriptive metadata');
+    requireSidecar($privacy->locationName === null, 'privacy-safe sidecar omits descriptive location');
     requireSidecar($privacy->latitude === null && $privacy->longitude === null, 'privacy-safe sidecar omits GPS');
 
     $customPath = $root.'/custom.xmp';
@@ -154,6 +155,36 @@ try {
     requireSidecar($custom->copyright === null, 'custom sidecar omits unselected copyright');
     requireSidecar($custom->locationName === null, 'custom sidecar omits unselected location');
     requireSidecar($custom->latitude === null && $custom->longitude === null, 'custom sidecar omits unselected GPS');
+
+    $customLocationPath = $root.'/custom-location.xmp';
+    saveSidecar(
+        $export(
+            $media,
+            new MetadataExportPolicy(
+                MetadataExportProfile::Custom,
+                ['location_name'],
+            ),
+        ),
+        $customLocationPath,
+    );
+    $customLocation = $parser->parse($process->run([
+        '-json',
+        '-struct',
+        '-G1',
+        '-a',
+        '-n',
+        '--',
+        $customLocationPath,
+    ]));
+
+    requireSidecar(
+        $customLocation->locationName === 'Vienna RAW',
+        'custom sidecar can explicitly include descriptive location',
+    );
+    requireSidecar(
+        $customLocation->latitude === null && $customLocation->longitude === null,
+        'custom descriptive-location opt-in does not infer or include GPS',
+    );
 
     try {
         $export($media, new MetadataExportPolicy(MetadataExportProfile::Original));

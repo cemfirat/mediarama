@@ -128,16 +128,31 @@ Exports are generated artifacts.
 Initial policies:
 
 - `original` — untouched original bytes;
-- `current` — write current canonical metadata into a generated copy;
-- `privacy_safe` — current metadata with sensitive fields omitted;
-- `custom` — field/group selection.
+- `current` — write current canonical metadata into a generated copy, including location when present;
+- `privacy_safe` — current non-location descriptive metadata with exact GPS, descriptive `location_name` and other explicitly sensitive fields omitted;
+- `custom` — explicit field/group selection; `location_name` is included only when selected.
 
 Sensitive groups include at least:
 
-- GPS/location;
+- exact GPS coordinates;
+- human-readable descriptive location;
 - camera/device serials;
 - owner/contact details;
 - internal/private Mediarama fields.
+
+### Privacy-safe location boundary
+
+`privacy_safe` treats descriptive location as sensitive even when exact GPS is absent.
+
+The reason is structural, not heuristic: `location_name` is free-form canonical text and has no reliable precision level. It can represent a broad city/region or a precise home, school, venue, building or sublocation. Mediarama therefore removes it rather than trying to decide from the text whether it is "coarse enough".
+
+The same rule applies to generated metadata copies and RAW XMP sidecars.
+
+Mediarama does **not** reverse-geocode, round or otherwise derive a coarse location from GPS for Privacy-safe exports. If coarse-location export is added later, it requires an explicit structured product model rather than inference from sensitive coordinates.
+
+`current` retains canonical location. `custom` may retain `location_name` only through explicit field selection; that opt-in does not implicitly include latitude/longitude.
+
+ADR-0013 records this decision.
 
 ## Format strategy
 
