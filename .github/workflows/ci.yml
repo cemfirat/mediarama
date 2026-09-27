@@ -92,7 +92,7 @@ jobs:
       - name: Install runtime tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y exiftool ffmpeg imagemagick mariadb-client
+          sudo apt-get install -y exiftool ffmpeg imagemagick mariadb-client libheif-examples libheif-plugin-aomenc libheif-plugin-x265
 
       - name: Validate Composer metadata
         run: composer validate --strict
@@ -117,6 +117,9 @@ jobs:
 
       - name: Verify ImageMagick application resource envelope
         run: php tests/Integration/ImageMagick/resource-limits.php
+
+      - name: Verify real metadata format round trips
+        run: php tests/Integration/Metadata/real-format-roundtrip.php
 
       - name: Verify upload structural media validation
         run: php tests/Integration/Upload/structural-validation.php

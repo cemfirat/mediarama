@@ -40,3 +40,16 @@ For canonical descriptive metadata, prefer modern interoperable namespaces:
 3. legacy IPTC IIM only where format/tool compatibility justifies it.
 
 Mediarama's database remains the canonical editable layer regardless of how a particular export file can encode those fields.
+
+## Real-file verification
+
+CI exercises the actual ExifTool inspection and export adapters against generated real files for JPEG, TIFF, PNG, WebP, AVIF and HEIC.
+
+For every format the test verifies:
+
+- XMP descriptive and GPS metadata can be extracted through ExifTool's family-1 group names;
+- the Current export profile writes Mediarama canonical metadata into a copy and round-trips through the normal inspector;
+- the immutable source checksum is unchanged;
+- the Privacy-safe profile removes GPS while retaining descriptive metadata.
+
+This is a runtime integration gate rather than a parser-only fixture. If the declared CI/runtime toolchain loses one of these format capabilities, the repository gate fails instead of silently downgrading support.
