@@ -27,7 +27,7 @@ php bin/benchmark-derivative-formats   --input-dir="$INPUT"   --output="$REPORT"
   --corpus-revision="synthetic-v2" \
   --retain-dir="$RETAIN"
 
-REPORT="$REPORT" INPUT="$INPUT" php <<'PHP'
+REPORT="$REPORT" INPUT="$INPUT" RETAIN="$RETAIN" php <<'PHP'
 <?php
 
 declare(strict_types=1);
@@ -142,14 +142,35 @@ if ($avifSupported) {
     );
 }
 
+$retainedFiles = glob((string) getenv('RETAIN').'/*');
+requireBenchmarkSmoke(is_array($retainedFiles), 'retained benchmark output can be listed');
+requireBenchmarkSmoke(
+    count($retainedFiles) === 1 + count($ok),
+    'retained output contains one reference plus every successful codec candidate',
+);
+
+$sourceId = (string) ($report['sources'][0]['source_id'] ?? '');
+requireBenchmarkSmoke(
+    is_file((string) getenv('RETAIN').'/'.$sourceId.'-smoke-reference.png'),
+    'retained output contains the lossless review reference',
+);
+
+foreach ($ok as $sample) {
+    $extension = ($sample['format'] ?? null) === 'jpeg' ? 'jpg' : (string) ($sample['format'] ?? '');
+    $candidate = sprintf(
+        '%s/%s-%s-%s-q%d.%s',
+        (string) getenv('RETAIN'),
+        $sourceId,
+        (string) ($sample['profile'] ?? ''),
+        (string) ($sample['format'] ?? ''),
+        (int) ($sample['quality'] ?? 0),
+        $extension,
+    );
+    requireBenchmarkSmoke(is_file($candidate), 'successful sample has retained review candidate');
+}
+
 echo "Derivative-format benchmark smoke checks passed.".PHP_EOL;
 PHP
-
-if [ "$(find "$RETAIN" -maxdepth 1 -type f | wc -l)" -ne 7 ]; then
-  echo "Expected one reference plus six retained codec candidates." >&2
-  exit 1
-fi
-
 
 php bin/summarize-derivative-format-benchmark \
   --report="smoke:$REPORT" \
