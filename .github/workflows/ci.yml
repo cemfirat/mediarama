@@ -111,7 +111,19 @@ jobs:
       - name: Commit verified rate-limiter Composer lock
         if: github.event.pull_request.head.repo.full_name == github.repository
         run: |
-          printf '%s  %s\n'             'f95ad2bde7bf20b2c173c74965dc845a79d72831014150c0031e2fbc03b0109d' composer.lock             | sha256sum --check --strict
+          printf '%s  %s\n' \
+            'f95ad2bde7bf20b2c173c74965dc845a79d72831014150c0031e2fbc03b0109d' composer.lock \
+            | sha256sum --check --strict
+
+          cp composer.lock /tmp/mediarama-rate-limiter-composer.lock
+
+          git fetch origin security/login-throttling
+          git checkout -B security/login-throttling origin/security/login-throttling
+          cp /tmp/mediarama-rate-limiter-composer.lock composer.lock
+
+          printf '%s  %s\n' \
+            'f95ad2bde7bf20b2c173c74965dc845a79d72831014150c0031e2fbc03b0109d' composer.lock \
+            | sha256sum --check --strict
 
           if git diff --quiet -- composer.lock; then
             echo "Verified rate-limiter composer.lock is already committed."
