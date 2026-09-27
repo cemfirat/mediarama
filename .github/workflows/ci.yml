@@ -351,18 +351,18 @@ jobs:
               }
           }
 
-          $uploadPermissions = new Mediarama\Collection\Infrastructure\Persistence\DbalCollectionUploadPermissionRepository($db);
+          $collectionAccess = new Mediarama\Collection\Infrastructure\Persistence\DbalCollectionAccessPolicy($db);
           $viewerId = Symfony\Component\Uid\Uuid::fromString((string) $db->fetchOne("SELECT id FROM users WHERE username = 'viewer-user'"));
           $fixtureAlbumId = Symfony\Component\Uid\Uuid::fromString((string) $db->fetchOne("SELECT id FROM collections WHERE title = 'Fixture Album'"));
           $linkedAlbumId = Symfony\Component\Uid\Uuid::fromString((string) $db->fetchOne("SELECT id FROM collections WHERE title = 'Linked Album'"));
 
-          if (!$uploadPermissions->userCanUpload($viewerId, $fixtureAlbumId)) {
+          if (!$collectionAccess->canAddMedia($viewerId, $fixtureAlbumId)) {
               fwrite(STDERR, "FAIL runtime album upload permission should allow Registered viewer on Fixture Album".PHP_EOL);
               exit(1);
           }
           echo "OK runtime album upload permission allows source-enabled album".PHP_EOL;
 
-          if ($uploadPermissions->userCanUpload($viewerId, $linkedAlbumId)) {
+          if ($collectionAccess->canAddMedia($viewerId, $linkedAlbumId)) {
               fwrite(STDERR, "FAIL runtime album upload permission should deny Registered viewer on Linked Album".PHP_EOL);
               exit(1);
           }
