@@ -145,6 +145,14 @@ services:
             $identifyBinary: '%env(IMAGEMAGICK_IDENTIFY_BINARY)%'
             $timeoutSeconds: '%env(float:IMAGEMAGICK_PROCESS_TIMEOUT_SECONDS)%'
 
+    Mediarama\Media\Infrastructure\Image\ImageWatermarkConfiguration:
+        arguments:
+            $assetPath: '%env(IMAGE_WATERMARK_ASSET_PATH)%'
+            $widthPercent: '%env(int:IMAGE_WATERMARK_WIDTH_PERCENT)%'
+            $opacityPercent: '%env(int:IMAGE_WATERMARK_OPACITY_PERCENT)%'
+            $marginPercent: '%env(int:IMAGE_WATERMARK_MARGIN_PERCENT)%'
+            $gravity: '%env(IMAGE_WATERMARK_GRAVITY)%'
+
     Mediarama\Media\Application\InspectImageFileGeometry:
         alias: Mediarama\Media\Infrastructure\Image\ImageMagickFileGeometryInspector
 
