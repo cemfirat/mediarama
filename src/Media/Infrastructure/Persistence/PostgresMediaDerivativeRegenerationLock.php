@@ -17,12 +17,12 @@ final readonly class PostgresMediaDerivativeRegenerationLock implements MediaDer
     public function synchronized(Uuid $mediaId, string $kind, callable $operation): mixed
     {
         $key = $mediaId->toRfc4122().':'.$kind;
-        $locked = (bool) $this->connection->fetchOne(
-            'SELECT pg_try_advisory_lock(hashtextextended(:key, 0))',
+        $locked = (int) $this->connection->fetchOne(
+            'SELECT CASE WHEN pg_try_advisory_lock(hashtextextended(:key, 0)) THEN 1 ELSE 0 END',
             ['key' => $key],
         );
 
-        if (!$locked) {
+        if ($locked !== 1) {
             throw new \DomainException(sprintf(
                 'Derivative regeneration is already running for media "%s" and kind "%s".',
                 $mediaId->toRfc4122(),
@@ -40,10 +40,14 @@ final readonly class PostgresMediaDerivativeRegenerationLock implements MediaDer
             throw $error;
         } finally {
             try {
-                $this->connection->fetchOne(
-                    'SELECT pg_advisory_unlock(hashtextextended(:key, 0))',
+                $unlocked = (int) $this->connection->fetchOne(
+                    'SELECT CASE WHEN pg_advisory_unlock(hashtextextended(:key, 0)) THEN 1 ELSE 0 END',
                     ['key' => $key],
                 );
+
+                if ($unlocked !== 1 && $operationError === null) {
+                    throw new \RuntimeException('Unable to release derivative regeneration advisory lock.');
+                }
             } catch (\Throwable $unlockError) {
                 if ($operationError === null) {
                     throw $unlockError;
