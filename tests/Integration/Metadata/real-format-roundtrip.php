@@ -89,6 +89,45 @@ function assertNear(?float $actual, float $expected, string $message): void
     requireCondition($actual !== null && abs($actual - $expected) < 0.0001, $message);
 }
 
+
+function createImageFixture(
+    string $name,
+    string $path,
+    string $root,
+    string $convertBinary,
+): void {
+    if (!in_array($name, ['avif', 'heic'], true)) {
+        runCommand([
+            $convertBinary,
+            '-size',
+            '64x48',
+            'xc:white',
+            $path,
+        ], 30.0);
+
+        return;
+    }
+
+    $png = $root.'/heif-source-'.$name.'.png';
+    runCommand([
+        $convertBinary,
+        '-size',
+        '64x48',
+        'xc:white',
+        $png,
+    ], 30.0);
+
+    $command = ['heif-enc', $png];
+    if ($name === 'avif') {
+        $command[] = '-A';
+    }
+    $command[] = '-o';
+    $command[] = $path;
+
+    runCommand($command, 30.0);
+    @unlink($png);
+}
+
 $convertBinary = getenv('IMAGEMAGICK_BINARY') ?: 'convert';
 $exiftoolBinary = getenv('EXIFTOOL_BINARY') ?: 'exiftool';
 $root = sys_get_temp_dir().'/mediarama-real-metadata-formats-'.getmypid();
@@ -118,15 +157,9 @@ try {
         $sourceName = 'source-'.$name.'.'.$extension;
         $sourcePath = $root.'/'.$sourceName;
 
-        runCommand([
-            $convertBinary,
-            '-size',
-            '64x48',
-            'xc:white',
-            $sourcePath,
-        ], 30.0);
+        createImageFixture($name, $sourcePath, $root, $convertBinary);
 
-        requireCondition(is_file($sourcePath) && filesize($sourcePath) > 0, 'ImageMagick did not create '.$name.' fixture.');
+        requireCondition(is_file($sourcePath) && filesize($sourcePath) > 0, 'Runtime fixture encoder did not create '.$name.' fixture.');
 
         runCommand([
             $exiftoolBinary,
