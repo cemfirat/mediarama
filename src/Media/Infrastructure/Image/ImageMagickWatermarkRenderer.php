@@ -32,6 +32,11 @@ final readonly class ImageMagickWatermarkRenderer
         }
 
         $assetPath = $this->configuration->assetPath();
+        $assetHashBefore = hash_file('sha256', $assetPath);
+        if ($assetHashBefore === false) {
+            throw new \RuntimeException('Unable to fingerprint configured watermark asset before rendering.');
+        }
+
         [$width, $height] = $this->dimensions($intermediatePath);
 
         $watermarkWidth = max(
@@ -72,9 +77,14 @@ final readonly class ImageMagickWatermarkRenderer
             $outputPath,
         ]);
 
+        $assetHashAfter = hash_file('sha256', $assetPath);
+        if ($assetHashAfter === false || !hash_equals($assetHashBefore, $assetHashAfter)) {
+            throw new \RuntimeException('Configured watermark asset changed while the derivative was being rendered.');
+        }
+
         return [
             'watermarked' => true,
-            'watermark_fingerprint' => $this->configuration->fingerprint(),
+            'watermark_fingerprint' => $this->configuration->fingerprintFromAssetHash($assetHashBefore),
             'watermark_gravity' => $this->configuration->gravity(),
             'watermark_width_percent' => $this->configuration->widthPercent(),
             'watermark_opacity_percent' => $this->configuration->opacityPercent(),
