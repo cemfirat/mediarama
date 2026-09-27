@@ -100,6 +100,20 @@ final readonly class ImageWatermarkConfiguration
         return strtolower($this->gravity);
     }
 
+    public function geometryOffset(int $margin): string
+    {
+        if ($margin < 0) {
+            throw new \InvalidArgumentException('Watermark pixel margin cannot be negative.');
+        }
+
+        return match ($this->gravity()) {
+            'north', 'south' => sprintf('+0+%d', $margin),
+            'west', 'east' => sprintf('+%d+0', $margin),
+            'center' => '+0+0',
+            default => sprintf('+%d+%d', $margin, $margin),
+        };
+    }
+
     public function fingerprintFromAssetHash(string $assetHash): string
     {
         if (!preg_match('/^[a-f0-9]{64}$/', $assetHash)) {
