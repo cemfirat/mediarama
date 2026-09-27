@@ -86,10 +86,13 @@ function auditCreateFixture(
         $png,
     ], 'create '.$name.' PNG source');
 
-    $command = ['heif-enc', $png];
+    $command = ['heif-enc'];
     if ($name === 'avif') {
         $command[] = '-A';
     }
+    $command[] = '--rotate-cw';
+    $command[] = '90';
+    $command[] = $png;
     $command[] = '-q';
     $command[] = '90';
     $command[] = '-o';
@@ -264,10 +267,6 @@ try {
                 $seed[] = '-PNG:Comment=PRIVATE-PNG-TEXT-87';
                 $seed[] = '-PNG:Gamma=2.2';
                 $seed[] = '-PNG:SRGBRendering#=0';
-            }
-
-            if (in_array($name, ['avif', 'heic'], true)) {
-                $seed[] = '-QuickTime:Rotation#=1';
             }
 
             $seed[] = '--';
