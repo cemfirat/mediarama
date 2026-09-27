@@ -285,6 +285,52 @@ if ($count !== 1) {
 }
 PHP
 
+ACTIVE_ID="$ACTIVE_ID" php <<'PHP'
+<?php
+require 'vendor/autoload.php';
+
+$dsn = new Doctrine\DBAL\Tools\DsnParser([
+    'postgresql' => 'pdo_pgsql',
+    'postgres' => 'pdo_pgsql',
+]);
+$db = Doctrine\DBAL\DriverManager::getConnection($dsn->parse((string) getenv('DATABASE_URL')));
+$db->insert('user_storage_quotas', [
+    'user_id' => getenv('ACTIVE_ID'),
+    'limit_bytes' => 4,
+    'updated_at' => (new DateTimeImmutable())->format(DATE_ATOM),
+]);
+PHP
+
+expect_status 422 "$(upload_status "$ACTIVE_JAR" "X-CSRF-Token: $UPLOAD_CSRF")" "quota exhaustion returns a client error"
+
+php -r '
+  $decoded = json_decode((string) file_get_contents("/tmp/auth-upload-body.json"), true, flags: JSON_THROW_ON_ERROR);
+  $expected = [
+      "error" => "upload_quota_exceeded",
+      "limit_bytes" => 4,
+      "committed_bytes" => 0,
+      "reserved_bytes" => 4,
+      "requested_bytes" => 4,
+  ];
+  if ($decoded !== $expected) {
+      fwrite(STDERR, "Unexpected quota error payload: ".json_encode($decoded).PHP_EOL);
+      exit(1);
+  }
+  echo "OK quota exhaustion response is stable and actionable".PHP_EOL;
+'
+
+ACTIVE_ID="$ACTIVE_ID" php <<'PHP'
+<?php
+require 'vendor/autoload.php';
+
+$dsn = new Doctrine\DBAL\Tools\DsnParser([
+    'postgresql' => 'pdo_pgsql',
+    'postgres' => 'pdo_pgsql',
+]);
+$db = Doctrine\DBAL\DriverManager::getConnection($dsn->parse((string) getenv('DATABASE_URL')));
+$db->delete('user_storage_quotas', ['user_id' => getenv('ACTIVE_ID')]);
+PHP
+
 HOME_PAGE=/tmp/auth-home.html
 curl --fail --silent --show-error --cookie "$ACTIVE_JAR" --cookie-jar "$ACTIVE_JAR" "$BASE_URL/" -o "$HOME_PAGE"
 LOGOUT_PATH="$(php -r '

@@ -69,6 +69,7 @@ jobs:
       IMAGEMAGICK_PROCESS_TIMEOUT_SECONDS: 60
       UPLOAD_MAX_ASSET_BYTES: 2147483648
       UPLOAD_MAX_CHUNK_BYTES: 16777216
+      UPLOAD_DEFAULT_QUOTA_BYTES: 0
       COPPERMINE_DATABASE_URL: mysql://readonly:readonly@127.0.0.1:3306/coppermine
       COPPERMINE_SOURCE_ID: fixture-main
       COPPERMINE_TABLE_PREFIX: cpg_
@@ -191,6 +192,9 @@ jobs:
 
       - name: Run unit tests
         run: vendor/bin/phpunit
+
+      - name: Verify persistent upload quota accounting
+        run: php tests/Integration/Upload/quota-accounting.php
 
       - name: Verify concurrent upload finalization and crash recovery
         run: php tests/Integration/Upload/finalize-concurrency.php
@@ -325,6 +329,7 @@ jobs:
               'aggregate-only rating' => (int) $db->fetchOne("SELECT COUNT(*) FROM import_rating_aggregates a JOIN media_assets m ON m.id = a.media_id WHERE m.original_filename = 'sample2.jpg' AND a.average_5 = 3 AND a.vote_count = 2") === 1,
               'no synthesized individual rating' => (int) $db->fetchOne("SELECT COUNT(*) FROM ratings r JOIN media_assets m ON m.id = r.media_id WHERE m.original_filename = 'sample2.jpg'") === 0,
               'reset-required user' => (int) $db->fetchOne("SELECT COUNT(*) FROM users WHERE username = 'fixture-user' AND status = 'password_reset_required'") === 1,
+              'imported group quota' => (int) $db->fetchOne("SELECT COUNT(*) FROM group_storage_quotas WHERE limit_bytes = 2097152") === 1,
               'english language id maps to locale' => (int) $db->fetchOne("SELECT COUNT(*) FROM users WHERE username = 'fixture-user' AND locale = 'en'") === 1,
               'german language id maps to locale' => (int) $db->fetchOne("SELECT COUNT(*) FROM users WHERE username = 'viewer-user' AND locale = 'de'") === 1,
               'empty async queue' => (int) $db->fetchOne("SELECT COUNT(*) FROM messenger_messages WHERE queue_name = 'async'") === 0,

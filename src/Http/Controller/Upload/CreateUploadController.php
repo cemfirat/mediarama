@@ -6,7 +6,9 @@ namespace Mediarama\Http\Controller\Upload;
 
 use Mediarama\Security\Application\CurrentUser;
 use Mediarama\Upload\Application\CreateUploadSession;
+use Mediarama\Upload\Application\UploadQuotaExceeded;
 use Symfony\Component\HttpFoundation\JsonResponse;
+use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Uid\Uuid;
@@ -27,13 +29,23 @@ final readonly class CreateUploadController
             ? Uuid::fromString((string) $payload['collection_id'])
             : null;
 
-        $session = ($this->create)(
-            $userId,
-            $collectionId,
-            (string) ($payload['filename'] ?? ''),
-            (int) ($payload['size'] ?? -1),
-            isset($payload['mime']) ? (string) $payload['mime'] : null,
-        );
+        try {
+            $session = ($this->create)(
+                $userId,
+                $collectionId,
+                (string) ($payload['filename'] ?? ''),
+                (int) ($payload['size'] ?? -1),
+                isset($payload['mime']) ? (string) $payload['mime'] : null,
+            );
+        } catch (UploadQuotaExceeded $error) {
+            return new JsonResponse([
+                'error' => 'upload_quota_exceeded',
+                'limit_bytes' => $error->limitBytes,
+                'committed_bytes' => $error->committedBytes,
+                'reserved_bytes' => $error->reservedBytes,
+                'requested_bytes' => $error->requestedBytes,
+            ], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
 
         return new JsonResponse([
             'id' => $session->id->toRfc4122(),

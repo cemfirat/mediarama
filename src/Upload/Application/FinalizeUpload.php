@@ -27,6 +27,7 @@ final readonly class FinalizeUpload
         private ValidateStoredMediaStructure $structureValidator,
         private UploadDestinationAuthorizer $authorizer,
         private UploadFinalizationRepository $finalizations,
+        private UploadQuota $quota,
         private UploadFinalizationCriticalSection $criticalSection,
         private MessageBusInterface $bus,
     ) {
@@ -52,6 +53,9 @@ final readonly class FinalizeUpload
                         ) {
                             // Repair the pre-hardening crash window where the
                             // mapping existed but the session was not completed.
+                            // commit() is idempotent and normally a no-op for
+                            // sessions created before persistent reservations.
+                            $this->quota->commit($sessionId);
                             $locked->complete();
                             $this->sessions->save($locked);
                             $this->bus->dispatch(new ProcessMedia($sessionId->toRfc4122()));
@@ -196,6 +200,10 @@ final readonly class FinalizeUpload
                 );
 
                 $this->media->save($asset);
+                // The MediaAsset is canonical committed usage. Removing the
+                // reservation in this same transaction converts the bytes
+                // without maintaining a drift-prone committed counter.
+                $this->quota->commit($sessionId);
                 $this->finalizations->remember($sessionId, $asset->id);
                 $locked->complete();
                 $this->sessions->save($locked);

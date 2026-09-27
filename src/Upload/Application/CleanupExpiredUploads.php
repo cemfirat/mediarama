@@ -14,7 +14,6 @@ final readonly class CleanupExpiredUploads
         private ExpiredUploadSessionRepository $sessions,
         private ChunkStorage $chunks,
         private MediaStorage $storage,
-        private UploadQuota $quota,
     ) {
     }
 
@@ -30,7 +29,8 @@ final readonly class CleanupExpiredUploads
                 $this->storage->delete($temporary);
             }
 
-            $this->quota->release($session->userId, $session->expectedSize);
+            // The reservation FK cascades from upload_sessions, so database
+            // deletion releases quota atomically and exactly once.
             $this->sessions->delete($session);
         }
 

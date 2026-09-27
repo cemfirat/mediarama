@@ -59,6 +59,26 @@ SQL,
                 ['system' => ParameterType::BOOLEAN],
             );
 
+            $sourceQuotaKiB = (int) $row['group_quota'];
+            if ($sourceQuotaKiB < 0) {
+                throw new \RuntimeException('Coppermine group quota must not be negative.');
+            }
+
+            $this->target->executeStatement(
+                <<<'SQL'
+INSERT INTO group_storage_quotas (group_id, limit_bytes, updated_at)
+VALUES (:group_id, :limit_bytes, NOW())
+ON CONFLICT (group_id) DO UPDATE SET
+    limit_bytes = EXCLUDED.limit_bytes,
+    updated_at = NOW()
+SQL,
+                [
+                    'group_id' => $targetId->toRfc4122(),
+                    // Coppermine stores group_quota in KiB. Zero means unlimited.
+                    'limit_bytes' => $sourceQuotaKiB * 1024,
+                ],
+            );
+
             foreach ($this->permissionKeys($row) as $permission) {
                 $this->target->executeStatement(
                     <<<'SQL'
