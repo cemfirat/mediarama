@@ -11,6 +11,8 @@ use Mediarama\Media\Domain\StorageObjectId;
 use Mediarama\Media\Infrastructure\Image\ImageMagickDerivativeGenerator;
 use Mediarama\Media\Infrastructure\Image\ImageMagickProcess;
 use Mediarama\Media\Infrastructure\Image\ImageMagickResourceLimits;
+use Mediarama\Media\Infrastructure\Image\ImageMagickWatermarkRenderer;
+use Mediarama\Media\Infrastructure\Image\ImageWatermarkConfiguration;
 use Mediarama\Media\Infrastructure\Storage\LocalMediaStorage;
 use Symfony\Component\Process\Process;
 
@@ -136,7 +138,11 @@ try {
         $stored->checksum,
     );
     $profile = new ImageDerivativeProfile('resource-test', 32, 32, 'webp', 82, false);
-    $generator = new ImageMagickDerivativeGenerator($storage, $runner);
+    $generator = new ImageMagickDerivativeGenerator(
+        $storage,
+        $runner,
+        new ImageMagickWatermarkRenderer($runner, new ImageWatermarkConfiguration('')),
+    );
     requireRuntimeFailure(
         static fn () => $generator->generate($asset, $profile, 1),
         'Oversized image unexpectedly produced a derivative.',
