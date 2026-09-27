@@ -196,6 +196,12 @@ try {
         marginPercent: 10,
         gravity: 'southeast',
     );
+    $watermarkAssetHash = hash_file('sha256', $watermarkPath);
+    if ($watermarkAssetHash === false) {
+        throw new RuntimeException('Unable to hash watermark fixture.');
+    }
+    $expectedWatermarkFingerprint = $configuration->fingerprintFromAssetHash($watermarkAssetHash);
+
     $renderer = new ImageMagickWatermarkRenderer($imageMagick, $configuration);
     $generator = new ImageMagickDerivativeGenerator(
         $storage,
@@ -227,9 +233,8 @@ try {
         'watermark filesystem path is not persisted in derivative metadata',
     );
     requireWatermark(
-        is_string($derivative->metadata['watermark_fingerprint'] ?? null)
-        && strlen((string) $derivative->metadata['watermark_fingerprint']) === 64,
-        'watermark configuration/asset fingerprint is recorded without exposing its path',
+        ($derivative->metadata['watermark_fingerprint'] ?? null) === $expectedWatermarkFingerprint,
+        'watermark fingerprint matches the exact rendered asset snapshot and configuration',
     );
 
     $outputPath = $storage->localPath($derivative->storage);
