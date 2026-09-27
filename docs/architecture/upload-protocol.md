@@ -41,7 +41,26 @@ After the MIME/type allow policy and expected-size check pass, Mediarama validat
 - audio must contain an audio stream recognized by FFprobe;
 - video must contain a video stream recognized by FFprobe.
 
-FFprobe runs through an argv-only process with a parent timeout plus bounded probe size and analyze duration. With the current local-storage adapter the validator probes the already assembled temporary file in place; it does not duplicate a potentially multi-gigabyte upload merely to validate it. A structural validation failure is terminal for that UploadSession: the session moves to `failed`, stores only a sanitized failure code/stage/timestamp, releases its quota reservation, and prevents immutable-original promotion, `MediaAsset` creation and background dispatch. The failed session remains queryable by its owner until explicit abandon or expiry cleanup.
+FFprobe runs through an argv-only process with a parent timeout plus bounded probe size and analyze duration. With the current local-storage adapter the validator probes the already assembled temporary file in place; it does not duplicate a potentially multi-gigabyte upload merely to validate it.
+
+Structural validation has an explicit two-class failure boundary:
+
+- **content rejection**: the configured tool ran and rejected malformed/unsupported structure, ImageMagick returned invalid geometry, or FFprobe completed without the expected audio/video stream. This becomes terminal `invalid_media`; the UploadSession moves to `failed` and its quota reservation is released.
+- **validation unavailable**: the executable cannot start, is missing/not executable, times out, the validation object cannot be read, or a successful FFprobe process returns an unusable protocol response. This becomes retryable `upload_temporarily_unavailable`; the UploadSession remains recoverable, its quota reservation stays in place, and no immutable-original promotion or MediaAsset creation occurs.
+
+The process adapters preserve tool stderr/exception chaining only for internal diagnostics. Public upload JSON never exposes executable paths, process stderr, stack traces or raw tool messages.
+
+Current process classification is deliberately explicit:
+
+- ImageMagick start/timeout and exit 126/127 → unavailable;
+- ImageMagick decoder/resource/other normal non-zero rejection → rejected input;
+- successful ImageMagick response with unusable geometry → rejected input;
+- FFprobe start/timeout and exit 126/127 → unavailable;
+- FFprobe normal non-zero result → rejected input;
+- successful FFprobe with invalid JSON/response schema → unavailable;
+- valid FFprobe response without the expected stream → rejected input.
+
+A terminal failed session remains queryable by its owner until explicit abandon or expiry cleanup. A validation outage remains retryable rather than destroying the upload.
 
 
 ## Finalization idempotency and crash recovery
@@ -144,7 +163,18 @@ Downstream metadata/derivative failures remain solely in `media_assets.processin
 
 Expected upload API problems use stable JSON error codes. Unknown/unexpected exceptions are not converted into client-visible internal diagnostics.
 
-## Remaining hardening
+## Verification status
 
-- richer resource-scoped collection sharing/access policy;
-- full authenticated HTTP + PostgreSQL + filesystem upload-flow coverage beyond the existing finalization/security integration tests.
+The normal CI gate now covers:
+
+- production authentication and CSRF boundaries;
+- persistent quota accounting;
+- chunk/assembly failure lifecycle;
+- concurrent/crash-safe finalization;
+- successful authenticated HTTP → PostgreSQL → filesystem → Messenger ingestion;
+- terminal malformed-media rejection;
+- retryable structural-validation tool outages;
+- ImageMagick/FFprobe missing/non-executable/timeout behavior;
+- quota release versus retention across terminal/retryable failures.
+
+Broader Collection sharing/search policy is implemented through the separate actor-aware Collection and Library Search boundaries. Future upload hardening should be tracked as concrete new issues rather than keeping already completed work in a generic remainder list.
