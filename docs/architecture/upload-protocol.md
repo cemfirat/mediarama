@@ -71,15 +71,22 @@ Writing an existing chunk index replaces that chunk only after the replacement p
 
 Destination authorization is checked when the session is created and again at finalization.
 
-Collection owners may upload to their own collection. Group permission `collection.media.add` grants upload capability according to the current foundation ACL model.
+Collection owners may upload to their own collection. Resource-scoped `collection.media.add` rules may grant upload capability to explicitly allowed users or groups.
 
-The ACL model will become resource-scoped as collection sharing rules are expanded; a global permission must not become the final sharing model.
+This is the current ACL foundation; richer sharing/access semantics remain separate hardening work.
 
 ## Current authentication boundary
 
-The HTTP foundation currently uses `X-Mediarama-User` as an explicit temporary actor transport.
+Production HTTP requests use Symfony Security with the PostgreSQL `users` table, stateful browser sessions and form login.
 
-This is **not** production authentication. It exists so the upload application protocol can be implemented and tested independently. Symfony Security/session/token authentication must replace it before public deployment.
+- only active identities authenticate normally;
+- `CurrentUser` resolves the authenticated Mediarama UUID from the Symfony Security token;
+- production upload routes require `ROLE_USER`;
+- unsafe session-authenticated upload requests also require the upload CSRF token obtained from `GET /api/auth/csrf`.
+
+`X-Mediarama-User` remains a development/test helper only. Production ignores that caller-supplied header and does not use it as an authentication mechanism.
+
+The complete authentication/session boundary is documented in `docs/architecture/authentication.md`.
 
 ## Limits
 
@@ -92,7 +99,7 @@ These are deployment policy values, not hard-coded product limits.
 
 ## Remaining hardening
 
-- persistent quota reservations/accounting;
-- production authentication;
+- persistent quota reservations/accounting (#38);
+- observable retry/failure API (#37);
 - richer resource-scoped collection sharing/access policy;
-- HTTP + PostgreSQL + filesystem integration coverage beyond finalization.
+- full authenticated HTTP + PostgreSQL + filesystem upload-flow coverage beyond the existing finalization/security integration tests.
