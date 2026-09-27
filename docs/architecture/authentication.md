@@ -8,6 +8,8 @@ Mediarama uses Symfony Security as the production HTTP authentication boundary w
 
 The first release uses a stateful browser session and form login.
 
+A genuinely new installation is initialized through the separate first-run bootstrap boundary documented in [setup-bootstrap.md](setup-bootstrap.md). Browser bootstrap requires the persisted pending setup state, CSRF and a server-configured high-entropy setup token. The resulting administrator is a normal active user receiving `system.admin` through group membership; there is no permanent bootstrap superuser or `admin=true` shortcut.
+
 - identity source: existing PostgreSQL `users` table
 - login identifier: `username`
 - password verification: Symfony PasswordHasher through `form_login`
