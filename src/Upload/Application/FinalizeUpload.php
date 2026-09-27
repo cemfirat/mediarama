@@ -6,6 +6,8 @@ namespace Mediarama\Upload\Application;
 
 use Mediarama\Media\Application\MediaAssetRepository;
 use Mediarama\Media\Application\MediaStorage;
+use Mediarama\Media\Application\MediaValidationRejected;
+use Mediarama\Media\Application\MediaValidationUnavailable;
 use Mediarama\Media\Application\ProcessMedia;
 use Mediarama\Media\Application\StoredObject;
 use Mediarama\Media\Application\ValidateStoredMediaStructure;
@@ -283,11 +285,25 @@ final readonly class FinalizeUpload
 
         try {
             ($this->structureValidator)($object, $content->mediaType);
-        } catch (\DomainException $error) {
+        } catch (MediaValidationRejected $error) {
             throw UploadProblem::terminal(
                 'invalid_media',
                 UploadFailureStage::Finalization,
                 'Uploaded media failed structural validation.',
+                previous: $error,
+            );
+        } catch (MediaValidationUnavailable $error) {
+            throw UploadProblem::retryable(
+                'upload_temporarily_unavailable',
+                UploadFailureStage::Finalization,
+                'Media structural validation is temporarily unavailable.',
+                previous: $error,
+            );
+        } catch (\RuntimeException|\DomainException $error) {
+            throw UploadProblem::retryable(
+                'upload_temporarily_unavailable',
+                UploadFailureStage::Finalization,
+                'Media structural validation failed unexpectedly.',
                 previous: $error,
             );
         }
