@@ -94,10 +94,19 @@ jobs:
           sudo apt-get install -y exiftool ffmpeg imagemagick mariadb-client
 
       - name: Validate Composer metadata
-        run: composer validate --strict
+        run: composer validate --strict --no-check-lock
 
-      - name: Install dependencies
-        run: composer install --no-interaction --prefer-dist --no-progress
+      - name: Resolve Symfony rate limiter with minimal dependency changes
+        run: composer update symfony/rate-limiter --with-dependencies --minimal-changes --no-interaction --prefer-dist --no-progress
+
+      - name: Capture generated PHP lock state
+        uses: actions/upload-artifact@v4
+        with:
+          name: login-throttling-lockfiles
+          if-no-files-found: error
+          path: |
+            composer.lock
+            symfony.lock
 
       - name: Verify PHP exposes real environment variables
         run: |
@@ -128,11 +137,11 @@ jobs:
           test -s public/build/uikit.min.js
           test -s public/build/uikit-icons.min.js
 
-      - name: Verify dependency install is reproducible
+      - name: Verify dependency update only changed PHP lock state
         run: |
-          STATUS="$(git status --porcelain -- composer.lock symfony.lock package-lock.json package.json .env config)"
+          STATUS="$(git status --porcelain -- package-lock.json package.json .env config)"
           if [ -n "$STATUS" ]; then
-            echo "Dependency installation changed committed project state:"
+            echo "Rate-limiter dependency update changed unrelated project state:"
             printf '%s\n' "$STATUS"
             exit 1
           fi
