@@ -28,13 +28,22 @@ final readonly class UploadStatusController
         $actor = $this->currentUser->requireUser()->id;
 
         if (!$session->userId->equals($actor)) {
-            throw new \DomainException('Upload session does not belong to the acting user.');
+            throw \Mediarama\Upload\Application\UploadProblem::request(
+                'upload_not_found',
+                'Upload session is not accessible to the acting user.',
+            );
         }
 
         return new JsonResponse([
             'id' => $session->id->toRfc4122(),
             'status' => $session->status->value,
             'expected_size' => $session->expectedSize,
+            'failure' => $session->lastFailure === null ? null : [
+                'code' => $session->lastFailure->code,
+                'stage' => $session->lastFailure->stage->value,
+                'retryable' => $session->lastFailure->retryable,
+                'failed_at' => $session->lastFailure->failedAt->format(DATE_ATOM),
+            ],
             'chunks' => array_map(static fn ($chunk): array => [
                 'index' => $chunk->index,
                 'offset' => $chunk->offset,

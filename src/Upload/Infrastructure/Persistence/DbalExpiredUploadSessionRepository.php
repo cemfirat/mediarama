@@ -7,6 +7,8 @@ namespace Mediarama\Upload\Infrastructure\Persistence;
 use DateTimeImmutable;
 use Doctrine\DBAL\Connection;
 use Mediarama\Upload\Application\ExpiredUploadSessionRepository;
+use Mediarama\Upload\Domain\UploadFailure;
+use Mediarama\Upload\Domain\UploadFailureStage;
 use Mediarama\Upload\Domain\UploadSession;
 use Mediarama\Upload\Domain\UploadStatus;
 use Symfony\Component\Uid\Uuid;
@@ -32,7 +34,18 @@ SQL,
             ['limit' => \Doctrine\DBAL\ParameterType::INTEGER],
         );
 
-        return array_map(static fn (array $row): UploadSession => UploadSession::reconstitute(
+        return array_map(static function (array $row): UploadSession {
+            $failure = null;
+            if ($row['last_failure_code'] !== null) {
+                $failure = new UploadFailure(
+                    (string) $row['last_failure_code'],
+                    UploadFailureStage::from((string) $row['last_failure_stage']),
+                    filter_var($row['last_failure_retryable'], FILTER_VALIDATE_BOOLEAN),
+                    new DateTimeImmutable((string) $row['last_failed_at']),
+                );
+            }
+
+            return UploadSession::reconstitute(
             Uuid::fromString((string) $row['id']),
             Uuid::fromString((string) $row['user_id']),
             $row['target_collection_id'] !== null ? Uuid::fromString((string) $row['target_collection_id']) : null,
@@ -44,7 +57,9 @@ SQL,
             new DateTimeImmutable((string) $row['expires_at']),
             new DateTimeImmutable((string) $row['created_at']),
             new DateTimeImmutable((string) $row['updated_at']),
-        ), $rows);
+            $failure,
+            );
+        }, $rows);
     }
 
     public function delete(UploadSession $session): void
