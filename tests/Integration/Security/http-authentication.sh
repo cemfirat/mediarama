@@ -257,7 +257,7 @@ expect_status 201 "$(upload_status "$ACTIVE_JAR" "X-CSRF-Token: $UPLOAD_CSRF")" 
 
 LIBRARY_SEARCH_STATUS="$(curl --silent --show-error --cookie "$ACTIVE_JAR" --cookie-jar "$ACTIVE_JAR" --dump-header /tmp/auth-library-search.headers --output /tmp/auth-library-search.json --write-out '%{http_code}' "$BASE_URL/api/library/media?q=auth-ci")"
 expect_status 200 "$LIBRARY_SEARCH_STATUS" "authenticated active user can access library media search"
-grep -i -F "cache-control: no-store" /tmp/auth-library-search.headers
+grep -i -E '^cache-control:.*no-store' /tmp/auth-library-search.headers
 grep -i -F "x-robots-tag: noindex, nofollow" /tmp/auth-library-search.headers
 
 UPLOAD_ID="$(php -r '
