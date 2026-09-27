@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Mediarama\Media\Infrastructure\Image;
 
 use Mediarama\Media\Application\InspectImageFileGeometry;
+use Mediarama\Media\Infrastructure\Process\MediaToolRejected;
 
 final readonly class ImageMagickFileGeometryInspector implements InspectImageFileGeometry
 {
@@ -14,23 +15,15 @@ final readonly class ImageMagickFileGeometryInspector implements InspectImageFil
 
     public function __invoke(string $path): array
     {
-        try {
-            $output = $this->process->identify([
-                '-format',
-                '%w %h %[orientation]',
-                $path.'[0]',
-            ]);
-        } catch (\RuntimeException $error) {
-            throw new \RuntimeException(
-                'Unable to inspect image geometry: '.$error->getMessage(),
-                0,
-                $error,
-            );
-        }
+        $output = $this->process->identify([
+            '-format',
+            '%w %h %[orientation]',
+            $path.'[0]',
+        ]);
 
         $parts = preg_split('/\s+/', trim($output));
         if ($parts === false || count($parts) < 2) {
-            throw new \RuntimeException('Image geometry response is invalid.');
+            throw new MediaToolRejected('Image geometry response is invalid.');
         }
 
         $width = (int) $parts[0];
@@ -42,7 +35,7 @@ final readonly class ImageMagickFileGeometryInspector implements InspectImageFil
         }
 
         if ($width < 1 || $height < 1) {
-            throw new \RuntimeException('Image dimensions are invalid.');
+            throw new MediaToolRejected('Image dimensions are invalid.');
         }
 
         return ['width' => $width, 'height' => $height];

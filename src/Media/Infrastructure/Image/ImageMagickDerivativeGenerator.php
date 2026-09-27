@@ -18,25 +18,33 @@ final readonly class ImageMagickDerivativeGenerator implements ImageDerivativeGe
     public function __construct(
         private MediaStorage $storage,
         private ImageMagickProcess $process,
+        private ImageMagickWatermarkRenderer $watermarks,
+        private CwebpEncoder $webp,
     ) {
     }
 
     public function generate(MediaAsset $media, ImageDerivativeProfile $profile, int $processingVersion): MediaDerivative
     {
-        if ($profile->watermark) {
-            throw new \LogicException('Watermarked derivative profiles are not implemented yet.');
-        }
-
         $source = $this->storage->read($media->original);
         $input = tempnam(sys_get_temp_dir(), 'mediarama-image-in-');
         $output = tempnam(sys_get_temp_dir(), 'mediarama-image-out-');
+        $prepared = ($profile->format === 'webp' || $profile->watermark)
+            ? tempnam(sys_get_temp_dir(), 'mediarama-image-prepared-')
+            : null;
+        $intermediate = $profile->watermark
+            ? tempnam(sys_get_temp_dir(), 'mediarama-image-watermark-base-')
+            : null;
 
-        if ($input === false || $output === false) {
-            if (is_string($input)) {
-                @unlink($input);
-            }
-            if (is_string($output)) {
-                @unlink($output);
+        if (
+            $input === false
+            || $output === false
+            || (($profile->format === 'webp' || $profile->watermark) && $prepared === false)
+            || ($profile->watermark && $intermediate === false)
+        ) {
+            foreach ([$input, $output, $prepared, $intermediate] as $temporary) {
+                if (is_string($temporary)) {
+                    @unlink($temporary);
+                }
             }
             fclose($source);
 
@@ -61,16 +69,87 @@ final readonly class ImageMagickDerivativeGenerator implements ImageDerivativeGe
                 fclose($source);
             }
 
-            $arguments = [
-                $input.'[0]',
-                '-auto-orient',
-                '-strip',
-                '-thumbnail', sprintf('%dx%d>', $profile->maximumWidth, $profile->maximumHeight),
-                '-quality', (string) $profile->quality,
-                $outputWithExtension,
+            $metadata = [
+                'orientation_normalized' => true,
+                'watermarked' => false,
             ];
 
-            $this->process->convert($arguments);
+            if ($profile->watermark) {
+                if (!is_string($intermediate) || !is_string($prepared)) {
+                    throw new \LogicException('Watermark processing paths were not allocated.');
+                }
+
+                $this->process->convert([
+                    $input.'[0]',
+                    '-auto-orient',
+                    '-strip',
+                    '-thumbnail',
+                    sprintf('%dx%d>', $profile->maximumWidth, $profile->maximumHeight),
+                    '-colorspace',
+                    'sRGB',
+                    'miff:'.$intermediate,
+                ]);
+
+                $metadata = [
+                    'orientation_normalized' => true,
+                    ...$this->watermarks->renderLossless(
+                        $intermediate,
+                        $prepared,
+                    ),
+                ];
+            } elseif ($profile->format === 'webp') {
+                if (!is_string($prepared)) {
+                    throw new \LogicException('WebP preparation path was not allocated.');
+                }
+
+                $this->process->convert([
+                    $input.'[0]',
+                    '-auto-orient',
+                    '-strip',
+                    '-thumbnail',
+                    sprintf('%dx%d>', $profile->maximumWidth, $profile->maximumHeight),
+                    '-colorspace',
+                    'sRGB',
+                    'png:'.$prepared,
+                ]);
+            }
+
+            if ($profile->format === 'webp') {
+                if (!is_string($prepared)) {
+                    throw new \LogicException('WebP preparation path was not allocated.');
+                }
+
+                $this->webp->encode(
+                    $prepared,
+                    $outputWithExtension,
+                    $profile->quality,
+                );
+                $metadata['encoder'] = 'cwebp';
+                $metadata['encoder_quality'] = $profile->quality;
+            } elseif ($profile->watermark) {
+                if (!is_string($prepared)) {
+                    throw new \LogicException('Watermark preparation path was not allocated.');
+                }
+
+                $this->process->convert([
+                    $prepared.'[0]',
+                    '-strip',
+                    '-quality',
+                    (string) $profile->quality,
+                    $outputWithExtension,
+                ]);
+            } else {
+                $this->process->convert([
+                    $input.'[0]',
+                    '-auto-orient',
+                    '-strip',
+                    '-thumbnail',
+                    sprintf('%dx%d>', $profile->maximumWidth, $profile->maximumHeight),
+                    '-quality',
+                    (string) $profile->quality,
+                    $outputWithExtension,
+                ]);
+            }
 
             $imageInfo = getimagesize($outputWithExtension);
             if ($imageInfo === false) {
@@ -113,10 +192,7 @@ final readonly class ImageMagickDerivativeGenerator implements ImageDerivativeGe
                 (int) $imageInfo[0],
                 (int) $imageInfo[1],
                 null,
-                [
-                    'orientation_normalized' => true,
-                    'watermarked' => false,
-                ],
+                $metadata,
                 $now,
                 $now,
             );
@@ -124,6 +200,12 @@ final readonly class ImageMagickDerivativeGenerator implements ImageDerivativeGe
             @unlink($input);
             @unlink($output);
             @unlink($outputWithExtension);
+            if (is_string($prepared)) {
+                @unlink($prepared);
+            }
+            if (is_string($intermediate)) {
+                @unlink($intermediate);
+            }
         }
     }
 }

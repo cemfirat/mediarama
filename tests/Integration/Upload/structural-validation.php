@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 require dirname(__DIR__, 3).'/vendor/autoload.php';
 
+use Mediarama\Media\Application\MediaValidationRejected;
+use Mediarama\Media\Application\MediaValidationUnavailable;
 use Mediarama\Media\Domain\MediaType;
 use Mediarama\Media\Domain\StorageObjectId;
 use Mediarama\Media\Infrastructure\Image\ImageMagickFileGeometryInspector;
@@ -24,11 +26,23 @@ function requireCondition(bool $condition, string $message): void
 }
 
 /** @param callable(): void $operation */
-function requireDomainFailure(callable $operation, string $message): void
+function requireValidationRejection(callable $operation, string $message): void
 {
     try {
         $operation();
-    } catch (DomainException) {
+    } catch (MediaValidationRejected) {
+        return;
+    }
+
+    throw new RuntimeException($message);
+}
+
+/** @param callable(): void $operation */
+function requireValidationUnavailable(callable $operation, string $message): void
+{
+    try {
+        $operation();
+    } catch (MediaValidationUnavailable) {
         return;
     }
 
@@ -63,6 +77,17 @@ function removeTree(string $path): void
     }
 
     @rmdir($path);
+}
+
+function writeFakeTool(string $path, string $body, bool $executable = true): void
+{
+    if (file_put_contents($path, "#!/bin/sh\n".$body."\n") === false) {
+        throw new RuntimeException('Unable to create fake media tool.');
+    }
+
+    if (!chmod($path, $executable ? 0700 : 0600)) {
+        throw new RuntimeException('Unable to set fake media tool permissions.');
+    }
 }
 
 function storeFixture(LocalMediaStorage $storage, string $key, string $path): StorageObjectId
@@ -103,6 +128,14 @@ $truncatedImage = $fixtures.'/truncated.png';
 $audio = $fixtures.'/valid.mp3';
 $video = $fixtures.'/valid.mp4';
 $invalidAv = $fixtures.'/invalid.bin';
+$slowIdentify = $fixtures.'/slow-identify';
+$nonExecutableIdentify = $fixtures.'/non-executable-identify';
+$invalidGeometry = $fixtures.'/invalid-geometry';
+$slowFfprobe = $fixtures.'/slow-ffprobe';
+$invalidJsonFfprobe = $fixtures.'/invalid-json-ffprobe';
+$nonExecutableFfprobe = $fixtures.'/non-executable-ffprobe';
+$missingIdentify = $fixtures.'/missing-identify';
+$missingFfprobe = $fixtures.'/missing-ffprobe';
 
 try {
     runTool([$convertBinary, '-size', '32x32', 'xc:white', $image]);
@@ -129,6 +162,13 @@ try {
         $video,
     ]);
     requireCondition(file_put_contents($invalidAv, "not a media file\n") !== false, 'Unable to create invalid AV fixture.');
+
+    writeFakeTool($slowIdentify, "sleep 2\nprintf '32 32 Undefined'");
+    writeFakeTool($nonExecutableIdentify, "printf '32 32 Undefined'", false);
+    writeFakeTool($invalidGeometry, "printf 'not-a-geometry-response'");
+    writeFakeTool($slowFfprobe, "sleep 2\nprintf '{\"streams\":[{\"codec_type\":\"audio\"}]}'");
+    writeFakeTool($invalidJsonFfprobe, "printf 'not-json'");
+    writeFakeTool($nonExecutableFfprobe, "printf '{\"streams\":[]}'", false);
 
     $storage = new LocalMediaStorage($storageRoot);
     $contentInspector = new LocalContentInspector($storage);
@@ -160,7 +200,7 @@ try {
     $badImageContent = $contentInspector->inspect($badImage);
     requireCondition($badImageContent->mimeType === 'image/png', 'Truncated image no longer looks like image/png to MIME detection.');
     $contentPolicy->assertAllowed($badImageContent);
-    requireDomainFailure(
+    requireValidationRejection(
         static fn () => $validator($badImage, $badImageContent->mediaType),
         'Truncated image passed structural validation.',
     );
@@ -178,20 +218,128 @@ try {
     $validator($validVideo, $validVideoContent->mediaType);
 
     $invalidAudio = storeFixture($storage, 'temporary/invalid-audio/source', $invalidAv);
-    requireDomainFailure(
+    requireValidationRejection(
         static fn () => $validator($invalidAudio, MediaType::Audio),
         'Invalid audio structure passed FFprobe validation.',
     );
 
     $invalidVideo = new StorageObjectId('media', 'temporary/invalid-audio/source');
-    requireDomainFailure(
+    requireValidationRejection(
         static fn () => $validator($invalidVideo, MediaType::Video),
         'Invalid video structure passed FFprobe validation.',
     );
 
-    requireDomainFailure(
+    requireValidationRejection(
         static fn () => $validator($validAudio, MediaType::Video),
         'Audio-only media passed validation as video.',
+    );
+
+    $missingImageValidator = new LocalStoredMediaStructureValidator(
+        $storage,
+        new ImageMagickFileGeometryInspector(new ImageMagickProcess(
+            new ImageMagickResourceLimits(),
+            $convertBinary,
+            $missingIdentify,
+            0.25,
+        )),
+        new FfprobeProcess($ffprobeBinary, 15.0, 33554432, 5000000),
+    );
+    requireValidationUnavailable(
+        static fn () => $missingImageValidator($validImage, MediaType::Image),
+        'Missing ImageMagick identify binary was not classified as unavailable.',
+    );
+
+    $slowImageValidator = new LocalStoredMediaStructureValidator(
+        $storage,
+        new ImageMagickFileGeometryInspector(new ImageMagickProcess(
+            new ImageMagickResourceLimits(),
+            $convertBinary,
+            $slowIdentify,
+            0.1,
+        )),
+        new FfprobeProcess($ffprobeBinary, 15.0, 33554432, 5000000),
+    );
+    requireValidationUnavailable(
+        static fn () => $slowImageValidator($validImage, MediaType::Image),
+        'ImageMagick timeout was not classified as unavailable.',
+    );
+
+    $nonExecutableImageValidator = new LocalStoredMediaStructureValidator(
+        $storage,
+        new ImageMagickFileGeometryInspector(new ImageMagickProcess(
+            new ImageMagickResourceLimits(),
+            $convertBinary,
+            $nonExecutableIdentify,
+            0.25,
+        )),
+        new FfprobeProcess($ffprobeBinary, 15.0, 33554432, 5000000),
+    );
+    requireValidationUnavailable(
+        static fn () => $nonExecutableImageValidator($validImage, MediaType::Image),
+        'Non-executable ImageMagick identify binary was not classified as unavailable.',
+    );
+
+    $invalidGeometryValidator = new LocalStoredMediaStructureValidator(
+        $storage,
+        new ImageMagickFileGeometryInspector(new ImageMagickProcess(
+            new ImageMagickResourceLimits(),
+            $convertBinary,
+            $invalidGeometry,
+            2.0,
+        )),
+        new FfprobeProcess($ffprobeBinary, 15.0, 33554432, 5000000),
+    );
+    requireValidationRejection(
+        static fn () => $invalidGeometryValidator($validImage, MediaType::Image),
+        'Invalid ImageMagick geometry response was not classified as rejected input.',
+    );
+
+    $missingFfprobeValidator = new LocalStoredMediaStructureValidator(
+        $storage,
+        new ImageMagickFileGeometryInspector($imageProcess),
+        new FfprobeProcess($missingFfprobe, 0.25, 33554432, 5000000),
+    );
+    requireValidationUnavailable(
+        static fn () => $missingFfprobeValidator($validAudio, MediaType::Audio),
+        'Missing FFprobe binary was not classified as unavailable.',
+    );
+
+    $nonExecutableFfprobeValidator = new LocalStoredMediaStructureValidator(
+        $storage,
+        new ImageMagickFileGeometryInspector($imageProcess),
+        new FfprobeProcess($nonExecutableFfprobe, 0.25, 33554432, 5000000),
+    );
+    requireValidationUnavailable(
+        static fn () => $nonExecutableFfprobeValidator($validAudio, MediaType::Audio),
+        'Non-executable FFprobe binary was not classified as unavailable.',
+    );
+
+    $slowFfprobeValidator = new LocalStoredMediaStructureValidator(
+        $storage,
+        new ImageMagickFileGeometryInspector($imageProcess),
+        new FfprobeProcess($slowFfprobe, 0.1, 33554432, 5000000),
+    );
+    requireValidationUnavailable(
+        static fn () => $slowFfprobeValidator($validAudio, MediaType::Audio),
+        'FFprobe timeout was not classified as unavailable.',
+    );
+
+    $invalidJsonValidator = new LocalStoredMediaStructureValidator(
+        $storage,
+        new ImageMagickFileGeometryInspector($imageProcess),
+        new FfprobeProcess($invalidJsonFfprobe, 2.0, 33554432, 5000000),
+    );
+    requireValidationUnavailable(
+        static fn () => $invalidJsonValidator($validAudio, MediaType::Audio),
+        'Invalid FFprobe JSON was not classified as unavailable.',
+    );
+
+    requireValidationUnavailable(
+        static fn () => $validator(
+            new StorageObjectId('media', 'temporary/missing/source'),
+            MediaType::Image,
+        ),
+        'Missing validation object was not classified as unavailable.',
     );
 
     echo "OK valid image structural validation\n";
@@ -200,6 +348,14 @@ try {
     echo "OK valid video FFprobe validation\n";
     echo "OK invalid audio/video rejected\n";
     echo "OK stream-type mismatch rejected\n";
+    echo "OK missing ImageMagick classified unavailable\n";
+    echo "OK ImageMagick timeout classified unavailable\n";
+    echo "OK non-executable ImageMagick classified unavailable\n";
+    echo "OK invalid ImageMagick geometry response rejected\n";
+    echo "OK missing/non-executable FFprobe classified unavailable\n";
+    echo "OK FFprobe timeout classified unavailable\n";
+    echo "OK invalid FFprobe response classified unavailable\n";
+    echo "OK missing stored object classified unavailable\n";
 } finally {
     removeTree($root);
 }

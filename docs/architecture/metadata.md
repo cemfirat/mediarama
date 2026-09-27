@@ -147,7 +147,9 @@ Preferred write tool should support broad EXIF/IPTC/XMP compatibility and preser
 
 The infrastructure adapter must expose capabilities per format rather than pretending every format has identical write support.
 
-RAW source files are not modified destructively. Where appropriate, current metadata is exported as XMP sidecar data.
+RAW source files are not modified destructively. Current, privacy-safe and custom metadata can be exported through a dedicated XMP sidecar writer. The sidecar path is generated independently of the immutable original; sidecar export does not read or rewrite RAW bytes.
+
+The RAW sidecar boundary is selected by the original filename extension rather than trusting a single MIME spelling, because RAW MIME detection varies across platforms and camera formats. The initial supported RAW extension set includes DNG, CR2/CR3, NEF/NRW, ARW, RAF, ORF, RW2 and PEF plus other common camera RAW extensions handled by the writer.
 
 ## Batch exports
 

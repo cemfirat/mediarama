@@ -77,4 +77,26 @@ final class ExifToolMetadataParserTest extends TestCase
         self::assertSame(['archive', 'vienna'], $metadata->keywords);
         self::assertSame('IPTC title', $metadata->embedded['iptc']['IPTC:ObjectName']);
     }
+
+    public function testKeepsCompatibilityWithGenericGroupAliases(): void
+    {
+        $json = json_encode([[
+            'EXIF:Make' => 'Legacy Make',
+            'EXIF:ISO' => 200,
+            'XMP:Title' => 'Legacy Title',
+            'XMP:Subject' => ['legacy'],
+            'Composite:GPSLatitude' => 48.2,
+            'Composite:GPSLongitude' => 16.3,
+        ]], JSON_THROW_ON_ERROR);
+
+        $metadata = (new ExifToolMetadataParser())->parse($json);
+
+        self::assertSame('Legacy Make', $metadata->cameraMake);
+        self::assertSame(200, $metadata->iso);
+        self::assertSame('Legacy Title', $metadata->title);
+        self::assertSame(['legacy'], $metadata->keywords);
+        self::assertSame(48.2, $metadata->latitude);
+        self::assertSame(16.3, $metadata->longitude);
+    }
+
 }

@@ -40,3 +40,30 @@ For canonical descriptive metadata, prefer modern interoperable namespaces:
 3. legacy IPTC IIM only where format/tool compatibility justifies it.
 
 Mediarama's database remains the canonical editable layer regardless of how a particular export file can encode those fields.
+
+## Real-file verification
+
+CI exercises the actual ExifTool inspection and export adapters against generated real files for JPEG, TIFF, PNG, WebP, AVIF and HEIC.
+
+For every format the test verifies:
+
+- XMP descriptive and GPS metadata can be extracted through ExifTool's family-1 group names;
+- the Current export profile writes Mediarama canonical metadata into a copy and round-trips through the normal inspector;
+- the immutable source checksum is unchanged;
+- the Privacy-safe profile removes GPS while retaining descriptive metadata.
+
+This is a runtime integration gate rather than a parser-only fixture. If the declared CI/runtime toolchain loses one of these format capabilities, the repository gate fails instead of silently downgrading support.
+
+## RAW XMP sidecars
+
+RAW files remain immutable. Mediarama writes canonical editable metadata to a separate XMP artifact instead of rewriting DNG/CR2/CR3/NEF/NRW/ARW/RAF/ORF/RW2/PEF and related RAW originals.
+
+The sidecar writer:
+
+- is a separate application/infrastructure boundary from ordinary embedded metadata export;
+- does not read or mutate the original RAW stream;
+- supports Current, Privacy-safe and Custom metadata policies;
+- rejects the Original profile because that profile means original media bytes, not a generated metadata artifact;
+- uses ExifTool to create a standard XMP file from Mediarama's canonical database values.
+
+CI validates the sidecar through a real ExifTool read-back, including GPS removal for the Privacy-safe profile and field selection for the Custom profile.

@@ -25,6 +25,7 @@ final class ExifToolMetadataParser
             capturedAt: $this->date($this->first($raw, [
                 'Composite:SubSecDateTimeOriginal',
                 'ExifIFD:DateTimeOriginal',
+                'XMP-exif:DateTimeOriginal',
                 'EXIF:DateTimeOriginal',
                 'XMP-photoshop:DateCreated',
                 'XMP:DateCreated',

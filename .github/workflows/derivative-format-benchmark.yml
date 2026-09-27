@@ -1,0 +1,262 @@
+name: Representative derivative format benchmark
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/derivative-format-benchmark.yml'
+      - 'bin/benchmark-derivative-formats'
+      - 'bin/summarize-derivative-format-benchmark'
+      - 'tests/Integration/ImageMagick/derivative-format-benchmark.sh'
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    name: WebP JPEG AVIF representative corpus
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    env:
+      CODEC_CORPUS_SHA: 8e10d4d765667c1c49d74413878fc4bfb46dcf8d
+      IMAZEN26_SHA: fb09068fd09ba971d3e7bdf9695f2454a77aa9b6
+      IMAGEMAGICK_BINARY: convert
+      IMAGEMAGICK_IDENTIFY_BINARY: identify
+      IMAGEMAGICK_COMPARE_BINARY: compare
+      IMAGEMAGICK_LIMIT_MEMORY: 512MiB
+      IMAGEMAGICK_LIMIT_MAP: 1GiB
+      IMAGEMAGICK_LIMIT_DISK: 4GiB
+      IMAGEMAGICK_LIMIT_AREA: 1GiB
+      IMAGEMAGICK_LIMIT_WIDTH: 32768
+      IMAGEMAGICK_LIMIT_HEIGHT: 32768
+      IMAGEMAGICK_LIMIT_FILES: 128
+      IMAGEMAGICK_LIMIT_THREADS: 2
+      IMAGEMAGICK_LIMIT_TIME_SECONDS: 90
+      IMAGEMAGICK_LIMIT_LIST_LENGTH: 32
+      IMAGEMAGICK_PROCESS_TIMEOUT_SECONDS: 120
+      CWEBP_BINARY: cwebp
+      CWEBP_PROCESS_TIMEOUT_SECONDS: 120
+
+    steps:
+      - name: Checkout Mediarama
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          coverage: none
+          extensions: pdo_pgsql, pdo_mysql
+          tools: composer:v2
+          ini-values: variables_order=EGPCS
+
+      - name: Install benchmark runtime
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y imagemagick webp libheif-examples libheif-plugin-aomdec libheif-plugin-aomenc libheif-plugin-libde265 libheif-plugin-x265
+
+      - name: Install PHP dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Checkout pinned codec corpus
+        uses: actions/checkout@v4
+        with:
+          repository: imazen/codec-corpus
+          ref: 8e10d4d765667c1c49d74413878fc4bfb46dcf8d
+          path: benchmark-corpus
+          persist-credentials: false
+          fetch-depth: 1
+          sparse-checkout: |
+            gb82
+            clic2025/final-test
+          sparse-checkout-cone-mode: true
+
+      - name: Checkout pinned high-resolution manifest
+        uses: actions/checkout@v4
+        with:
+          repository: imazen/imazen-26
+          ref: fb09068fd09ba971d3e7bdf9695f2454a77aa9b6
+          path: benchmark-highres-manifest
+          persist-credentials: false
+          fetch-depth: 1
+          sparse-checkout: |
+            CORPUS-MANIFEST.tsv
+            CORPUS-MANIFEST.README.md
+            manifests/test.tsv
+          sparse-checkout-cone-mode: false
+
+      - name: Verify corpus provenance and licenses
+        run: |
+          test "$(git -C benchmark-corpus rev-parse HEAD)" = "$CODEC_CORPUS_SHA"
+          test "$(git -C benchmark-highres-manifest rev-parse HEAD)" = "$IMAZEN26_SHA"
+          test -f benchmark-corpus/gb82/LICENSE
+          test -f benchmark-corpus/clic2025/LICENSE
+          test -f benchmark-highres-manifest/CORPUS-MANIFEST.tsv
+          test -f benchmark-highres-manifest/CORPUS-MANIFEST.README.md
+          test -f benchmark-highres-manifest/manifests/test.tsv
+          test "$(find benchmark-corpus/gb82 -maxdepth 1 -type f -name '*.png' | wc -l)" -eq 25
+          test "$(find benchmark-corpus/clic2025/final-test -maxdepth 1 -type f -name '*.png' | wc -l)" -eq 30
+
+      - name: Prepare pinned high-resolution PD-own supplement
+        run: |
+          mkdir -p benchmark-highres
+          php <<'PHP' > /tmp/mediarama-highres.tsv
+          <?php
+          declare(strict_types=1);
+
+          $selected = ['1059', '1237', '1407', '1477', '1499', '1607'];
+          $allowedClasses = [
+              '1000-lilith-photos-general',
+              '1200-lilith-interiors',
+              '1400-lilith-nature',
+              '1600-lilith-food',
+          ];
+
+          $licenses = [];
+          $handle = fopen('benchmark-highres-manifest/CORPUS-MANIFEST.tsv', 'rb');
+          if ($handle === false) {
+              throw new RuntimeException('Unable to read imazen-26 corpus manifest.');
+          }
+          $header = fgetcsv($handle, separator: "\t");
+          if ($header === false) {
+              throw new RuntimeException('Invalid imazen-26 corpus manifest header.');
+          }
+          $index = array_flip($header);
+          foreach (['number', 'license'] as $required) {
+              if (!isset($index[$required])) {
+                  throw new RuntimeException('Missing imazen-26 manifest column '.$required);
+              }
+          }
+          while (($row = fgetcsv($handle, separator: "\t")) !== false) {
+              $number = $row[$index['number']] ?? '';
+              if (in_array($number, $selected, true)) {
+                  $licenses[$number] = $row[$index['license']] ?? '';
+              }
+          }
+          fclose($handle);
+
+          $rows = [];
+          $handle = fopen('benchmark-highres-manifest/manifests/test.tsv', 'rb');
+          if ($handle === false) {
+              throw new RuntimeException('Unable to read imazen-26 test split.');
+          }
+          $header = fgetcsv($handle, separator: "\t");
+          if ($header === false) {
+              throw new RuntimeException('Invalid imazen-26 test split header.');
+          }
+          $index = array_flip($header);
+          foreach (['id', 'split', 'content_class', 'width', 'height', 'format', 'sha256', 'raw_url'] as $required) {
+              if (!isset($index[$required])) {
+                  throw new RuntimeException('Missing imazen-26 test column '.$required);
+              }
+          }
+          while (($row = fgetcsv($handle, separator: "\t")) !== false) {
+              $id = $row[$index['id']] ?? '';
+              if (!in_array($id, $selected, true)) {
+                  continue;
+              }
+
+              $class = $row[$index['content_class']] ?? '';
+              $width = (int) ($row[$index['width']] ?? 0);
+              $height = (int) ($row[$index['height']] ?? 0);
+              $format = strtolower((string) ($row[$index['format']] ?? ''));
+
+              if (($row[$index['split']] ?? '') !== 'test'
+                  || !in_array($class, $allowedClasses, true)
+                  || ($licenses[$id] ?? null) !== 'PD-own'
+                  || $format !== 'jpg'
+                  || min($width, $height) < 2560) {
+                  throw new RuntimeException('High-resolution corpus row '.$id.' failed split/class/license/format/resolution validation.');
+              }
+
+              $rows[$id] = [
+                  'sha256' => $row[$index['sha256']] ?? '',
+                  'url' => $row[$index['raw_url']] ?? '',
+              ];
+          }
+          fclose($handle);
+
+          // PHP converts numeric-string array keys such as "1069" to integers.
+          // Normalize them back to strings before the strict manifest completeness check.
+          $sortedRows = array_map('strval', array_keys($rows));
+          sort($sortedRows, SORT_STRING);
+          $sortedSelected = $selected;
+          sort($sortedSelected, SORT_STRING);
+          if ($sortedRows !== $sortedSelected) {
+              throw new RuntimeException('Pinned high-resolution corpus selection is incomplete.');
+          }
+
+          foreach ($selected as $id) {
+              $row = $rows[$id] ?? null;
+              if (!is_array($row)
+                  || preg_match('/^[a-f0-9]{64}$/', (string) $row['sha256']) !== 1
+                  || !str_starts_with((string) $row['url'], 'https://codec-corpus.r2.imazen.org/')) {
+                  throw new RuntimeException('Invalid high-resolution corpus row '.$id.'.');
+              }
+              echo $id."\t".$row['sha256']."\t".$row['url']."\n";
+          }
+          PHP
+
+          while IFS=$'\t' read -r id expected_sha url; do
+            extension="${url##*.}"
+            destination="benchmark-highres/${id}.${extension}"
+            curl --fail --location --silent --show-error --retry 3 "$url" --output "$destination"
+            printf '%s  %s\n' "$expected_sha" "$destination" | sha256sum --check -
+          done < /tmp/mediarama-highres.tsv
+          test "$(find benchmark-highres -maxdepth 1 -type f | wc -l)" -eq 6
+
+      - name: Benchmark GB82
+        run: |
+          mkdir -p var/benchmarks
+          php bin/benchmark-derivative-formats \
+            --input-dir=benchmark-corpus/gb82 \
+            --output=var/benchmarks/gb82.json \
+            --formats=webp,jpeg,avif \
+            --qualities=55,70,82,90 \
+            --profiles=thumbnail:480x480,source:576x576 \
+            --corpus-id=imazen/codec-corpus:gb82 \
+            --corpus-revision="$CODEC_CORPUS_SHA"
+
+      - name: Benchmark CLIC 2025 final holdout
+        run: |
+          php bin/benchmark-derivative-formats \
+            --input-dir=benchmark-corpus/clic2025/final-test \
+            --output=var/benchmarks/clic2025-final.json \
+            --formats=webp,jpeg,avif \
+            --qualities=55,70,82,90 \
+            --profiles=thumbnail:480x480,preview:1600x1600,large:2560x2560 \
+            --corpus-id=imazen/codec-corpus:clic2025-final \
+            --corpus-revision="$CODEC_CORPUS_SHA"
+
+      - name: Benchmark high-resolution PD-own supplement
+        run: |
+          php bin/benchmark-derivative-formats \
+            --input-dir=benchmark-highres \
+            --output=var/benchmarks/imazen26-highres.json \
+            --formats=webp,jpeg,avif \
+            --qualities=55,70,82,90 \
+            --profiles=thumbnail:480x480,preview:1600x1600,large:2560x2560 \
+            --corpus-id=imazen/imazen-26:pd-own-test-highres \
+            --corpus-revision="$IMAZEN26_SHA" \
+            --retain-dir=var/benchmarks/review-highres
+
+      - name: Summarize benchmark curves
+        run: |
+          php bin/summarize-derivative-format-benchmark \
+            --report=gb82:var/benchmarks/gb82.json \
+            --report=clic2025-final:var/benchmarks/clic2025-final.json \
+            --report=imazen26-highres:var/benchmarks/imazen26-highres.json \
+            --markdown=var/benchmarks/summary.md \
+            --json=var/benchmarks/summary.json
+          cat var/benchmarks/summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload benchmark evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: derivative-format-benchmark
+          path: var/benchmarks/
+          if-no-files-found: error
+          retention-days: 30

@@ -1,0 +1,253 @@
+{
+  "schema_version": 1,
+  "purpose": "Durable sanitized decision evidence for Mediarama derivative-format benchmark. No source images or private metadata are included.",
+  "accepted_run": {
+    "github_actions_run_id": 36329534098,
+    "head_sha": "4a30145da6dcb6a04dd730d791d84ba37002fae8",
+    "ci_run_id": 36329534026,
+    "artifact_id": 10935142827,
+    "artifact_sha256": "01985103d60c8680ae872cdba97f0ff73895d4b564dfe61ee4a486d6b742e703",
+    "artifact_expires_at": "2026-10-27T15:38:54Z"
+  },
+  "corpora": [
+    {
+      "label": "gb82",
+      "id": "imazen/codec-corpus:gb82",
+      "revision": "8e10d4d765667c1c49d74413878fc4bfb46dcf8d",
+      "sources": 25,
+      "successful_samples": 600
+    },
+    {
+      "label": "clic2025-final",
+      "id": "imazen/codec-corpus:clic2025-final",
+      "revision": "8e10d4d765667c1c49d74413878fc4bfb46dcf8d",
+      "sources": 30,
+      "successful_samples": 1080
+    },
+    {
+      "label": "imazen26-highres",
+      "id": "imazen/imazen-26:pd-own-test-highres",
+      "revision": "fb09068fd09ba971d3e7bdf9695f2454a77aa9b6",
+      "sources": 6,
+      "successful_samples": 216
+    }
+  ],
+  "runtime": {
+    "php": "8.5.11",
+    "imagemagick": "6.9.12-98 Q16",
+    "webp_backend": "cwebp",
+    "cwebp": "1.3.2",
+    "libsharpyuv": "0.2.1"
+  },
+  "raw_report_integrity": {
+    "gb82.json": {
+      "sha256": "943fcfc05613a1300e37bcfacf067cc45acb9056492eeaea037beb652c4b293b",
+      "bytes": 329517
+    },
+    "clic2025-final.json": {
+      "sha256": "ba8b9fa9860f88d11c4ce8603a87842802b03fe7b001d72057fc7168179ba39f",
+      "bytes": 590876
+    },
+    "imazen26-highres.json": {
+      "sha256": "d4d78b39e62057ec2d46a0862b6fd306ca7ef95f4932045695fa21e3ddaa9fd2",
+      "bytes": 120038
+    },
+    "summary.json": {
+      "sha256": "2b94bb6c0389f9aa2e9a451c12aaf6c5a59d9c6ae5e07dd09dd1eb8a5bd19887",
+      "bytes": 53506
+    },
+    "summary.md": {
+      "sha256": "3e08c3bf40aae45c15dca66679c49c5fe7c265fbba0c71d427c15ffd00482aa2",
+      "bytes": 12113
+    }
+  },
+  "production_webp_targets": {
+    "thumbnail": 82,
+    "preview": 84,
+    "large": 86
+  },
+  "equal_psnr_analysis": {
+    "method": "Per source/profile, linearly interpolate WebP PSNR/bytes/time at the production WebP quality, then interpolate JPEG/AVIF bytes/time at the same PSNR when the target is inside that codec measured Q55/Q70/Q82/Q90 PSNR range. Ratios are candidate/WebP. PSNR is supporting evidence, not a perceptual-equivalence guarantee.",
+    "per_corpus": {
+      "gb82": {
+        "source": {
+          "webp_q": 82,
+          "jpeg": {
+            "comparable": 25,
+            "of": 25,
+            "median_size_ratio": 1.517844,
+            "median_encode_time_ratio": 0.438478
+          },
+          "avif": {
+            "comparable": 25,
+            "of": 25,
+            "median_size_ratio": 0.779377,
+            "median_encode_time_ratio": 3.000156
+          }
+        },
+        "thumbnail": {
+          "webp_q": 82,
+          "jpeg": {
+            "comparable": 25,
+            "of": 25,
+            "median_size_ratio": 1.510189,
+            "median_encode_time_ratio": 0.499163
+          },
+          "avif": {
+            "comparable": 25,
+            "of": 25,
+            "median_size_ratio": 0.787143,
+            "median_encode_time_ratio": 2.657894
+          }
+        }
+      },
+      "clic2025-final": {
+        "thumbnail": {
+          "webp_q": 82,
+          "jpeg": {
+            "comparable": 29,
+            "of": 30,
+            "median_size_ratio": 1.482659,
+            "median_encode_time_ratio": 0.541027
+          },
+          "avif": {
+            "comparable": 30,
+            "of": 30,
+            "median_size_ratio": 0.892819,
+            "median_encode_time_ratio": 3.488377
+          }
+        },
+        "preview": {
+          "webp_q": 84,
+          "jpeg": {
+            "comparable": 29,
+            "of": 30,
+            "median_size_ratio": 1.481386,
+            "median_encode_time_ratio": 0.309486
+          },
+          "avif": {
+            "comparable": 30,
+            "of": 30,
+            "median_size_ratio": 0.837448,
+            "median_encode_time_ratio": 2.189156
+          }
+        },
+        "large": {
+          "webp_q": 86,
+          "jpeg": {
+            "comparable": 25,
+            "of": 30,
+            "median_size_ratio": 1.49207,
+            "median_encode_time_ratio": 0.296223
+          },
+          "avif": {
+            "comparable": 30,
+            "of": 30,
+            "median_size_ratio": 0.878987,
+            "median_encode_time_ratio": 2.113836
+          }
+        }
+      },
+      "imazen26-highres": {
+        "thumbnail": {
+          "webp_q": 82,
+          "jpeg": {
+            "comparable": 6,
+            "of": 6,
+            "median_size_ratio": 1.533868,
+            "median_encode_time_ratio": 0.500873
+          },
+          "avif": {
+            "comparable": 6,
+            "of": 6,
+            "median_size_ratio": 0.882686,
+            "median_encode_time_ratio": 3.097577
+          }
+        },
+        "preview": {
+          "webp_q": 84,
+          "jpeg": {
+            "comparable": 5,
+            "of": 6,
+            "median_size_ratio": 1.516118,
+            "median_encode_time_ratio": 0.293232
+          },
+          "avif": {
+            "comparable": 6,
+            "of": 6,
+            "median_size_ratio": 0.898098,
+            "median_encode_time_ratio": 2.04142
+          }
+        },
+        "large": {
+          "webp_q": 86,
+          "jpeg": {
+            "comparable": 5,
+            "of": 6,
+            "median_size_ratio": 1.417052,
+            "median_encode_time_ratio": 0.27093
+          },
+          "avif": {
+            "comparable": 6,
+            "of": 6,
+            "median_size_ratio": 0.877262,
+            "median_encode_time_ratio": 1.79711
+          }
+        }
+      }
+    },
+    "pooled": {
+      "thumbnail": {
+        "jpeg": {
+          "comparable": 60,
+          "median_size_ratio": 1.5111,
+          "median_size_delta_percent": 51.11,
+          "median_encode_time_ratio": 0.523
+        },
+        "avif": {
+          "comparable": 61,
+          "median_size_ratio": 0.8586,
+          "median_size_delta_percent": -14.14,
+          "median_encode_time_ratio": 3.119
+        }
+      },
+      "preview": {
+        "jpeg": {
+          "comparable": 34,
+          "median_size_ratio": 1.4835,
+          "median_size_delta_percent": 48.35,
+          "median_encode_time_ratio": 0.302
+        },
+        "avif": {
+          "comparable": 36,
+          "median_size_ratio": 0.8454,
+          "median_size_delta_percent": -15.46,
+          "median_encode_time_ratio": 2.182
+        }
+      },
+      "large": {
+        "jpeg": {
+          "comparable": 30,
+          "median_size_ratio": 1.476,
+          "median_size_delta_percent": 47.6,
+          "median_encode_time_ratio": 0.295
+        },
+        "avif": {
+          "comparable": 36,
+          "median_size_ratio": 0.879,
+          "median_size_delta_percent": -12.1,
+          "median_encode_time_ratio": 2.008
+        }
+      }
+    }
+  },
+  "visual_review": {
+    "scope": "Six manifest-verified high-resolution PD-own sources, retained lossless references and WebP/JPEG/AVIF Q55/Q70/Q82/Q90 candidates; thumbnail, preview, large and detail crops reviewed.",
+    "result": "No systematic visual defect or decisive perceptual advantage contradicted the measured curves. At comparable measured quality, AVIF mainly reduced bytes while JPEG mainly reduced encode time."
+  },
+  "decision_support": {
+    "webp": "Retain cwebp WebP as the sole standard display derivative codec in the current single-format profile architecture.",
+    "jpeg": "Do not expose JPEG display profiles: materially larger at comparable PSNR and alpha semantics would need a new explicit policy, despite faster encoding.",
+    "avif": "Do not replace WebP with AVIF in the current single-format model. Revisit only with an intentional multi-format variant/fallback model and refreshed production-backend benchmarks."
+  }
+}

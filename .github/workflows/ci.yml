@@ -56,6 +56,7 @@ jobs:
       FFPROBE_ANALYZE_DURATION_US: 5000000
       IMAGEMAGICK_BINARY: convert
       IMAGEMAGICK_IDENTIFY_BINARY: identify
+      IMAGEMAGICK_COMPARE_BINARY: compare
       IMAGEMAGICK_LIMIT_MEMORY: 256MiB
       IMAGEMAGICK_LIMIT_MAP: 512MiB
       IMAGEMAGICK_LIMIT_DISK: 2GiB
@@ -67,6 +68,16 @@ jobs:
       IMAGEMAGICK_LIMIT_TIME_SECONDS: 45
       IMAGEMAGICK_LIMIT_LIST_LENGTH: 32
       IMAGEMAGICK_PROCESS_TIMEOUT_SECONDS: 60
+      CWEBP_BINARY: cwebp
+      CWEBP_PROCESS_TIMEOUT_SECONDS: 60
+      IMAGE_WATERMARK_ASSET_PATH: ""
+      IMAGE_WATERMARK_SIZE_PERCENT: 18
+      IMAGE_WATERMARK_OPACITY_PERCENT: 35
+      IMAGE_WATERMARK_MARGIN_PERCENT: 2
+      IMAGE_WATERMARK_GRAVITY: southeast
+      IMAGE_WATERMARK_THUMBNAIL: false
+      IMAGE_WATERMARK_PREVIEW: false
+      IMAGE_WATERMARK_LARGE: false
       UPLOAD_MAX_ASSET_BYTES: 2147483648
       UPLOAD_MAX_CHUNK_BYTES: 16777216
       UPLOAD_DEFAULT_QUOTA_BYTES: 0
@@ -98,7 +109,7 @@ jobs:
       - name: Install runtime tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y exiftool ffmpeg imagemagick mariadb-client
+          sudo apt-get install -y exiftool ffmpeg imagemagick webp mariadb-client libheif-examples libheif-plugin-aomdec libheif-plugin-aomenc libheif-plugin-libde265 libheif-plugin-x265
 
       - name: Validate Composer metadata
         run: composer validate --strict
@@ -123,6 +134,24 @@ jobs:
 
       - name: Verify ImageMagick application resource envelope
         run: php tests/Integration/ImageMagick/resource-limits.php
+
+      - name: Verify cwebp quality control
+        run: php tests/Integration/ImageMagick/cwebp-quality.php
+
+      - name: Verify real image derivative formats
+        run: php tests/Integration/ImageMagick/real-format-derivatives.php
+
+      - name: Verify derivative format benchmark harness
+        run: bash tests/Integration/ImageMagick/derivative-format-benchmark.sh
+
+      - name: Verify profile-level watermark rendering
+        run: php tests/Integration/ImageMagick/watermark.php
+
+      - name: Verify real metadata format round trips
+        run: php tests/Integration/Metadata/real-format-roundtrip.php
+
+      - name: Verify RAW XMP sidecar export
+        run: php tests/Integration/Metadata/raw-xmp-sidecar.php
 
       - name: Verify upload structural media validation
         run: php tests/Integration/Upload/structural-validation.php
@@ -183,6 +212,9 @@ jobs:
 
       - name: Show migration status
         run: php bin/console doctrine:migrations:status
+
+      - name: Verify derivative regeneration persistence and locking
+        run: php tests/Integration/Media/derivative-regeneration.php
 
       - name: Verify collection access policy
         run: php tests/Integration/Collection/access-policy.php
@@ -787,7 +819,7 @@ jobs:
           cp /tmp/coppermine-albums/userpics/sample.jpg /tmp/coppermine-albums/userpics/sample.jpg.good
           head -c 100 /tmp/coppermine-albums/userpics/sample.jpg.good > /tmp/coppermine-albums/userpics/sample.jpg
           php -r '$mime=(new finfo(FILEINFO_MIME_TYPE))->file($argv[1]); if ($mime !== "image/jpeg") { fwrite(STDERR, "Expected truncated fixture to remain image/jpeg, got ".$mime.PHP_EOL); exit(1); }' /tmp/coppermine-albums/userpics/sample.jpg
-          assert_inspect_blocked corrupt-image 'Picture 100 source media is not importable: Unable to inspect image geometry:'
+          assert_inspect_blocked corrupt-image 'Picture 100 source media is not importable:'
           mv /tmp/coppermine-albums/userpics/sample.jpg.good /tmp/coppermine-albums/userpics/sample.jpg
 
       - name: Verify unusual Coppermine prefix and configuration

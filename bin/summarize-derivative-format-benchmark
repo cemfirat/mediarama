@@ -1,0 +1,318 @@
+<?php
+
+declare(strict_types=1);
+
+function summaryFail(string $message): never
+{
+    fwrite(STDERR, $message.PHP_EOL);
+    exit(1);
+}
+
+/** @return list<string> */
+function summaryOptionList(mixed $value): array
+{
+    if (is_string($value) && $value !== '') {
+        return [$value];
+    }
+
+    if (is_array($value)) {
+        return array_values(array_filter(
+            $value,
+            static fn (mixed $item): bool => is_string($item) && $item !== '',
+        ));
+    }
+
+    return [];
+}
+
+/** @param list<int|float> $values */
+function summaryMean(array $values): ?float
+{
+    if ($values === []) {
+        return null;
+    }
+
+    return array_sum($values) / count($values);
+}
+
+/** @param list<int|float> $values */
+function summaryMedian(array $values): ?float
+{
+    if ($values === []) {
+        return null;
+    }
+
+    sort($values, SORT_NUMERIC);
+    $count = count($values);
+    $middle = intdiv($count, 2);
+
+    if ($count % 2 === 1) {
+        return (float) $values[$middle];
+    }
+
+    return ((float) $values[$middle - 1] + (float) $values[$middle]) / 2;
+}
+
+function summaryNumber(?float $value, int $decimals = 3): string
+{
+    if ($value === null) {
+        return 'n/a';
+    }
+
+    return number_format($value, $decimals, '.', '');
+}
+
+function summaryBytes(?float $value): string
+{
+    if ($value === null) {
+        return 'n/a';
+    }
+
+    return number_format($value / 1024, 1, '.', '').' KiB';
+}
+
+$options = getopt('', [
+    'report:',
+    'markdown:',
+    'json:',
+    'help',
+]);
+
+if ($options === false) {
+    summaryFail('Unable to parse benchmark summary options.');
+}
+
+if (array_key_exists('help', $options)) {
+    echo <<<'TXT'
+Mediarama derivative-format benchmark summary
+
+Required:
+  --report=label:/path/to/report.json
+  --markdown=/path/to/summary.md
+  --json=/path/to/summary.json
+
+Repeat --report for multiple corpora.
+TXT;
+    exit(0);
+}
+
+$reportArguments = summaryOptionList($options['report'] ?? null);
+$markdownPath = isset($options['markdown']) ? trim((string) $options['markdown']) : '';
+$jsonPath = isset($options['json']) ? trim((string) $options['json']) : '';
+
+if ($reportArguments === [] || $markdownPath === '' || $jsonPath === '') {
+    summaryFail('At least one --report plus --markdown and --json are required.');
+}
+
+/** @var list<array<string, mixed>> $reportSummaries */
+$reportSummaries = [];
+/** @var array<string, array<string, mixed>> $groups */
+$groups = [];
+
+foreach ($reportArguments as $argument) {
+    $separator = strpos($argument, ':');
+    if ($separator === false || $separator === 0 || $separator === strlen($argument) - 1) {
+        summaryFail('Report arguments must use label:/path/to/report.json.');
+    }
+
+    $label = substr($argument, 0, $separator);
+    $path = substr($argument, $separator + 1);
+
+    if (preg_match('/^[a-z0-9][a-z0-9_-]{0,63}$/', $label) !== 1) {
+        summaryFail('Invalid report label: '.$label);
+    }
+
+    $raw = file_get_contents($path);
+    if ($raw === false) {
+        summaryFail('Unable to read benchmark report: '.$path);
+    }
+
+    $report = json_decode($raw, true, flags: JSON_THROW_ON_ERROR);
+    if (!is_array($report) || ($report['schema_version'] ?? null) !== 2) {
+        summaryFail('Unsupported benchmark report schema: '.$path);
+    }
+
+    $sources = is_array($report['sources'] ?? null) ? $report['sources'] : [];
+    $samples = is_array($report['samples'] ?? null) ? $report['samples'] : [];
+    $capabilities = is_array($report['capabilities'] ?? null) ? $report['capabilities'] : [];
+
+    $reportSummaries[] = [
+        'label' => $label,
+        'corpus' => is_array($report['corpus'] ?? null) ? $report['corpus'] : [],
+        'source_count' => count($sources),
+        'sample_count' => count($samples),
+        'capabilities' => $capabilities,
+        'runtime' => is_array($report['runtime'] ?? null) ? $report['runtime'] : [],
+    ];
+
+    foreach ($samples as $sample) {
+        if (!is_array($sample) || !isset($sample['profile'], $sample['format'])) {
+            continue;
+        }
+
+        $quality = isset($sample['quality']) ? (int) $sample['quality'] : null;
+        if ($quality === null) {
+            continue;
+        }
+
+        $profile = (string) $sample['profile'];
+        $format = (string) $sample['format'];
+        $key = implode('|', [$label, $profile, $format, (string) $quality]);
+
+        if (!isset($groups[$key])) {
+            $groups[$key] = [
+                'corpus' => $label,
+                'profile' => $profile,
+                'format' => $format,
+                'encoder_backend' => (string) ($sample['encoder_backend'] ?? ($format === 'webp' ? 'cwebp' : 'imagemagick')),
+                'quality' => $quality,
+                'ok_count' => 0,
+                'failed_count' => 0,
+                'bytes' => [],
+                'duration_ms' => [],
+                'ssim' => [],
+                'psnr' => [],
+            ];
+        }
+
+        if (($sample['status'] ?? null) !== 'ok') {
+            ++$groups[$key]['failed_count'];
+            continue;
+        }
+
+        ++$groups[$key]['ok_count'];
+        $groups[$key]['bytes'][] = (int) ($sample['byte_size'] ?? 0);
+        $groups[$key]['duration_ms'][] = (float) ($sample['encode_duration_ms'] ?? 0);
+
+        if (isset($sample['ssim']) && is_numeric($sample['ssim'])) {
+            $groups[$key]['ssim'][] = (float) $sample['ssim'];
+        }
+        if (isset($sample['psnr']) && is_numeric($sample['psnr'])) {
+            $groups[$key]['psnr'][] = (float) $sample['psnr'];
+        }
+    }
+}
+
+ksort($groups, SORT_STRING);
+
+$aggregates = [];
+foreach ($groups as $group) {
+    $aggregates[] = [
+        'corpus' => $group['corpus'],
+        'profile' => $group['profile'],
+        'format' => $group['format'],
+        'encoder_backend' => $group['encoder_backend'],
+        'quality' => $group['quality'],
+        'ok_count' => $group['ok_count'],
+        'failed_count' => $group['failed_count'],
+        'mean_bytes' => summaryMean($group['bytes']),
+        'median_bytes' => summaryMedian($group['bytes']),
+        'mean_encode_duration_ms' => summaryMean($group['duration_ms']),
+        'median_encode_duration_ms' => summaryMedian($group['duration_ms']),
+        'mean_ssim' => summaryMean($group['ssim']),
+        'mean_psnr' => summaryMean($group['psnr']),
+    ];
+}
+
+$summary = [
+    'schema_version' => 2,
+    'generated_at' => (new DateTimeImmutable())->format(DATE_ATOM),
+    'interpretation' => 'Measurement summary only. Matching numeric quality values are not equal-quality cross-codec points.',
+    'reports' => $reportSummaries,
+    'aggregates' => $aggregates,
+];
+
+$jsonDirectory = dirname($jsonPath);
+if (!is_dir($jsonDirectory) && !mkdir($jsonDirectory, 0770, true) && !is_dir($jsonDirectory)) {
+    summaryFail('Unable to create JSON summary directory.');
+}
+
+$json = json_encode(
+    $summary,
+    JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR,
+).PHP_EOL;
+
+if (file_put_contents($jsonPath, $json, LOCK_EX) === false) {
+    summaryFail('Unable to write JSON benchmark summary.');
+}
+
+$lines = [
+    '# Mediarama derivative-format benchmark',
+    '',
+    '> Measurement summary only. Numeric quality values are codec-specific curve points; matching quality numbers are not equal-quality cross-codec comparisons.',
+    '',
+    '## Corpus and runtime',
+    '',
+    '| Corpus | Corpus ID | Revision | Sources | WebP | JPEG | AVIF | ImageMagick | cwebp |',
+    '| --- | --- | --- | ---: | --- | --- | --- | --- | --- |',
+];
+
+foreach ($reportSummaries as $report) {
+    $capabilities = $report['capabilities'];
+    $capability = static function (string $format) use ($capabilities): string {
+        return ($capabilities[$format]['supported'] ?? false) ? 'supported' : 'unsupported';
+    };
+
+    $corpus = $report['corpus'];
+
+    $lines[] = sprintf(
+        '| %s | %s | %s | %d | %s | %s | %s | %s | %s |',
+        $report['label'],
+        (string) ($corpus['id'] ?? 'n/a'),
+        (string) ($corpus['revision'] ?? 'n/a'),
+        $report['source_count'],
+        $capability('webp'),
+        $capability('jpeg'),
+        $capability('avif'),
+        str_replace('|', '\\|', (string) ($report['runtime']['imagemagick'] ?? 'n/a')),
+        str_replace('|', '\\|', (string) ($report['runtime']['cwebp_version'] ?? 'n/a')),
+    );
+}
+
+$lines[] = '';
+$lines[] = '## Codec curves';
+$lines[] = '';
+$lines[] = '| Corpus | Profile | Codec | Backend | Q | N | Failed | Median size | Mean size | Median encode | Mean SSIM | Mean PSNR |';
+$lines[] = '| --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |';
+
+foreach ($aggregates as $row) {
+    $lines[] = sprintf(
+        '| %s | %s | %s | %s | %d | %d | %d | %s | %s | %s ms | %s | %s |',
+        $row['corpus'],
+        $row['profile'],
+        strtoupper($row['format']),
+        $row['encoder_backend'],
+        $row['quality'],
+        $row['ok_count'],
+        $row['failed_count'],
+        summaryBytes($row['median_bytes']),
+        summaryBytes($row['mean_bytes']),
+        summaryNumber($row['median_encode_duration_ms'], 1),
+        summaryNumber($row['mean_ssim'], 5),
+        summaryNumber($row['mean_psnr'], 3),
+    );
+}
+
+$lines[] = '';
+$lines[] = '## Interpretation boundary';
+$lines[] = '';
+$lines[] = '- Compare codec curves at similar measured quality regions, not at matching numeric Q values.';
+$lines[] = '- Encode duration is runner-dependent and should be interpreted comparatively within the same run.';
+$lines[] = '- SSIM/PSNR are supporting measurements; visual review of difficult images remains required.';
+$lines[] = '- No production codec/profile change is implied by this report.';
+$lines[] = '';
+
+$markdownDirectory = dirname($markdownPath);
+if (!is_dir($markdownDirectory) && !mkdir($markdownDirectory, 0770, true) && !is_dir($markdownDirectory)) {
+    summaryFail('Unable to create Markdown summary directory.');
+}
+
+if (file_put_contents($markdownPath, implode(PHP_EOL, $lines), LOCK_EX) === false) {
+    summaryFail('Unable to write Markdown benchmark summary.');
+}
+
+echo sprintf(
+    "Benchmark summary complete: %d report(s), %d aggregate row(s).\n",
+    count($reportSummaries),
+    count($aggregates),
+);
