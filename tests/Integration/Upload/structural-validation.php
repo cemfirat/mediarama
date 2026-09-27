@@ -129,6 +129,7 @@ $audio = $fixtures.'/valid.mp3';
 $video = $fixtures.'/valid.mp4';
 $invalidAv = $fixtures.'/invalid.bin';
 $slowIdentify = $fixtures.'/slow-identify';
+$nonExecutableIdentify = $fixtures.'/non-executable-identify';
 $invalidGeometry = $fixtures.'/invalid-geometry';
 $slowFfprobe = $fixtures.'/slow-ffprobe';
 $invalidJsonFfprobe = $fixtures.'/invalid-json-ffprobe';
@@ -163,6 +164,7 @@ try {
     requireCondition(file_put_contents($invalidAv, "not a media file\n") !== false, 'Unable to create invalid AV fixture.');
 
     writeFakeTool($slowIdentify, "sleep 2\nprintf '32 32 Undefined'");
+    writeFakeTool($nonExecutableIdentify, "printf '32 32 Undefined'", false);
     writeFakeTool($invalidGeometry, "printf 'not-a-geometry-response'");
     writeFakeTool($slowFfprobe, "sleep 2\nprintf '{\"streams\":[{\"codec_type\":\"audio\"}]}'");
     writeFakeTool($invalidJsonFfprobe, "printf 'not-json'");
@@ -262,6 +264,21 @@ try {
         'ImageMagick timeout was not classified as unavailable.',
     );
 
+    $nonExecutableImageValidator = new LocalStoredMediaStructureValidator(
+        $storage,
+        new ImageMagickFileGeometryInspector(new ImageMagickProcess(
+            new ImageMagickResourceLimits(),
+            $convertBinary,
+            $nonExecutableIdentify,
+            0.25,
+        )),
+        new FfprobeProcess($ffprobeBinary, 15.0, 33554432, 5000000),
+    );
+    requireValidationUnavailable(
+        static fn () => $nonExecutableImageValidator($validImage, MediaType::Image),
+        'Non-executable ImageMagick identify binary was not classified as unavailable.',
+    );
+
     $invalidGeometryValidator = new LocalStoredMediaStructureValidator(
         $storage,
         new ImageMagickFileGeometryInspector(new ImageMagickProcess(
@@ -333,6 +350,7 @@ try {
     echo "OK stream-type mismatch rejected\n";
     echo "OK missing ImageMagick classified unavailable\n";
     echo "OK ImageMagick timeout classified unavailable\n";
+    echo "OK non-executable ImageMagick classified unavailable\n";
     echo "OK invalid ImageMagick geometry response rejected\n";
     echo "OK missing/non-executable FFprobe classified unavailable\n";
     echo "OK FFprobe timeout classified unavailable\n";
