@@ -85,6 +85,8 @@ final readonly class ImageMagickDerivativeGenerator implements ImageDerivativeGe
                     '-strip',
                     '-thumbnail',
                     sprintf('%dx%d>', $profile->maximumWidth, $profile->maximumHeight),
+                    '-colorspace',
+                    'sRGB',
                     'miff:'.$intermediate,
                 ]);
 
@@ -106,6 +108,8 @@ final readonly class ImageMagickDerivativeGenerator implements ImageDerivativeGe
                     '-strip',
                     '-thumbnail',
                     sprintf('%dx%d>', $profile->maximumWidth, $profile->maximumHeight),
+                    '-colorspace',
+                    'sRGB',
                     'png:'.$prepared,
                 ]);
             }
