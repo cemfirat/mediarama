@@ -621,9 +621,9 @@ jobs:
 
           mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine \
             -e "UPDATE cpg_usergroups SET group_quota = 1024 WHERE group_id = 3;"
-          assert_inspect_blocked effective-group-quota 'User 1 has effective Coppermine upload quota 1024 KiB; Mediarama currently uses an unlimited quota adapter and cannot preserve this limit.'
+          assert_inspect_clean effective-group-quota
           mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine \
-            -e "UPDATE cpg_usergroups SET group_quota = 0 WHERE group_id = 3;"
+            -e "UPDATE cpg_usergroups SET group_quota = 2048 WHERE group_id = 3;"
 
           mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine \
             -e "UPDATE cpg_usergroups SET pub_upl_need_approval = 1 WHERE group_id = 3;"

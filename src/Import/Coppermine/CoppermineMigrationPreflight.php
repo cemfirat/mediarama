@@ -256,8 +256,6 @@ SQL,
                 continue;
             }
 
-            $quotas = array_map(static fn (array $group): int => (int) $group['group_quota'], $effectiveGroups);
-            $effectiveQuota = in_array(0, $quotas, true) ? 0 : max($quotas);
             $canUpload = max(array_map(
                 static fn (array $group): int => max((int) $group['can_upload_pictures'], (int) $group['can_create_albums']),
                 $effectiveGroups,
@@ -265,14 +263,6 @@ SQL,
             $publicApproval = min(array_map(static fn (array $group): int => (int) $group['pub_upl_need_approval'], $effectiveGroups));
             $privateApproval = min(array_map(static fn (array $group): int => (int) $group['priv_upl_need_approval'], $effectiveGroups));
             $accessLevel = max(array_map(static fn (array $group): int => (int) $group['access_level'], $effectiveGroups));
-
-            if ($effectiveQuota > 0) {
-                $blockers[] = sprintf(
-                    'User %s has effective Coppermine upload quota %d KiB; Mediarama currently uses an unlimited quota adapter and cannot preserve this limit.',
-                    $userId,
-                    $effectiveQuota,
-                );
-            }
 
             if ($canUpload && $publicApproval === 1) {
                 $blockers[] = sprintf(

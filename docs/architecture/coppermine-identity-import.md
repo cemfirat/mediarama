@@ -33,14 +33,15 @@ Coppermine derives several effective user policies across all group memberships 
 - public/private upload approval uses the least restrictive group value;
 - `access_level` uses the highest level (`0` none, `1` thumbnails, `2` intermediate, `3` full-size).
 
-Mediarama's current upload foundation deliberately has an `UploadQuota` abstraction, but production wiring still uses `UnlimitedUploadQuota`; it also does not yet model migrated public/private upload-approval rules or Coppermine's thumbnail/intermediate/full-size access tiers.
+Mediarama now persists Coppermine group quota policy in normalized `group_storage_quotas`. Source `group_quota` values are converted from KiB to bytes; `0` remains explicit unlimited. Runtime quota resolution uses the normalized `user_groups` memberships and preserves Coppermine's effective rule: any unlimited group wins, otherwise the largest finite group quota wins.
 
-Preflight therefore evaluates the **effective policy per existing source user** using Coppermine's own aggregation semantics. Migration is blocked when an existing user would lose:
+Preflight therefore no longer treats a valid finite quota as data loss. It still evaluates the **effective policy per existing source user** for policy dimensions that are not yet modeled. Migration is blocked when an existing user would lose:
 
-- a finite upload quota;
 - a required public/private upload approval rule;
 - an access level below full-size;
 - or a referenced source group is missing.
+
+Negative source quota values remain invalid source state and block migration before writes.
 
 This is intentionally user-effective rather than a raw per-group comparison, so a liberal supplemental group is handled the same way Coppermine handles it and does not create a false blocker.
 

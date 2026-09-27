@@ -38,7 +38,7 @@ Each source concept must end in one of these states:
 | `plugins` | installed plugin registry, enablement and priority; plugin/custom tables may remain independently | registry itself is not migrated; installed rows and unknown Coppermine-prefixed tables block preflight | Intentional omission as runtime registry + plugin/custom-data blocker | audit/resolve each installed plugin and any unknown prefixed table before core migration |
 | `sessions` | active login/remember-me runtime state | not migrated | Intentional omission | legacy authentication/session credentials expire with Coppermine; users establish new Mediarama auth state |
 | `temp_messages` | transient redirect/cross-page status messages | not migrated | Intentional omission | deleted after fetch/cleanup; request-flow state, not content |
-| `usergroups` | global capabilities, quotas, upload approval, access tier, e-card capability | major capabilities migrate; effective finite quota/approval/access-tier semantics now block preflight until equivalent target policy exists | Transform + explicit blockers | implement persistent quota/accounting and deliberate moderation/derivative-access policy if parity is required; e-card capability is intentionally omitted with the feature |
+| `usergroups` | global capabilities, quotas, upload approval, access tier, e-card capability | major capabilities and group quotas migrate; upload-approval/access-tier semantics still block preflight until equivalent target policy exists | Transform + explicit blockers | quota policy is normalized in `group_storage_quotas`; deliberate moderation/derivative-access policy is still required for the remaining blockers; e-card capability is intentionally omitted with the feature |
 | `users` | local identities, profiles, activation/status | core identity import exists; non-empty `user_profile1..6` now blocks preflight | Transform + explicit blockers | design profile-field target mapping; activation tokens are intentionally not reusable; bridged identities remain unsupported |
 | `votes` | per-voter anti-repeat records without the individual rating value | individual rating is not fabricated; source aggregate remains preserved | Historical / intentional omission of unrecoverable detail | none unless separate recoverable detailed rating data exists |
 | `vote_stats` | detailed ratings + IP/referrer/browser/OS/user | recoverable user-linked rating value/time migrate; network/client telemetry does not | Transform + intentional privacy reduction | no raw telemetry import by default |
@@ -180,17 +180,18 @@ Verified 1.6/1.7 behavior:
 - public/private approval flags use the least restrictive value;
 - `access_level` uses the highest level: `0` none, `1` thumbnail only, `2` intermediate, `3` full-size.
 
-Mediarama does not yet have equivalent migrated policy for finite quota, source-style public/private upload approval, or derivative/full-size access tiers. Its upload architecture already has an `UploadQuota` boundary, but current production wiring is intentionally unlimited.
+Mediarama now has persistent normalized upload quota policy. Coppermine `group_quota` values migrate from KiB to bytes into `group_storage_quotas`, with `0` remaining explicit unlimited, and runtime resolution preserves the audited multi-group rule. Source-style public/private upload approval and derivative/full-size access tiers are still not modeled.
 
-Migration policy: **evaluate effective policy per existing user and fail closed when current Mediarama behavior would be more permissive or would discard a restriction**.
+Migration policy remains: **evaluate effective policy per existing user and fail closed when current Mediarama behavior would be more permissive or would discard a restriction**.
 
 Preflight therefore blocks:
 
-- effective finite quota;
 - required public-upload approval when the user can upload/create albums;
 - required private/user-gallery upload approval when the user can upload/create albums;
 - effective access level below full-size;
 - missing referenced groups.
+
+Valid finite quotas no longer block migration; negative quota values remain invalid source state and are rejected.
 
 This is intentionally not a raw per-group blocker: a supplemental group that makes a user's effective Coppermine policy unlimited/no-approval/full-access is respected exactly as Coppermine would calculate it.
 
