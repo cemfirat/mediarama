@@ -179,14 +179,14 @@ The evidence set is:
 
 Six canonical test-split camera photographs are selected from the `PD-own` photo categories and downloaded from the corpus's public R2 storage only after manifest validation:
 
-- 1069 — low-light illuminated castle, 2870 × 3827;
+- 1059 — colorful sailboat detail, 2841 × 3788 portrait;
 - 1237 — person/interior mixed detail, 4000 × 3000;
 - 1407 — rocky coastline/natural texture, 8160 × 6120;
 - 1477 — ocean sunset/sky gradients, 4000 × 3000;
-- 1537 — flowers/fine detail, 5712 × 4284;
+- 1499 — snowy forest/fine natural texture, 4000 × 3000;
 - 1607 — food/high-ISO texture, 4000 × 3000.
 
-The workflow verifies pinned revisions, source licenses/provenance, canonical test-split membership and every downloaded high-resolution source SHA-256 before benchmarking.
+The workflow verifies pinned revisions, source licenses/provenance, canonical test-split membership, JPEG source format, a minimum 2560 px short side, and every downloaded high-resolution source SHA-256 before benchmarking. The JPEG-only high-resolution supplement deliberately isolates derivative-codec measurement from HEIC container/depth-image decoder behavior; HEIC decoding is covered separately by Mediarama's real-format integration gate.
 
 The high-resolution supplement directly exercises the full 2560 px Mediarama `large` bound and removes the need to extrapolate from the approximately 2048 px CLIC corpus.
 

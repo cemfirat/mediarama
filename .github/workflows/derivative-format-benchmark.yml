@@ -108,7 +108,7 @@ jobs:
           <?php
           declare(strict_types=1);
 
-          $selected = ['1069', '1237', '1407', '1477', '1537', '1607'];
+          $selected = ['1059', '1237', '1407', '1477', '1499', '1607'];
           $allowedClasses = [
               '1000-lilith-photos-general',
               '1200-lilith-interiors',
@@ -149,7 +149,7 @@ jobs:
               throw new RuntimeException('Invalid imazen-26 test split header.');
           }
           $index = array_flip($header);
-          foreach (['id', 'split', 'content_class', 'sha256', 'raw_url'] as $required) {
+          foreach (['id', 'split', 'content_class', 'width', 'height', 'format', 'sha256', 'raw_url'] as $required) {
               if (!isset($index[$required])) {
                   throw new RuntimeException('Missing imazen-26 test column '.$required);
               }
@@ -161,10 +161,16 @@ jobs:
               }
 
               $class = $row[$index['content_class']] ?? '';
+              $width = (int) ($row[$index['width']] ?? 0);
+              $height = (int) ($row[$index['height']] ?? 0);
+              $format = strtolower((string) ($row[$index['format']] ?? ''));
+
               if (($row[$index['split']] ?? '') !== 'test'
                   || !in_array($class, $allowedClasses, true)
-                  || ($licenses[$id] ?? null) !== 'PD-own') {
-                  throw new RuntimeException('High-resolution corpus row '.$id.' failed split/class/license validation.');
+                  || ($licenses[$id] ?? null) !== 'PD-own'
+                  || $format !== 'jpg'
+                  || min($width, $height) < 2560) {
+                  throw new RuntimeException('High-resolution corpus row '.$id.' failed split/class/license/format/resolution validation.');
               }
 
               $rows[$id] = [
