@@ -73,7 +73,9 @@ Destination authorization is checked when the session is created and again at fi
 
 Collection owners may upload to their own collection. Resource-scoped `collection.media.add` rules may grant upload capability to explicitly allowed users or groups.
 
-This is the current ACL foundation; richer sharing/access semantics remain separate hardening work.
+Upload authorization delegates this decision to the shared actor-aware Collection access policy. `collection.media.add` remains independent from `collection.view`; an upload grant does not implicitly expose a private Collection.
+
+Broader view/sharing semantics are documented in `docs/architecture/collection-access.md`.
 
 ## Current authentication boundary
 
