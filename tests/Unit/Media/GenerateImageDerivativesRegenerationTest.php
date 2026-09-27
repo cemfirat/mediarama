@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Mediarama\Tests\Unit\Media;
 
 use DateTimeImmutable;
-use Mediarama\Media\Application\DerivativeCleanupJob;
 use Mediarama\Media\Application\DerivativeCleanupRepository;
 use Mediarama\Media\Application\GenerateImageDerivatives;
 use Mediarama\Media\Application\ImageDerivativeGenerator;
@@ -394,6 +393,98 @@ final class GenerateImageDerivativesRegenerationTest extends TestCase
         self::assertStringContainsString('/v8/preview.webp', $storage->deleted[1]->key);
     }
 
+    public function testFailedPhysicalCleanupQueuesGeneratedArtifactForRetry(): void
+    {
+        $asset = $this->imageAsset();
+
+        $repository = new class implements MediaDerivativeRepository {
+            public function save(MediaDerivative $derivative): void
+            {
+                throw new \LogicException('Versioned regeneration must use batch persistence.');
+            }
+
+            public function saveAll(array $derivatives): void
+            {
+                throw new \RuntimeException('Synthetic batch persistence failure.');
+            }
+
+            public function find(
+                Uuid $mediaId,
+                string $kind,
+                string $profile,
+                int $processingVersion,
+            ): ?MediaDerivative {
+                return null;
+            }
+
+            public function latestProcessingVersion(Uuid $mediaId, string $kind): int
+            {
+                return 4;
+            }
+        };
+
+        $generator = new class implements ImageDerivativeGenerator {
+            public function generate(
+                MediaAsset $media,
+                ImageDerivativeProfile $profile,
+                int $processingVersion,
+            ): MediaDerivative {
+                $now = new DateTimeImmutable();
+
+                return new MediaDerivative(
+                    Uuid::v7(),
+                    $media->id,
+                    'image',
+                    $profile->name,
+                    $processingVersion,
+                    new StorageObjectId(
+                        'media',
+                        sprintf(
+                            'derivatives/%s/v%d/%s.webp',
+                            $media->id->toRfc4122(),
+                            $processingVersion,
+                            $profile->name,
+                        ),
+                    ),
+                    'image/webp',
+                    100,
+                    64,
+                    64,
+                    null,
+                    [],
+                    $now,
+                    $now,
+                );
+            }
+        };
+
+        $storage = $this->trackingStorage(true);
+        $cleanup = $this->cleanupRepository();
+
+        $service = new GenerateImageDerivatives(
+            $repository,
+            $generator,
+            $storage,
+            $cleanup,
+            $this->immediateLock(),
+            [new ImageDerivativeProfile('thumbnail', 480, 480)],
+            1,
+        );
+
+        try {
+            $service->regenerate($asset);
+            self::fail('Expected batch persistence to fail.');
+        } catch (\RuntimeException $error) {
+            self::assertSame('Synthetic batch persistence failure.', $error->getMessage());
+        }
+
+        self::assertCount(1, $cleanup->orphaned);
+        self::assertSame($asset->id->toRfc4122(), $cleanup->orphaned[0]->mediaId->toRfc4122());
+        self::assertSame(5, $cleanup->orphaned[0]->processingVersion);
+        self::assertSame('thumbnail', $cleanup->orphaned[0]->profile);
+        self::assertStringContainsString('/v5/thumbnail.webp', $cleanup->orphaned[0]->storage->key);
+    }
+
     private function imageAsset(): MediaAsset
     {
         return MediaAsset::create(
@@ -448,9 +539,13 @@ final class GenerateImageDerivativesRegenerationTest extends TestCase
         };
     }
 
-    private function trackingStorage(): MediaStorage
+    private function trackingStorage(bool $failDelete = false): MediaStorage
     {
-        return new class implements MediaStorage {
+        return new class($failDelete) implements MediaStorage {
+            public function __construct(private readonly bool $failDelete)
+            {
+            }
+
             /** @var list<StorageObjectId> */
             public array $deleted = [];
 
@@ -476,6 +571,10 @@ final class GenerateImageDerivativesRegenerationTest extends TestCase
 
             public function delete(StorageObjectId $id): void
             {
+                if ($this->failDelete) {
+                    throw new \RuntimeException('Synthetic storage delete failure.');
+                }
+
                 $this->deleted[] = $id;
             }
 
