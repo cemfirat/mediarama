@@ -45,6 +45,12 @@ final readonly class CleanupSupersededDerivatives
                 continue;
             }
 
+            if ($this->cleanup->isReferenced($job->storage)) {
+                $this->cleanup->complete($job->id);
+                ++$completed;
+                continue;
+            }
+
             try {
                 if ($this->storage->exists($job->storage)) {
                     $this->storage->delete($job->storage);
