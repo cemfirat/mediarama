@@ -30,10 +30,16 @@ final class PublicCollectionShowController extends AbstractController
             throw $this->createNotFoundException();
         }
 
-        return $this->render('@Mediarama/public/collections/show.html.twig', [
+        $response = $this->render('@Mediarama/public/collections/show.html.twig', [
             'collection' => $collection,
             'children' => $this->gallery->childCollections($collectionId),
             'media' => $this->gallery->media($collectionId),
         ]);
+
+        if (!$collection->indexable) {
+            $response->headers->set('X-Robots-Tag', 'noindex');
+        }
+
+        return $response;
     }
 }
