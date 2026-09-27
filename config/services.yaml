@@ -166,8 +166,8 @@ services:
                 - '@mediarama.media.profile.large'
 
 
-    Mediarama\Media\Application\MediaSearch:
-        alias: Mediarama\Media\Infrastructure\Persistence\DbalMediaSearch
+    Mediarama\Media\Application\LibraryMediaSearch:
+        alias: Mediarama\Media\Infrastructure\Persistence\DbalLibraryMediaSearch
 
     Mediarama\Media\Application\PublicMediaSearch:
         alias: Mediarama\Media\Infrastructure\Persistence\DbalPublicMediaSearch

@@ -67,7 +67,7 @@ The upload create/finalize boundary delegates `collection.media.add` to this sha
 
 Public gallery/search must continue using their dedicated public DTO/query boundary.
 
-Authenticated library media search prepends the same reusable `actor_visible_collections` CTE at its query boundary. Media owned by the actor are also eligible even when uncollected. Inaccessible rows are never loaded first and filtered later.
+Authenticated `LibraryMediaSearch` prepends the same reusable `actor_visible_collections` CTE at its query boundary. Media owned by the actor are also eligible even when uncollected. Effectively public Collection membership additionally requires published moderation for non-owners; inaccessible rows are never loaded first and filtered later.
 
 ## Verification
 

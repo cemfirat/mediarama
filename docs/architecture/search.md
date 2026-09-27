@@ -40,6 +40,8 @@ The query is actor-aware before any result DTO is produced. A ready MediaAsset i
 1. the actor owns the MediaAsset; or
 2. the MediaAsset belongs to at least one Collection in the shared `actor_visible_collections` set.
 
+For a membership that is itself effectively public, a non-owner only receives the media after `moderation_state = published`. Collection owners and media owners may still work with their own non-publication states in the library. Non-public authenticated/restricted Collection access remains a library capability rather than public publication.
+
 That visible Collection set is provided by the Collection access boundary and enforces full hierarchy, owner, public/authenticated/private/restricted visibility, password-migration and user/group ACL rules.
 
 A membership in an inaccessible Collection does not hide a MediaAsset that is independently reachable through another visible Collection.
@@ -50,7 +52,7 @@ The response is private/no-store and noindex.
 
 ## Full text
 
-The library query uses the stored PostgreSQL `search_document` generated from:
+The `LibraryMediaSearch` query uses the stored PostgreSQL `search_document` generated from:
 
 - title;
 - description;

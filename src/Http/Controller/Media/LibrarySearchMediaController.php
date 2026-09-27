@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace Mediarama\Http\Controller\Media;
 
 use DateTimeImmutable;
-use Mediarama\Media\Application\MediaSearch;
-use Mediarama\Media\Application\MediaSearchCriteria;
+use Mediarama\Media\Application\LibraryMediaSearch;
+use Mediarama\Media\Application\LibraryMediaSearchCriteria;
 use Mediarama\Security\Application\CurrentUser;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -16,7 +16,7 @@ use Symfony\Component\Routing\Attribute\Route;
 final readonly class LibrarySearchMediaController
 {
     public function __construct(
-        private MediaSearch $search,
+        private LibraryMediaSearch $search,
         private CurrentUser $currentUser,
     ) {
     }
@@ -57,11 +57,11 @@ final readonly class LibrarySearchMediaController
         ], Response::HTTP_OK, $this->responseHeaders());
     }
 
-    private function criteria(Request $request): MediaSearchCriteria
+    private function criteria(Request $request): LibraryMediaSearchCriteria
     {
         $q = $request->query;
 
-        return new MediaSearchCriteria(
+        return new LibraryMediaSearchCriteria(
             text: $q->getString('q') ?: null,
             creator: $q->getString('creator') ?: null,
             cameraMake: $q->getString('camera_make') ?: null,

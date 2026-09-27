@@ -8,18 +8,18 @@ use DateTimeImmutable;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\ParameterType;
 use Mediarama\Collection\Infrastructure\Persistence\CollectionAccessSql;
-use Mediarama\Media\Application\MediaSearch;
-use Mediarama\Media\Application\MediaSearchCriteria;
-use Mediarama\Media\Application\MediaSearchResult;
+use Mediarama\Media\Application\LibraryMediaSearch;
+use Mediarama\Media\Application\LibraryMediaSearchCriteria;
+use Mediarama\Media\Application\LibraryMediaSearchResult;
 use Symfony\Component\Uid\Uuid;
 
-final readonly class DbalMediaSearch implements MediaSearch
+final readonly class DbalLibraryMediaSearch implements LibraryMediaSearch
 {
     public function __construct(private Connection $connection)
     {
     }
 
-    public function search(Uuid $actorId, MediaSearchCriteria $c): array
+    public function search(Uuid $actorId, LibraryMediaSearchCriteria $c): array
     {
         $where = [
             "m.deleted_at IS NULL",
@@ -32,11 +32,21 @@ final readonly class DbalMediaSearch implements MediaSearch
         FROM collection_media membership
         JOIN actor_visible_collections visible_collection
           ON visible_collection.collection_id = membership.collection_id
+        JOIN collections granted_collection
+          ON granted_collection.id = membership.collection_id
+        LEFT JOIN effective_public_collections public_collection
+          ON public_collection.collection_id = membership.collection_id
         WHERE membership.media_id = m.id
+          AND (
+              granted_collection.owner_id = :user
+              OR public_collection.collection_id IS NULL
+              OR m.moderation_state = 'published'
+          )
     )
 )
 SQL,
         ];
+
         $params = ['user' => $actorId->toRfc4122()];
         $types = [];
 
@@ -114,7 +124,7 @@ LIMIT :limit OFFSET :offset',
             $types,
         );
 
-        return array_map(static fn (array $row): MediaSearchResult => new MediaSearchResult(
+        return array_map(static fn (array $row): LibraryMediaSearchResult => new LibraryMediaSearchResult(
             Uuid::fromString((string) $row['id']),
             (string) $row['original_filename'],
             (string) $row['mime_type'],

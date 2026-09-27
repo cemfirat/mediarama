@@ -6,7 +6,7 @@ namespace Mediarama\Media\Application;
 
 use DateTimeImmutable;
 
-final readonly class MediaSearchCriteria
+final readonly class LibraryMediaSearchCriteria
 {
     public function __construct(
         public ?string $text = null,

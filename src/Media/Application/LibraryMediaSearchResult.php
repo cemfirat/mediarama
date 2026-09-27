@@ -7,7 +7,7 @@ namespace Mediarama\Media\Application;
 use DateTimeImmutable;
 use Symfony\Component\Uid\Uuid;
 
-final readonly class MediaSearchResult
+final readonly class LibraryMediaSearchResult
 {
     public function __construct(
         public Uuid $id,
