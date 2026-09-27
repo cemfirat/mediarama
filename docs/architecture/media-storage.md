@@ -225,9 +225,12 @@ preventing DB/object cleanup from silently diverging:
 - storage deletion failure: the queue row remains for retry;
 - crash after physical deletion but before queue completion: the next run sees
   the object is already absent and safely completes the queue row;
-- if a failed-generation key is later regenerated and becomes referenced again
-  before queued cleanup runs, the worker drops the stale cleanup job and keeps
-  the now-live derivative object;
+- physical derivative cleanup runs under the same per-media/kind advisory lock
+  used by regeneration, so a cleanup worker cannot race a writer reusing the
+  deterministic key;
+- if a failed-generation key is later regenerated and becomes referenced again,
+  the worker re-checks that reference under the lock, drops the stale cleanup
+  job and keeps the now-live derivative object;
 - repeated cleanup is idempotent.
 
 The cleanup worker only physically deletes objects on the `media` disk whose
