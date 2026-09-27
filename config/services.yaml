@@ -16,6 +16,7 @@ services:
             - '../src/Media/Application/ImageDerivativeProfile.php'
             - '../src/Media/Application/StoredObject.php'
             - '../src/Media/Application/InspectedMetadata.php'
+            - '../src/Media/Application/DerivativeCleanupJob.php'
             - '../src/Upload/Application/InspectedContent.php'
             - '../src/Export/Application/MetadataExportPolicy.php'
             - '../src/Security/Application/AuthenticatedUser.php'
