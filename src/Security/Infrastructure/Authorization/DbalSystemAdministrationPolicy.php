@@ -20,9 +20,11 @@ final readonly class DbalSystemAdministrationPolicy implements SystemAdministrat
             <<<'SQL'
 SELECT EXISTS (
     SELECT 1
-    FROM user_groups ug
+    FROM users u
+    INNER JOIN user_groups ug ON ug.user_id = u.id
     INNER JOIN group_permissions gp ON gp.group_id = ug.group_id
-    WHERE ug.user_id = :user
+    WHERE u.id = :user
+      AND u.status = 'active'
       AND gp.permission_key = 'system.admin'
 )
 SQL,
