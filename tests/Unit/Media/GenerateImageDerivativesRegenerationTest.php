@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Mediarama\Tests\Unit\Media;
 
 use DateTimeImmutable;
+use Mediarama\Media\Application\DerivativeCleanupJob;
+use Mediarama\Media\Application\DerivativeCleanupRepository;
 use Mediarama\Media\Application\GenerateImageDerivatives;
 use Mediarama\Media\Application\ImageDerivativeGenerator;
 use Mediarama\Media\Application\ImageDerivativeProfile;
@@ -99,6 +101,7 @@ final class GenerateImageDerivativesRegenerationTest extends TestCase
             $repository,
             $generator,
             $storage,
+            $this->cleanupRepository(),
             $this->immediateLock(),
             [
                 new ImageDerivativeProfile('thumbnail', 480, 480),
@@ -188,6 +191,7 @@ final class GenerateImageDerivativesRegenerationTest extends TestCase
             $repository,
             $generator,
             $this->trackingStorage(),
+            $this->cleanupRepository(),
             $this->immediateLock(),
             [new ImageDerivativeProfile('thumbnail', 480, 480)],
             3,
@@ -278,6 +282,7 @@ final class GenerateImageDerivativesRegenerationTest extends TestCase
             $repository,
             $generator,
             $storage,
+            $this->cleanupRepository(),
             $this->immediateLock(),
             [
                 new ImageDerivativeProfile('thumbnail', 480, 480),
@@ -368,6 +373,7 @@ final class GenerateImageDerivativesRegenerationTest extends TestCase
             $repository,
             $generator,
             $storage,
+            $this->cleanupRepository(),
             $this->immediateLock(),
             [
                 new ImageDerivativeProfile('thumbnail', 480, 480),
@@ -401,6 +407,36 @@ final class GenerateImageDerivativesRegenerationTest extends TestCase
         );
     }
 
+
+    private function cleanupRepository(): DerivativeCleanupRepository
+    {
+        return new class implements DerivativeCleanupRepository {
+            /** @var list<MediaDerivative> */
+            public array $orphaned = [];
+
+            public function stageSuperseded(
+                DateTimeImmutable $cutoff,
+                int $keepNewestVersions,
+                int $limitVersions,
+            ): int {
+                return 0;
+            }
+
+            public function pending(int $limit): array
+            {
+                return [];
+            }
+
+            public function complete(int $jobId): void
+            {
+            }
+
+            public function enqueueOrphan(MediaDerivative $derivative): void
+            {
+                $this->orphaned[] = $derivative;
+            }
+        };
+    }
 
     private function immediateLock(): MediaDerivativeRegenerationLock
     {
