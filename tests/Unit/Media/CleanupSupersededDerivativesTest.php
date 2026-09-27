@@ -126,7 +126,10 @@ final class CleanupSupersededDerivativesTest extends TestCase
 
             public function failStorageJob(Uuid $id, string $error): void
             {
-                self::assertSame('storage_delete_failed', $error);
+                if ($error !== 'storage_delete_failed') {
+                    throw new \RuntimeException('Unexpected storage cleanup failure code.');
+                }
+
                 $this->failed[] = $id->toRfc4122();
             }
 
