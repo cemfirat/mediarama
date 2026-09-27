@@ -158,7 +158,7 @@ ADR-0013 records this decision.
 
 For ordinary image-copy exports, Privacy-safe is an **allowlist**, not an open-ended source-metadata copy.
 
-The exporter first removes inherited metadata from the generated copy, while explicitly preserving/re-copying rendering-relevant ICC/color-space information, orientation and density metadata. It then writes only the canonical fields permitted by the Privacy-safe policy.
+The exporter first removes inherited metadata from the generated copy, while explicitly preserving/re-copying rendering-relevant ICC/color-space information, orientation, PNG gamma/sRGB rendering semantics and density metadata. TIFF's structural image directory is retained while common descriptive IFD0 metadata is cleared. It then writes only the canonical fields permitted by the Privacy-safe policy.
 
 This means unknown EXIF/IPTC/XMP fields are removed by default. The application does not need to know a sensitive tag name in advance for that tag to be excluded.
 
