@@ -14,6 +14,7 @@ final readonly class GenerateImageDerivatives
         private MediaDerivativeRepository $derivatives,
         private ImageDerivativeGenerator $generator,
         private MediaStorage $storage,
+        private DerivativeCleanupRepository $cleanup,
         private MediaDerivativeRegenerationLock $regenerationLock,
         private array $profiles,
         private int $processingVersion,
@@ -69,7 +70,14 @@ final readonly class GenerateImageDerivatives
 
             $this->derivatives->saveAll($generated);
         } catch (\Throwable $error) {
-            $this->cleanupGenerated($generated);
+            $cleanupFailure = $this->cleanupGenerated($generated);
+
+            if ($cleanupFailure !== null) {
+                throw new \RuntimeException(
+                    'Derivative generation failed and orphan cleanup could not be recorded.',
+                    previous: $error,
+                );
+            }
 
             throw $error;
         }
@@ -78,15 +86,22 @@ final readonly class GenerateImageDerivatives
     }
 
     /** @param list<MediaDerivative> $generated */
-    private function cleanupGenerated(array $generated): void
+    private function cleanupGenerated(array $generated): ?\Throwable
     {
+        $queueFailure = null;
+
         foreach ($generated as $derivative) {
             try {
                 $this->storage->delete($derivative->storage);
             } catch (\Throwable) {
-                // Preserve the primary generation/persistence failure. A deterministic
-                // orphan can be safely overwritten by the next regeneration attempt.
+                try {
+                    $this->cleanup->enqueueOrphan($derivative);
+                } catch (\Throwable $error) {
+                    $queueFailure ??= $error;
+                }
             }
         }
+
+        return $queueFailure;
     }
 }
