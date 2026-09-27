@@ -35,6 +35,9 @@ services:
     Mediarama\Export\Application\MetadataWriter:
         alias: Mediarama\Export\Infrastructure\ExifToolMetadataWriter
 
+    Mediarama\Export\Application\MetadataSidecarWriter:
+        alias: Mediarama\Export\Infrastructure\ExifToolXmpSidecarWriter
+
     Mediarama\Upload\Application\UploadSessionRepository:
         alias: Mediarama\Upload\Infrastructure\Persistence\DbalUploadSessionRepository
 
