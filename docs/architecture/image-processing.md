@@ -75,9 +75,39 @@ The advisory lock is session-scoped and fail-fast. A second concurrent regenerat
 
 ## Watermarks
 
-The profile model already carries a watermark flag, but watermark rendering is not enabled until watermark asset/configuration semantics are defined.
+Watermarking is a derivative-only transformation. It never modifies the immutable source.
 
-Watermarked output remains a derivative and never modifies the source.
+The current derivative identity is `media_id + kind + profile + processing_version`, and one derivative can be reused from several Collections. For that reason the first implementation is deliberately **profile-level and deployment-configured**. Collection-, user- or request-specific watermark variants would require an additional derivative policy/variant identity plus matching URL/cache semantics; they must not silently reuse the current profile identity.
+
+A profile opts into watermarking with `ImageDerivativeProfile::watermark=true`. The shared deployment settings are:
+
+- `IMAGE_WATERMARK_ASSET_PATH` — trusted local PNG asset; empty by default;
+- `IMAGE_WATERMARK_WIDTH_PERCENT` — width relative to the actual resized derivative, 1–50;
+- `IMAGE_WATERMARK_OPACITY_PERCENT` — overlay opacity, 1–100;
+- `IMAGE_WATERMARK_MARGIN_PERCENT` — inset relative to the derivative's shorter side, 0–20;
+- `IMAGE_WATERMARK_GRAVITY` — one of north-west/north/north-east/west/center/east/south-west/south/south-east using the compact configuration names documented by `ImageWatermarkConfiguration`.
+
+The path is deployment configuration, never request/user input. The configured asset must be a readable, non-empty PNG no larger than 16 MiB or 8192 pixels in either dimension. A watermark-enabled profile fails closed when the asset is missing or invalid.
+
+Rendering avoids lossy double encoding:
+
+1. the source is decoded, auto-oriented, stripped and resized into a temporary lossless MIFF image under the normal ImageMagick resource envelope;
+2. actual resized dimensions are inspected;
+3. watermark pixel width and margin are calculated from those dimensions;
+4. the PNG watermark is resized, its alpha channel is multiplied by the configured opacity, and it is composited with validated gravity using the standard `Over` alpha-composition mode;
+5. metadata is stripped again and the requested derivative format is encoded once.
+
+The derivative metadata records that watermarking occurred plus the asset/render-configuration fingerprint, gravity, width percentage, opacity percentage and margin percentage. The configured filesystem path is never persisted.
+
+Changing the watermark asset or any rendering setting changes the fingerprint and requires a new processing version/regeneration before existing public derivatives change.
+
+Default thumbnail/preview/large profiles remain unwatermarked until a profile is explicitly configured otherwise.
+
+Primary ImageMagick behavior references:
+
+- https://imagemagick.org/compose/
+- https://imagemagick.org/command-line-options/#composite
+- https://usage.imagemagick.org/compose/
 
 ## Resource safety
 
@@ -106,6 +136,8 @@ Production deployments should also install a restrictive ImageMagick `policy.xml
 The defaults are deliberately finite but are deployment settings rather than universal hardware recommendations. Operators may tighten them for smaller workers or raise them after measurement for unusually large professional images. Width/height, disk and elapsed-time limits must remain finite for Internet-facing installations.
 
 CI runs `tests/Integration/ImageMagick/resource-limits.php` against the actual ImageMagick binaries. It verifies a valid image, an oversized-dimension image, a deliberately truncated image, a highly compressed decode-stress image under tight cache limits, and the invariant that a failed conversion never becomes a persisted derivative.
+
+CI also runs `tests/Integration/ImageMagick/watermark.php` with a runtime-generated PNG watermark. It verifies dimension-relative placement, transparent-pixel preservation, configured alpha blending, immutable-source preservation, stripped Orientation/GPS metadata, fingerprint recording, and fail-closed behavior for missing/invalid watermark configuration.
 
 References:
 
