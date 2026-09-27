@@ -222,7 +222,7 @@ The representative benchmark evidence is accepted and retained in:
 
 `docs/research/evidence/derivative-format-benchmark-2026-09-27.json`
 
-ADR-0011 records the resulting product boundary:
+ADR-0012 records the resulting product boundary:
 
 - keep the production `cwebp` WebP profiles as the sole standard display derivatives;
 - do not expose JPEG display profiles;
