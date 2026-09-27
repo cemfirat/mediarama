@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Mediarama\Media\Infrastructure\Image\CwebpEncoder;
 use Mediarama\Media\Infrastructure\Image\ImageMagickProcess;
 use Mediarama\Media\Infrastructure\Image\ImageMagickResourceLimits;
+use Mediarama\Media\Infrastructure\Process\MediaToolUnavailable;
 
 require dirname(__DIR__, 3).'/vendor/autoload.php';
 
@@ -137,6 +138,25 @@ try {
     requireCwebpQuality(
         hash_file('sha256', $png) === $referenceHash,
         'cwebp encoding leaves the prepared source immutable',
+    );
+
+    $missingOutput = $root.'/missing-cwebp-output.webp';
+    $missingEncoder = new CwebpEncoder($root.'/missing-cwebp-binary', 5.0);
+    $missingFailedClosed = false;
+
+    try {
+        $missingEncoder->encode($png, $missingOutput, 75);
+    } catch (MediaToolUnavailable) {
+        $missingFailedClosed = true;
+    }
+
+    requireCwebpQuality(
+        $missingFailedClosed,
+        'missing cwebp runtime fails closed as unavailable',
+    );
+    requireCwebpQuality(
+        !is_file($missingOutput),
+        'missing cwebp runtime does not leave a derivative artifact',
     );
 } finally {
     removeCwebpQualityTree($root);
