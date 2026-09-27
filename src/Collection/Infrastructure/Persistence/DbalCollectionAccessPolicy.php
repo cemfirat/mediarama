@@ -68,13 +68,13 @@ evaluated AS (
             WHEN node.visibility = 'private' THEN FALSE
             WHEN node.visibility = 'restricted' THEN EXISTS (
                 SELECT 1
-                FROM collection_access access
-                WHERE access.collection_id = node.id
-                  AND access.capability = 'collection.view'
-                  AND access.effect = 'allow'
+                FROM collection_access acl
+                WHERE acl.collection_id = node.id
+                  AND acl.capability = 'collection.view'
+                  AND acl.effect = 'allow'
                   AND (
-                      access.user_id = :user
-                      OR access.group_id IN (
+                      acl.user_id = :user
+                      OR acl.group_id IN (
                           SELECT membership.group_id
                           FROM user_groups membership
                           WHERE membership.user_id = :user
@@ -113,13 +113,13 @@ SELECT CASE WHEN EXISTS (
           collection.owner_id = :user
           OR EXISTS (
               SELECT 1
-              FROM collection_access access
-              WHERE access.collection_id = collection.id
-                AND access.capability = 'collection.media.add'
-                AND access.effect = 'allow'
+              FROM collection_access acl
+              WHERE acl.collection_id = collection.id
+                AND acl.capability = 'collection.media.add'
+                AND acl.effect = 'allow'
                 AND (
-                    access.user_id = :user
-                    OR access.group_id IN (
+                    acl.user_id = :user
+                    OR acl.group_id IN (
                         SELECT membership.group_id
                         FROM user_groups membership
                         WHERE membership.user_id = :user
