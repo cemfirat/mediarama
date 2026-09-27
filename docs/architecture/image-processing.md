@@ -85,7 +85,7 @@ A profile opts into watermarking with `ImageDerivativeProfile::watermark=true`. 
 - `IMAGE_WATERMARK_WIDTH_PERCENT` — width relative to the actual resized derivative, 1–50;
 - `IMAGE_WATERMARK_OPACITY_PERCENT` — overlay opacity, 1–100;
 - `IMAGE_WATERMARK_MARGIN_PERCENT` — inset relative to the derivative's shorter side, 0–20;
-- `IMAGE_WATERMARK_GRAVITY` — one of north-west/north/north-east/west/center/east/south-west/south/south-east using the compact configuration names documented by `ImageWatermarkConfiguration`.
+- `IMAGE_WATERMARK_GRAVITY` — one of `northwest`, `north`, `northeast`, `west`, `center`, `east`, `southwest`, `south`, `southeast`.
 
 The path is deployment configuration, never request/user input. The configured asset must be a readable, non-empty PNG no larger than 16 MiB or 8192 pixels in either dimension. A watermark-enabled profile fails closed when the asset is missing or invalid.
 
