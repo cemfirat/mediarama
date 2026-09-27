@@ -234,9 +234,15 @@ Singleton site-level publication/discovery settings.
 - `deployment_profile varchar`
 - `public_publishing_enabled boolean`
 - `search_index_default varchar` (`index | noindex`)
+- `setup_status varchar` (`pending | completed`)
+- `setup_completed_at timestamptz nullable`
+- `setup_completed_by uuid nullable fk users on delete set null`
+- `setup_completed_via varchar nullable` (`migration | browser | cli | existing_admin`)
 - timestamps
 
 `deployment_profile` records the last applied setup/operator preset. It is not an ACL and does not prove actual network isolation.
+
+The singleton setup row is also the concurrency boundary for first-run administrator creation. Bootstrap takes a PostgreSQL row lock before creating/recovering an administrator and completing setup, preventing concurrent requests from creating two initial administrators.
 
 For new empty installations the migration initializes **Private workspace** semantics:
 

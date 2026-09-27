@@ -48,6 +48,13 @@ services:
     Mediarama\Platform\Application\PlatformSettingsRepository:
         alias: Mediarama\Platform\Infrastructure\Persistence\DbalPlatformSettingsRepository
 
+    Mediarama\Platform\Application\FirstRunSetup:
+        alias: Mediarama\Platform\Infrastructure\Persistence\DbalFirstRunSetup
+
+    Mediarama\Platform\Infrastructure\Security\BrowserSetupToken:
+        arguments:
+            $expectedToken: '%env(MEDIARAMA_SETUP_TOKEN)%'
+
     Mediarama\Platform\Application\SearchIndexPolicyRepository:
         alias: Mediarama\Platform\Infrastructure\Persistence\DbalSearchIndexPolicyRepository
 
