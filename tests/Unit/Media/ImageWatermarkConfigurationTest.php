@@ -20,7 +20,7 @@ final class ImageWatermarkConfigurationTest extends TestCase
             'SouthEast',
         );
 
-        self::assertSame(25, $configuration->widthPercent());
+        self::assertSame(25, $configuration->sizePercent());
         self::assertSame(50, $configuration->opacityPercent());
         self::assertSame(4, $configuration->marginPercent());
         self::assertSame('southeast', $configuration->gravity());
@@ -47,7 +47,7 @@ final class ImageWatermarkConfigurationTest extends TestCase
         );
     }
 
-    public function testWidthPercentMustBeBounded(): void
+    public function testSizePercentMustBeBounded(): void
     {
         $this->expectException(InvalidArgumentException::class);
         new ImageWatermarkConfiguration('', 0);
