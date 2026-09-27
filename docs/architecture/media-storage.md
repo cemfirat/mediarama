@@ -161,6 +161,8 @@ Derivative keys are deterministic from:
 
 This enables retry-safe processing.
 
+Explicit regeneration never overwrites the currently published derivative identity. It allocates the next image processing version under a per-media advisory lock, writes the new deterministic versioned objects, and only then publishes the complete derivative-record batch transactionally. Existing versioned derivative keys remain immutable/cache-safe from the public consumer's perspective.
+
 A successful retry may detect the same valid object and avoid duplicate database records.
 
 ## Checksums

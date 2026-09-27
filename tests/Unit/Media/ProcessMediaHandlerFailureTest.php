@@ -13,6 +13,9 @@ use Mediarama\Media\Application\InspectMediaMetadata;
 use Mediarama\Media\Application\InspectedMetadata;
 use Mediarama\Media\Application\MediaAssetRepository;
 use Mediarama\Media\Application\MediaDerivativeRepository;
+use Mediarama\Media\Application\MediaDerivativeRegenerationLock;
+use Mediarama\Media\Application\MediaStorage;
+use Mediarama\Media\Application\StoredObject;
 use Mediarama\Media\Application\MediaMetadataInspector;
 use Mediarama\Media\Application\ProcessMedia;
 use Mediarama\Media\Application\ProcessMediaHandler;
@@ -21,6 +24,7 @@ use Mediarama\Media\Domain\MediaDerivative;
 use Mediarama\Media\Domain\MediaType;
 use Mediarama\Media\Domain\ProcessingState;
 use Mediarama\Media\Domain\StorageObjectId;
+use DateTimeImmutable;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Uid\Uuid;
 
@@ -73,6 +77,11 @@ final class ProcessMediaHandlerFailureTest extends TestCase
                 throw new \LogicException('Derivative generation must not run after geometry failure.');
             }
 
+            public function saveAll(array $derivatives): void
+            {
+                throw new \LogicException('Derivative generation must not run after geometry failure.');
+            }
+
             public function find(
                 Uuid $mediaId,
                 string $kind,
@@ -80,6 +89,11 @@ final class ProcessMediaHandlerFailureTest extends TestCase
                 int $processingVersion,
             ): ?MediaDerivative {
                 return null;
+            }
+
+            public function latestProcessingVersion(Uuid $mediaId, string $kind): int
+            {
+                return 0;
             }
         };
 
@@ -93,9 +107,62 @@ final class ProcessMediaHandlerFailureTest extends TestCase
             }
         };
 
+
+        $storage = new class implements MediaStorage {
+            public function write(StorageObjectId $id, $stream, ?string $contentType = null): StoredObject
+            {
+                throw new \LogicException('Storage must not be used after geometry failure.');
+            }
+
+            public function read(StorageObjectId $id)
+            {
+                throw new \LogicException('Storage must not be used after geometry failure.');
+            }
+
+            public function exists(StorageObjectId $id): bool
+            {
+                return false;
+            }
+
+            public function stat(StorageObjectId $id): StoredObject
+            {
+                throw new \LogicException('Storage must not be used after geometry failure.');
+            }
+
+            public function delete(StorageObjectId $id): void
+            {
+                throw new \LogicException('Storage must not be used after geometry failure.');
+            }
+
+            public function promote(StorageObjectId $temporary, StorageObjectId $permanent): StoredObject
+            {
+                throw new \LogicException('Storage must not be used after geometry failure.');
+            }
+
+            public function publicUrl(StorageObjectId $id): ?string
+            {
+                return null;
+            }
+
+            public function temporaryUrl(StorageObjectId $id, DateTimeImmutable $expiresAt): ?string
+            {
+                return null;
+            }
+        };
+
+
+        $regenerationLock = new class implements MediaDerivativeRegenerationLock {
+            public function synchronized(Uuid $mediaId, string $kind, callable $operation): mixed
+            {
+                return $operation();
+            }
+        };
+
         $images = new GenerateImageDerivatives(
             $derivatives,
             $generator,
+            $storage,
+            $regenerationLock,
             [new ImageDerivativeProfile('test', 64, 64)],
             1,
         );
