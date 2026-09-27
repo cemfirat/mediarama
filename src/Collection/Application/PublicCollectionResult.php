@@ -16,6 +16,7 @@ final readonly class PublicCollectionResult
         public int $childCount,
         public ?Uuid $coverMediaId,
         public ?int $coverThumbnailVersion,
+        public bool $indexable,
     ) {
     }
 }
