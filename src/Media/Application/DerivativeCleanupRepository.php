@@ -5,11 +5,12 @@ declare(strict_types=1);
 namespace Mediarama\Media\Application;
 
 use DateTimeImmutable;
+use Mediarama\Media\Domain\MediaDerivative;
 use Symfony\Component\Uid\Uuid;
 
 interface DerivativeCleanupRepository
 {
-    public function enqueueOrphanedDerivative(\Mediarama\Media\Domain\MediaDerivative $derivative): StorageCleanupJob;
+    public function enqueueOrphanedDerivative(MediaDerivative $derivative): StorageCleanupJob;
 
     public function previewSuperseded(
         DateTimeImmutable $cutoff,
