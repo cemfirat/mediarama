@@ -264,6 +264,7 @@ try {
     $publicPending = Uuid::v7();
     $publicRejected = Uuid::v7();
     $authenticatedPending = Uuid::v7();
+    $authenticatedRejected = Uuid::v7();
     $privateHidden = Uuid::v7();
     $restrictedUserMedia = Uuid::v7();
     $restrictedGroupMedia = Uuid::v7();
@@ -278,6 +279,7 @@ try {
         $publicPending,
         $publicRejected,
         $authenticatedPending,
+        $authenticatedRejected,
         $privateHidden,
         $restrictedUserMedia,
         $restrictedGroupMedia,
@@ -340,6 +342,16 @@ try {
         creator: 'Authenticated Creator',
         cameraMake: 'Authenticated Camera',
         iso: 300,
+    );
+    insertSearchMedia(
+        $db,
+        $authenticatedRejected,
+        $unrelated,
+        'Authenticated Rejected',
+        moderationState: 'rejected',
+        creator: 'Rejected Authenticated Creator',
+        cameraMake: 'RejectedAuthCam',
+        iso: 325,
     );
     insertSearchMedia(
         $db,
@@ -418,6 +430,7 @@ try {
     addSearchMembership($db, $public, $publicPending);
     addSearchMembership($db, $public, $publicRejected);
     addSearchMembership($db, $authenticated, $authenticatedPending);
+    addSearchMembership($db, $authenticated, $authenticatedRejected);
     addSearchMembership($db, $private, $privateHidden);
     addSearchMembership($db, $restrictedUser, $restrictedUserMedia);
     addSearchMembership($db, $restrictedGroup, $restrictedGroupMedia);
@@ -439,13 +452,23 @@ try {
         'group viewer sees public, authenticated and group-shared media only',
     );
 
+    $ownerResults = resultIds($search->search($owner, new LibraryMediaSearchCriteria(limit: 200)));
     requireSearch(
-        in_array(
-            $publicPending->toRfc4122(),
-            resultIds($search->search($owner, new LibraryMediaSearchCriteria(limit: 200))),
+        in_array($publicPending->toRfc4122(), $ownerResults, true),
+        'MediaAsset owner can find own pending public media',
+    );
+    requireSearch(
+        in_array($authenticatedRejected->toRfc4122(), $ownerResults, true),
+        'Collection owner can inspect rejected media in owned Collection',
+    );
+
+    requireSearch(
+        !in_array(
+            $authenticatedRejected->toRfc4122(),
+            resultIds($search->search($viewer, new LibraryMediaSearchCriteria(limit: 200))),
             true,
         ),
-        'MediaAsset owner can find own pending public media',
+        'ordinary authenticated Collection viewer cannot enumerate rejected foreign media',
     );
 
     requireResultIds(
@@ -519,8 +542,8 @@ try {
             $unrelated,
             new LibraryMediaSearchCriteria(limit: 200),
         )),
-        [$publicPublished, $authenticatedPending],
-        'unrelated authenticated user sees no private or restricted media',
+        [$publicPublished, $authenticatedPending, $authenticatedRejected],
+        'MediaAsset owner still sees own rejected item while unrelated Collection data stays hidden',
     );
 
     echo "Actor-aware library media search integration checks passed.".PHP_EOL;

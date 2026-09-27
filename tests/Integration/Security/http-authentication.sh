@@ -261,7 +261,8 @@ LIBRARY_STATUS="$(curl --silent --show-error \
     "$BASE_URL/api/library/media?q=auth-ci")"
 expect_status 200 "$LIBRARY_STATUS" "authenticated active user can query library media search"
 grep -i -F "x-robots-tag: noindex, nofollow" /tmp/auth-library-search.headers
-grep -i -F "cache-control: private, no-store" /tmp/auth-library-search.headers
+grep -i -E '^cache-control:.*private' /tmp/auth-library-search.headers
+grep -i -E '^cache-control:.*no-store' /tmp/auth-library-search.headers
 php -r '
   $decoded = json_decode((string) file_get_contents("/tmp/auth-library-search.json"), true, flags: JSON_THROW_ON_ERROR);
   if (!isset($decoded["items"]) || !is_array($decoded["items"])) {
@@ -277,6 +278,17 @@ php -r '
       }
   }
   echo "OK authenticated library search uses the private metadata DTO boundary".PHP_EOL;
+'
+
+INVALID_LIBRARY_STATUS="$(curl --silent --show-error     --cookie "$ACTIVE_JAR"     --cookie-jar "$ACTIVE_JAR"     --output /tmp/auth-library-invalid.json     --write-out '%{http_code}'     "$BASE_URL/api/library/media?iso_min=not-a-number")"
+expect_status 400 "$INVALID_LIBRARY_STATUS" "invalid library search filter returns stable client error"
+php -r '
+  $decoded = json_decode((string) file_get_contents("/tmp/auth-library-invalid.json"), true, flags: JSON_THROW_ON_ERROR);
+  if ($decoded !== ["error" => "invalid_search_query"]) {
+      fwrite(STDERR, "Unexpected invalid library-search payload: ".json_encode($decoded).PHP_EOL);
+      exit(1);
+  }
+  echo "OK invalid library search payload is stable".PHP_EOL;
 '
 
 UPLOAD_CSRF="$(api_csrf_token "$ACTIVE_JAR" /tmp/auth-upload-csrf.json)"

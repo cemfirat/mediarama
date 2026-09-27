@@ -40,7 +40,7 @@ The query is actor-aware before any result DTO is produced. A ready MediaAsset i
 1. the actor owns the MediaAsset; or
 2. the MediaAsset belongs to at least one Collection in the shared `actor_visible_collections` set.
 
-For a membership that is itself effectively public, a non-owner only receives the media after `moderation_state = published`. Collection owners and media owners may still work with their own non-publication states in the library. Non-public authenticated/restricted Collection access remains a library capability rather than public publication.
+For a membership that is itself effectively public, a non-owner only receives the media after `moderation_state = published`. For non-public shared Collections, ordinary viewers may work with draft/pending items but do not receive foreign `rejected` media. Media owners and Collection owners may still inspect their own/managed rejected items. Non-public authenticated/restricted Collection access remains a library capability rather than public publication.
 
 That visible Collection set is provided by the Collection access boundary and enforces full hierarchy, owner, public/authenticated/private/restricted visibility, password-migration and user/group ACL rules.
 

@@ -39,8 +39,13 @@ final readonly class DbalLibraryMediaSearch implements LibraryMediaSearch
         WHERE membership.media_id = m.id
           AND (
               granted_collection.owner_id = :user
-              OR public_collection.collection_id IS NULL
-              OR m.moderation_state = 'published'
+              OR (
+                  m.moderation_state <> 'rejected'
+                  AND (
+                      public_collection.collection_id IS NULL
+                      OR m.moderation_state = 'published'
+                  )
+              )
           )
     )
 )
