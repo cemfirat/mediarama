@@ -6,7 +6,7 @@ on:
   pull_request:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   php:
@@ -94,47 +94,10 @@ jobs:
           sudo apt-get install -y exiftool ffmpeg imagemagick mariadb-client
 
       - name: Validate Composer metadata
-        run: composer validate --strict --no-check-lock
+        run: composer validate --strict
 
-      - name: Resolve Symfony rate limiter with minimal dependency changes
-        run: composer update symfony/rate-limiter --with-dependencies --minimal-changes --no-interaction --prefer-dist --no-progress
-
-      - name: Capture generated PHP lock state
-        uses: actions/upload-artifact@v4
-        with:
-          name: login-throttling-lockfiles
-          if-no-files-found: error
-          path: |
-            composer.lock
-            symfony.lock
-
-      - name: Commit verified rate-limiter Composer lock
-        if: github.event.pull_request.head.repo.full_name == github.repository
-        run: |
-          printf '%s  %s\n' \
-            'f95ad2bde7bf20b2c173c74965dc845a79d72831014150c0031e2fbc03b0109d' composer.lock \
-            | sha256sum --check --strict
-
-          cp composer.lock /tmp/mediarama-rate-limiter-composer.lock
-
-          git fetch origin security/login-throttling
-          git checkout -B security/login-throttling origin/security/login-throttling
-          cp /tmp/mediarama-rate-limiter-composer.lock composer.lock
-
-          printf '%s  %s\n' \
-            'f95ad2bde7bf20b2c173c74965dc845a79d72831014150c0031e2fbc03b0109d' composer.lock \
-            | sha256sum --check --strict
-
-          if git diff --quiet -- composer.lock; then
-            echo "Verified rate-limiter composer.lock is already committed."
-            exit 0
-          fi
-
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add composer.lock
-          git commit -m 'build: lock Symfony rate limiter dependency (#43)'
-          git push origin HEAD:security/login-throttling
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
 
       - name: Verify PHP exposes real environment variables
         run: |
@@ -165,11 +128,11 @@ jobs:
           test -s public/build/uikit.min.js
           test -s public/build/uikit-icons.min.js
 
-      - name: Verify dependency update only changed PHP lock state
+      - name: Verify dependency install is reproducible
         run: |
-          STATUS="$(git status --porcelain -- package-lock.json package.json .env config)"
+          STATUS="$(git status --porcelain -- composer.lock symfony.lock package-lock.json package.json .env config)"
           if [ -n "$STATUS" ]; then
-            echo "Rate-limiter dependency update changed unrelated project state:"
+            echo "Dependency installation changed committed project state:"
             printf '%s\n' "$STATUS"
             exit 1
           fi
