@@ -53,3 +53,17 @@ For every format the test verifies:
 - the Privacy-safe profile removes GPS while retaining descriptive metadata.
 
 This is a runtime integration gate rather than a parser-only fixture. If the declared CI/runtime toolchain loses one of these format capabilities, the repository gate fails instead of silently downgrading support.
+
+## RAW XMP sidecars
+
+RAW files remain immutable. Mediarama writes canonical editable metadata to a separate XMP artifact instead of rewriting DNG/CR2/CR3/NEF/NRW/ARW/RAF/ORF/RW2/PEF and related RAW originals.
+
+The sidecar writer:
+
+- is a separate application/infrastructure boundary from ordinary embedded metadata export;
+- does not read or mutate the original RAW stream;
+- supports Current, Privacy-safe and Custom metadata policies;
+- rejects the Original profile because that profile means original media bytes, not a generated metadata artifact;
+- uses ExifTool to create a standard XMP file from Mediarama's canonical database values.
+
+CI validates the sidecar through a real ExifTool read-back, including GPS removal for the Privacy-safe profile and field selection for the Custom profile.
