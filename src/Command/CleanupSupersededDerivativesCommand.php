@@ -91,11 +91,11 @@ final class CleanupSupersededDerivativesCommand extends Command
             );
 
             $output->writeln(sprintf(
-                'Queued %d generation(s) / %d derivative object(s) / %d byte(s); storage deleted=%d failed=%d pending=%d.',
+                'Queued %d generation(s) / %d derivative object(s) / %d byte(s); storage resolved=%d failed=%d pending=%d.',
                 $result->queued->generations,
                 $result->queued->derivatives,
                 $result->queued->bytes,
-                $result->storageDeleted,
+                $result->storageResolved,
                 $result->storageFailed,
                 $result->storagePending,
             ));
