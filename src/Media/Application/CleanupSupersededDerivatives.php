@@ -11,6 +11,7 @@ final readonly class CleanupSupersededDerivatives
     public function __construct(
         private DerivativeCleanupRepository $cleanup,
         private MediaStorage $storage,
+        private MediaDerivativeRegenerationLock $regenerationLock,
         private int $graceDays,
         private int $keepNewestVersions,
     ) {
@@ -40,26 +41,40 @@ final readonly class CleanupSupersededDerivatives
         $failed = 0;
 
         foreach ($this->cleanup->pending($deleteLimit) as $job) {
-            if (!$this->isOwnedDerivativeObject($job->storage->disk, $job->storage->key)) {
+            if (
+                !$this->isOwnedDerivativeObject($job->storage->disk, $job->storage->key)
+                || $job->mediaId === null
+                || $job->kind === null
+            ) {
                 ++$failed;
                 continue;
             }
 
-            if ($this->cleanup->isReferenced($job->storage)) {
-                $this->cleanup->complete($job->id);
-                ++$completed;
-                continue;
-            }
-
             try {
-                if ($this->storage->exists($job->storage)) {
-                    $this->storage->delete($job->storage);
-                }
+                $this->regenerationLock->synchronized(
+                    $job->mediaId,
+                    $job->kind,
+                    function () use ($job): void {
+                        // A failed generation can later reuse the same deterministic
+                        // key. Re-check under the regeneration lock so queued cleanup
+                        // can never delete an object that has become live again.
+                        if ($this->cleanup->isReferenced($job->storage)) {
+                            $this->cleanup->complete($job->id);
 
-                $this->cleanup->complete($job->id);
+                            return;
+                        }
+
+                        if ($this->storage->exists($job->storage)) {
+                            $this->storage->delete($job->storage);
+                        }
+
+                        $this->cleanup->complete($job->id);
+                    },
+                );
                 ++$completed;
             } catch (\Throwable) {
-                // Keep the durable queue row for the next maintenance run.
+                // Keep the durable queue row for the next maintenance run. This also
+                // handles a concurrent regeneration holding the media/kind lock.
                 ++$failed;
             }
         }
