@@ -247,7 +247,7 @@ WHERE id = :id
 SQL,
             [
                 'id' => $id->toRfc4122(),
-                'error' => mb_substr($error, 0, 120),
+                'error' => substr($error, 0, 120),
                 'updated' => (new DateTimeImmutable())->format(DATE_ATOM),
             ],
         );
