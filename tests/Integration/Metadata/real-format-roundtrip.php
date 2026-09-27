@@ -175,6 +175,19 @@ try {
             $sourcePath,
         ], 30.0);
 
+        if ($name === 'jpeg') {
+            // Keep a second legacy location representation in the source so the
+            // Privacy-safe test proves that clearing the canonical XMP location
+            // cannot reveal a fallback IPTC sublocation.
+            runCommand([
+                $exiftoolBinary,
+                '-overwrite_original',
+                '-IPTC:Sub-location=Vienna Legacy',
+                '--',
+                $sourcePath,
+            ], 30.0);
+        }
+
         $sourceHash = hash_file('sha256', $sourcePath);
         requireCondition(is_string($sourceHash), 'Unable to hash '.$name.' source fixture.');
 
