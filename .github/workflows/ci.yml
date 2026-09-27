@@ -190,6 +190,9 @@ jobs:
       - name: Verify production authentication boundary
         run: tests/Integration/Security/http-authentication.sh
 
+      - name: Verify upload failure lifecycle
+        run: tests/Integration/Upload/http-failure-lifecycle.sh
+
       - name: Run unit tests
         run: vendor/bin/phpunit
 

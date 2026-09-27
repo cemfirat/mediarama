@@ -29,6 +29,16 @@ final readonly class CleanupExpiredUploads
                 $this->storage->delete($temporary);
             }
 
+            if ($session->status === \Mediarama\Upload\Domain\UploadStatus::Failed) {
+                $permanent = new StorageObjectId(
+                    'media',
+                    sprintf('originals/%s/source', $session->id->toRfc4122()),
+                );
+                if ($this->storage->exists($permanent)) {
+                    $this->storage->delete($permanent);
+                }
+            }
+
             // The reservation FK cascades from upload_sessions, so database
             // deletion releases quota atomically and exactly once.
             $this->sessions->delete($session);

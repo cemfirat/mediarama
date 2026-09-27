@@ -9,7 +9,6 @@ use Mediarama\Upload\Application\CompleteChunkedUpload;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Attribute\Route;
-use Symfony\Component\Uid\Uuid;
 
 final readonly class CompleteUploadController
 {
@@ -21,7 +20,7 @@ final readonly class CompleteUploadController
     public function __invoke(string $id, Request $request): JsonResponse
     {
         ($this->complete)(
-            Uuid::fromString($id),
+            UploadRequestId::parse($id),
             $this->currentUser->requireUser()->id,
         );
 
