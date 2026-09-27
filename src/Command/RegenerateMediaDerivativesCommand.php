@@ -14,7 +14,7 @@ use Symfony\Component\Uid\Uuid;
 
 #[AsCommand(
     name: 'mediarama:media:regenerate',
-    description: 'Generate missing derivatives for one media asset.',
+    description: 'Generate a new versioned derivative set for one image asset.',
 )]
 final class RegenerateMediaDerivativesCommand extends Command
 {
@@ -30,8 +30,12 @@ final class RegenerateMediaDerivativesCommand extends Command
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        ($this->regenerate)(Uuid::fromString((string) $input->getArgument('media-id')));
-        $output->writeln('Derivative generation completed.');
+        $version = ($this->regenerate)(Uuid::fromString((string) $input->getArgument('media-id')));
+
+        $output->writeln(sprintf(
+            'Image derivatives regenerated as processing version %d.',
+            $version,
+        ));
 
         return Command::SUCCESS;
     }
