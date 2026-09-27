@@ -9,6 +9,8 @@ use Symfony\Component\Uid\Uuid;
 
 interface DerivativeCleanupRepository
 {
+    public function enqueueOrphanedDerivative(\Mediarama\Media\Domain\MediaDerivative $derivative): StorageCleanupJob;
+
     public function previewSuperseded(
         DateTimeImmutable $cutoff,
         int $keepVersions,
