@@ -16,5 +16,5 @@ interface MediaDerivativeRepository
 
     public function find(Uuid $mediaId, string $kind, string $profile, int $processingVersion): ?MediaDerivative;
 
-    public function latestProcessingVersion(Uuid $mediaId): int;
+    public function latestProcessingVersion(Uuid $mediaId, string $kind): int;
 }
