@@ -9,21 +9,30 @@ use Doctrine\DBAL\ParameterType;
 use Mediarama\Collection\Application\PublicCollectionResult;
 use Mediarama\Collection\Application\PublicGalleryQuery;
 use Mediarama\Collection\Application\PublicMediaResult;
+use Mediarama\Platform\Application\PublicDiscoveryPolicy;
 use Symfony\Component\Uid\Uuid;
 
 final readonly class DbalPublicGalleryQuery implements PublicGalleryQuery
 {
-    public function __construct(private Connection $connection)
-    {
+    public function __construct(
+        private Connection $connection,
+        private PublicDiscoveryPolicy $discovery,
+    ) {
     }
 
     public function rootCollections(): array
     {
-        return $this->collections(null);
+        return $this->discovery->publicPublishingEnabled()
+            ? $this->collections(null)
+            : [];
     }
 
     public function collection(Uuid $id): ?PublicCollectionResult
     {
+        if (!$this->discovery->publicPublishingEnabled()) {
+            return null;
+        }
+
         $row = $this->connection->fetchAssociative(
             $this->collectionSelect().' WHERE c.id = :id',
             ['id' => $id->toRfc4122()],
@@ -34,11 +43,17 @@ final readonly class DbalPublicGalleryQuery implements PublicGalleryQuery
 
     public function childCollections(Uuid $parentId): array
     {
-        return $this->collections($parentId);
+        return $this->discovery->publicPublishingEnabled()
+            ? $this->collections($parentId)
+            : [];
     }
 
     public function media(Uuid $collectionId, int $limit = 120, int $offset = 0): array
     {
+        if (!$this->discovery->publicPublishingEnabled()) {
+            return [];
+        }
+
         if ($limit < 1 || $limit > 240 || $offset < 0) {
             throw new \InvalidArgumentException('Invalid public gallery pagination.');
         }
@@ -112,6 +127,10 @@ SQL,
 
     public function canViewMedia(Uuid $mediaId): bool
     {
+        if (!$this->discovery->publicPublishingEnabled()) {
+            return false;
+        }
+
         return (bool) $this->connection->fetchOne(
             <<<'SQL'
 SELECT EXISTS (
