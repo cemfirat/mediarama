@@ -21,6 +21,11 @@ final readonly class ExifToolPrivacySafeCopyArguments
             // potentially identifying EXIF/IPTC/XMP tag a source may contain.
             '-all=',
 
+            // TIFF IFD0 also contains structural image tags, so ExifTool cannot
+            // remove the IFD itself. Clear the documented common descriptive IFD0
+            // surface explicitly while preserving the structural container.
+            '-CommonIFD0=',
+
             // ExifTool explicitly warns that removing ICC/color-space metadata can
             // alter image appearance. Keep ICC in place and copy the standard
             // ColorSpaceTags back from the pre-edit source snapshot.
@@ -32,6 +37,11 @@ final readonly class ExifToolPrivacySafeCopyArguments
             // Orientation is display semantics rather than descriptive identity.
             // Removing it from an unrotated source can visibly rotate the export.
             '-Orientation',
+
+            // PNG gAMA/sRGB chunks are display semantics but are not covered by
+            // ColorSpaceTags on the deployed ExifTool runtime.
+            '-PNG:Gamma',
+            '-PNG:SRGBRendering',
 
             // Preserve non-identifying print/display density semantics.
             '-XResolution',
