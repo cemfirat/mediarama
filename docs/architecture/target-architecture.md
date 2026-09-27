@@ -134,10 +134,15 @@ Owns:
 Owns:
 
 - settings
+- deployment-profile/setup defaults;
+- site-level public-publishing capability;
+- site-level search-index default;
 - extension registry
 - audit events
 - diagnostics
 - job monitoring
+
+Deployment-profile labels are operator/setup intent only. They do not replace authentication, Collection authorization or network controls. ADR-0015 defines the separation between deployment exposure, access, publication and search indexing.
 
 ## Database
 
