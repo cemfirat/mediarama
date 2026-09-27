@@ -110,6 +110,6 @@ CI starts the actual application with `APP_ENV=prod` against PostgreSQL and veri
 - changing an authenticated password invalidates the existing session
 - changing an authenticated account from active to inactive invalidates further authenticated API access
 - anonymous admin browser routes are redirected to authentication
-- an ordinary authenticated user can reach allowed admin reads but cannot read/write system settings
+- an ordinary authenticated user without `system.admin` is denied the current system-administration dashboard and settings
 - a user with active `system.admin` group permission can change publication settings
 - missing/invalid CSRF is rejected for browser settings mutation
