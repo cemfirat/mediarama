@@ -86,13 +86,10 @@ function auditCreateFixture(
         $png,
     ], 'create '.$name.' PNG source');
 
-    $command = ['heif-enc'];
+    $command = ['heif-enc', $png];
     if ($name === 'avif') {
         $command[] = '-A';
     }
-    $command[] = '--rotate-cw';
-    $command[] = '90';
-    $command[] = $png;
     $command[] = '-q';
     $command[] = '90';
     $command[] = '-o';
@@ -230,6 +227,18 @@ try {
         try {
             auditCreateFixture($name, $source, $root, $convert);
 
+            $itemTransformSeed = null;
+            if (in_array($name, ['avif', 'heic'], true)) {
+                $itemTransformSeed = auditRun([
+                    $exiftool,
+                    '-overwrite_original',
+                    '-ItemProp:Rotation#=3',
+                    '-ItemProp:Mirroring#=1',
+                    '--',
+                    $source,
+                ], 30.0);
+            }
+
             if ($name !== 'png' && $iccProfile !== '') {
                 auditRequire([
                     $exiftool,
@@ -312,6 +321,11 @@ try {
 
             $result = [
                 'format' => $name,
+                'item_transform_seed' => $itemTransformSeed === null ? null : [
+                    'ok' => $itemTransformSeed['ok'],
+                    'stdout' => trim($itemTransformSeed['stdout']),
+                    'stderr' => trim($itemTransformSeed['stderr']),
+                ],
                 'seed_warnings' => trim($seedResult['stderr']),
                 'scrub_command_ok' => $scrub['ok'],
                 'scrub_warnings' => trim($scrub['stderr']),
