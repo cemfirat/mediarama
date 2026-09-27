@@ -193,6 +193,9 @@ jobs:
       - name: Verify derivative regeneration persistence and locking
         run: php tests/Integration/Media/derivative-regeneration.php
 
+      - name: Verify derivative retention and cleanup
+        run: php tests/Integration/Media/derivative-cleanup.php
+
       - name: Verify collection access policy
         run: php tests/Integration/Collection/access-policy.php
 
