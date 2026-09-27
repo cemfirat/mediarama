@@ -170,6 +170,9 @@ jobs:
       - name: Show migration status
         run: php bin/console doctrine:migrations:status
 
+      - name: Verify derivative regeneration persistence and locking
+        run: php tests/Integration/Media/derivative-regeneration.php
+
       - name: Verify collection access policy
         run: php tests/Integration/Collection/access-policy.php
 
