@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Mediarama\Upload\Application;
 
 use Mediarama\Upload\Domain\UploadFailureStage;
+use Mediarama\Upload\Domain\UploadStatus;
 use Symfony\Component\Uid\Uuid;
 
 final readonly class CompleteChunkedUpload
@@ -28,6 +29,13 @@ final readonly class CompleteChunkedUpload
 
         if ($session->isExpired()) {
             throw UploadProblem::request('upload_expired', 'Upload session has expired.');
+        }
+
+        if (!in_array($session->status, [UploadStatus::Created, UploadStatus::Uploading], true)) {
+            throw UploadProblem::request(
+                'upload_state_conflict',
+                'Upload session cannot be completed from its current state.',
+            );
         }
 
         try {

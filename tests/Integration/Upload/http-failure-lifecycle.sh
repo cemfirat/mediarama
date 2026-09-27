@@ -250,7 +250,7 @@ expect_status 202 "$(put_chunk "$USER_JAR" "$USER_CSRF" "$FAILURE_ID" "$INVALID_
 expect_status 200 "$(get_upload "$USER_JAR" "$FAILURE_ID" /tmp/failure-status-cleared.json)" "status is readable after successful retry"
 php -r '
   $data = json_decode((string) file_get_contents($argv[1]), true, flags: JSON_THROW_ON_ERROR);
-  if (($data["failure"] ?? "missing") !== null) {
+  if (!array_key_exists("failure", $data) || $data["failure"] !== null) {
       fwrite(STDERR, "Successful retry did not clear stale failure: ".json_encode($data).PHP_EOL);
       exit(1);
   }
@@ -258,6 +258,17 @@ php -r '
 ' /tmp/failure-status-cleared.json
 
 expect_status 200 "$(post_upload_action "$USER_JAR" "$USER_CSRF" "$FAILURE_ID" complete /tmp/failure-complete.json)" "assembled malformed upload reaches uploaded state"
+expect_status 409 "$(post_upload_action "$USER_JAR" "$USER_CSRF" "$FAILURE_ID" complete /tmp/failure-complete-again.json)" "repeated complete returns stable state conflict"
+php -r '
+  $data = json_decode((string) file_get_contents($argv[1]), true, flags: JSON_THROW_ON_ERROR);
+  if (($data["error"] ?? null) !== "upload_state_conflict"
+      || ($data["retryable"] ?? null) !== false) {
+      fwrite(STDERR, "Unexpected repeated-complete payload: ".json_encode($data).PHP_EOL);
+      exit(1);
+  }
+  echo "OK repeated complete is classified as a state conflict".PHP_EOL;
+' /tmp/failure-complete-again.json
+
 expect_status 422 "$(post_upload_action "$USER_JAR" "$USER_CSRF" "$FAILURE_ID" finalize /tmp/failure-finalize.json)" "decoder rejection is a stable terminal client failure"
 
 php -r '
