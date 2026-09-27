@@ -56,6 +56,7 @@ jobs:
       FFPROBE_ANALYZE_DURATION_US: 5000000
       IMAGEMAGICK_BINARY: convert
       IMAGEMAGICK_IDENTIFY_BINARY: identify
+      IMAGEMAGICK_COMPARE_BINARY: compare
       IMAGEMAGICK_LIMIT_MEMORY: 256MiB
       IMAGEMAGICK_LIMIT_MAP: 512MiB
       IMAGEMAGICK_LIMIT_DISK: 2GiB
@@ -128,6 +129,9 @@ jobs:
 
       - name: Verify real image derivative formats
         run: php tests/Integration/ImageMagick/real-format-derivatives.php
+
+      - name: Verify derivative format benchmark harness
+        run: bash tests/Integration/ImageMagick/derivative-format-benchmark.sh
 
       - name: Verify profile-level watermark rendering
         run: php tests/Integration/ImageMagick/watermark.php
