@@ -175,7 +175,7 @@ expect_status 302 "$(get_status "" "/admin/settings/publication" /tmp/admin-sett
 ORDINARY_JAR=/tmp/admin-ordinary.cookies
 rm -f "$ORDINARY_JAR"
 expect_status 302 "$(login admin-ci-ordinary "$ORDINARY_JAR")" "ordinary active user can authenticate"
-expect_status 200 "$(get_status "$ORDINARY_JAR" "/admin" /tmp/admin-ordinary-dashboard.html)" "authenticated user can reach allowed admin dashboard"
+expect_status 403 "$(get_status "$ORDINARY_JAR" "/admin" /tmp/admin-ordinary-dashboard.html)" "ordinary authenticated user cannot enter system administration"
 expect_status 403 "$(get_status "$ORDINARY_JAR" "/admin/settings/publication" /tmp/admin-ordinary-settings.html)" "ordinary user cannot read system settings"
 
 ADMIN_JAR=/tmp/admin-system.cookies
@@ -186,7 +186,7 @@ SETTINGS_TOKEN="$(settings_csrf "$ADMIN_JAR" /tmp/admin-system-settings.html /tm
 grep -i -F "x-robots-tag: noindex, nofollow" /tmp/admin-system-settings.headers
 grep -i -E '^cache-control:.*private' /tmp/admin-system-settings.headers
 grep -i -E '^cache-control:.*no-store' /tmp/admin-system-settings.headers
-grep -F "Publication &amp; discovery" /tmp/admin-system-settings.html
+grep -F "Publication & discovery" /tmp/admin-system-settings.html
 
 NO_CSRF_STATUS="$(curl --silent --show-error     --cookie "$ADMIN_JAR"     --cookie-jar "$ADMIN_JAR"     --output /tmp/admin-no-csrf.html     --write-out '%{http_code}'     --data-urlencode 'action=apply_profile'     --data-urlencode 'profile=public_publishing'     "$BASE_URL/admin/settings/publication")"
 expect_status 403 "$NO_CSRF_STATUS" "system settings mutation rejects missing CSRF"
