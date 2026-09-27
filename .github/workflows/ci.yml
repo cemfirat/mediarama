@@ -164,7 +164,7 @@ jobs:
       - name: Verify collection access policy
         run: php tests/Integration/Collection/access-policy.php
 
-      - name: Verify actor-aware library media search
+      - name: Verify authenticated library media search
         run: php tests/Integration/Media/library-search.php
 
       - name: Validate production security container

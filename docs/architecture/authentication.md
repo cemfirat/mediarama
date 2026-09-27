@@ -80,6 +80,7 @@ Application-level rate limiting only runs after Symfony/PHP has booted. It is no
 
 - `/login` is public and non-indexable.
 - `/api/uploads...` requires `ROLE_USER` in production.
+- `/api/library/media` requires `ROLE_USER` in production and returns actor-authorized rich library metadata.
 - anonymous protected API requests receive JSON `401 authentication_required`.
 - protected browser requests are redirected to the login page.
 - public gallery and public search routes stay anonymous subject to their own visibility/privacy rules.
