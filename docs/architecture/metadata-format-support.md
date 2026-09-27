@@ -50,7 +50,7 @@ For every format the test verifies:
 - XMP descriptive and GPS metadata can be extracted through ExifTool's family-1 group names;
 - the Current export profile writes Mediarama canonical metadata into a copy and round-trips through the normal inspector;
 - the immutable source checksum is unchanged;
-- the Privacy-safe profile removes GPS while retaining descriptive metadata.
+- the Privacy-safe profile removes exact GPS and canonical descriptive location while retaining non-location descriptive metadata.
 
 This is a runtime integration gate rather than a parser-only fixture. If the declared CI/runtime toolchain loses one of these format capabilities, the repository gate fails instead of silently downgrading support.
 
@@ -66,4 +66,4 @@ The sidecar writer:
 - rejects the Original profile because that profile means original media bytes, not a generated metadata artifact;
 - uses ExifTool to create a standard XMP file from Mediarama's canonical database values.
 
-CI validates the sidecar through a real ExifTool read-back, including GPS removal for the Privacy-safe profile and field selection for the Custom profile.
+CI validates the sidecar through a real ExifTool read-back, including GPS and descriptive-location removal for the Privacy-safe profile plus explicit descriptive-location selection for the Custom profile.
