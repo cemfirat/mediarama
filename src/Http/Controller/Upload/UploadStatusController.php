@@ -10,7 +10,6 @@ use Mediarama\Upload\Application\UploadSessionRepository;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Attribute\Route;
-use Symfony\Component\Uid\Uuid;
 
 final readonly class UploadStatusController
 {
@@ -24,7 +23,7 @@ final readonly class UploadStatusController
     #[Route('/api/uploads/{id}', name: 'upload_status', methods: ['GET'])]
     public function __invoke(string $id, Request $request): JsonResponse
     {
-        $session = $this->sessions->get(Uuid::fromString($id));
+        $session = $this->sessions->get(UploadRequestId::parse($id));
         $actor = $this->currentUser->requireUser()->id;
 
         if (!$session->userId->equals($actor)) {

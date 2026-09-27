@@ -11,7 +11,6 @@ use Mediarama\Upload\Domain\UploadChunk;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Attribute\Route;
-use Symfony\Component\Uid\Uuid;
 
 final readonly class UploadChunkController
 {
@@ -27,7 +26,7 @@ final readonly class UploadChunkController
         $checksum = strtolower((string) $request->headers->get('Upload-Checksum-SHA256', ''));
 
         try {
-            $sessionId = Uuid::fromString($id);
+            $sessionId = UploadRequestId::parse($id);
             $chunk = new UploadChunk($index, $offset, $size, $checksum);
         } catch (\Throwable) {
             throw UploadProblem::request(

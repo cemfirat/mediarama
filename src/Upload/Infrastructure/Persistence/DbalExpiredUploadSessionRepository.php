@@ -40,24 +40,24 @@ SQL,
                 $failure = new UploadFailure(
                     (string) $row['last_failure_code'],
                     UploadFailureStage::from((string) $row['last_failure_stage']),
-                    filter_var($row['last_failure_retryable'], FILTER_VALIDATE_BOOLEAN),
+                    in_array(strtolower((string) $row['last_failure_retryable']), ['1', 't', 'true'], true),
                     new DateTimeImmutable((string) $row['last_failed_at']),
                 );
             }
 
             return UploadSession::reconstitute(
-            Uuid::fromString((string) $row['id']),
-            Uuid::fromString((string) $row['user_id']),
-            $row['target_collection_id'] !== null ? Uuid::fromString((string) $row['target_collection_id']) : null,
-            (string) $row['original_filename'],
-            (int) $row['expected_size'],
-            $row['expected_mime'] !== null ? (string) $row['expected_mime'] : null,
-            (string) $row['temporary_storage_key'],
-            UploadStatus::from((string) $row['status']),
-            new DateTimeImmutable((string) $row['expires_at']),
-            new DateTimeImmutable((string) $row['created_at']),
-            new DateTimeImmutable((string) $row['updated_at']),
-            $failure,
+                Uuid::fromString((string) $row['id']),
+                Uuid::fromString((string) $row['user_id']),
+                $row['target_collection_id'] !== null ? Uuid::fromString((string) $row['target_collection_id']) : null,
+                (string) $row['original_filename'],
+                (int) $row['expected_size'],
+                $row['expected_mime'] !== null ? (string) $row['expected_mime'] : null,
+                (string) $row['temporary_storage_key'],
+                UploadStatus::from((string) $row['status']),
+                new DateTimeImmutable((string) $row['expires_at']),
+                new DateTimeImmutable((string) $row['created_at']),
+                new DateTimeImmutable((string) $row['updated_at']),
+                $failure,
             );
         }, $rows);
     }

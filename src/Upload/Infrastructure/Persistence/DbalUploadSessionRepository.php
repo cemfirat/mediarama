@@ -93,7 +93,7 @@ SQL,
             $failure = new UploadFailure(
                 (string) $row['last_failure_code'],
                 UploadFailureStage::from((string) $row['last_failure_stage']),
-                filter_var($row['last_failure_retryable'], FILTER_VALIDATE_BOOLEAN),
+                in_array(strtolower((string) $row['last_failure_retryable']), ['1', 't', 'true'], true),
                 new DateTimeImmutable((string) $row['last_failed_at']),
             );
         }

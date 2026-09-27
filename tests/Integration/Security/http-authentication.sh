@@ -173,6 +173,7 @@ expect_status 401 "$(anonymous_endpoint_status GET "/api/uploads/$PROTECTED_ID")
 expect_status 401 "$(anonymous_endpoint_status PUT "/api/uploads/$PROTECTED_ID/chunks/0")" "anonymous upload chunk is rejected"
 expect_status 401 "$(anonymous_endpoint_status POST "/api/uploads/$PROTECTED_ID/complete")" "anonymous upload complete is rejected"
 expect_status 401 "$(anonymous_endpoint_status POST "/api/uploads/$PROTECTED_ID/finalize")" "anonymous upload finalize is rejected"
+expect_status 401 "$(anonymous_endpoint_status DELETE "/api/uploads/$PROTECTED_ID")" "anonymous upload abandon is rejected"
 
 expect_status 401 "$(anonymous_endpoint_status GET "/api/auth/csrf")" "anonymous API CSRF token request is rejected"
 

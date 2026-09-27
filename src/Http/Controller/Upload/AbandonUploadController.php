@@ -9,7 +9,6 @@ use Mediarama\Upload\Application\AbandonUpload;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Attribute\Route;
-use Symfony\Component\Uid\Uuid;
 
 final readonly class AbandonUploadController
 {
@@ -23,7 +22,7 @@ final readonly class AbandonUploadController
     public function __invoke(string $id, Request $request): Response
     {
         ($this->abandon)(
-            Uuid::fromString($id),
+            UploadRequestId::parse($id),
             $this->currentUser->requireUser()->id,
         );
 
