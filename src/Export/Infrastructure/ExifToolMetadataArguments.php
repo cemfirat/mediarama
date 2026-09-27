@@ -22,6 +22,11 @@ final readonly class ExifToolMetadataArguments
                 '-GPS:all=',
                 '-XMP-exif:GPSLatitude=',
                 '-XMP-exif:GPSLongitude=',
+                // A human-readable location can be as precise as a home, school,
+                // venue or street address. Privacy-safe therefore removes it rather
+                // than guessing a coarse location from the same source data.
+                '-XMP-iptcCore:Location=',
+                '-IPTC:Sub-location=',
                 '-SerialNumber=',
                 '-InternalSerialNumber=',
             ];
@@ -42,7 +47,11 @@ final readonly class ExifToolMetadataArguments
             : null;
 
         foreach ($fields as $name => [$prefix, $value]) {
-            if ($value === null || ($allowed !== null && !isset($allowed[$name]))) {
+            if (
+                $value === null
+                || ($allowed !== null && !isset($allowed[$name]))
+                || ($policy->profile === MetadataExportProfile::PrivacySafe && $name === 'location_name')
+            ) {
                 continue;
             }
 
