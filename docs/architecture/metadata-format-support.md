@@ -48,9 +48,13 @@ CI exercises the actual ExifTool inspection and export adapters against generate
 For every format the test verifies:
 
 - XMP descriptive and GPS metadata can be extracted through ExifTool's family-1 group names;
-- the Current export profile writes Mediarama canonical metadata into a copy and round-trips through the normal inspector;
+- the Current export profile writes Mediarama canonical metadata into a copy and intentionally preserves inherited source metadata;
 - the immutable source checksum is unchanged;
-- the Privacy-safe profile removes exact GPS and canonical descriptive location while retaining non-location descriptive metadata.
+- the Privacy-safe profile removes inherited non-allowlisted metadata rather than relying on a tag denylist;
+- Privacy-safe removes exact GPS and canonical descriptive location while re-writing allowed non-location canonical metadata;
+- the decoded visual signature remains unchanged across the metadata scrub.
+
+The JPEG case additionally carries a real ICC profile plus EXIF orientation and verifies both survive byte-for-byte/semantically through the Privacy-safe scrub.
 
 This is a runtime integration gate rather than a parser-only fixture. If the declared CI/runtime toolchain loses one of these format capabilities, the repository gate fails instead of silently downgrading support.
 
