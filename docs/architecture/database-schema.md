@@ -154,6 +154,34 @@ Unique logical derivative:
 
 `(media_id, kind, profile, processing_version)`
 
+## derivative_cleanup_jobs
+
+Durable queue for physical derivative-object deletion after relational
+retirement or a failed-generation cleanup attempt.
+
+- `id bigint identity primary key`
+- `storage_disk varchar`
+- `storage_key text`
+- `reason varchar`
+- `media_id uuid nullable`
+- `kind varchar nullable`
+- `profile varchar nullable`
+- `processing_version integer nullable`
+- timestamps
+
+Unique storage identity:
+
+`(storage_disk, storage_key)`
+
+This table intentionally does not foreign-key `media_id` or a
+`media_derivatives` row. Cleanup work must survive deletion of the relational
+entity that made the storage object obsolete.
+
+Retention staging deletes an eligible complete processing generation from
+`media_derivatives` and inserts the corresponding cleanup jobs in the **same
+PostgreSQL transaction**. Physical storage deletion happens only afterward and
+is retryable/idempotent.
+
 ## collections
 
 - `id uuid primary key`
