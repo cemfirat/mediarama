@@ -221,6 +221,8 @@ try {
         requireFormatCondition($derivative->byteSize > 0, $name.' derivative is empty.');
         requireFormatCondition($derivative->metadata['orientation_normalized'] ?? false, $name.' derivative is not marked orientation-normalized.');
         requireFormatCondition(($derivative->metadata['watermarked'] ?? true) === false, $name.' derivative was unexpectedly marked watermarked.');
+        requireFormatCondition(($derivative->metadata['encoder'] ?? null) === 'cwebp', $name.' derivative did not record the cwebp backend.');
+        requireFormatCondition(($derivative->metadata['encoder_quality'] ?? null) === 82, $name.' derivative did not record the cwebp quality.');
         requireFormatCondition($storage->exists($derivative->storage), $name.' derivative was not persisted.');
 
         $after = $storage->stat($asset->original);
