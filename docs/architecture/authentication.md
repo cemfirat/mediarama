@@ -59,6 +59,23 @@ Unsafe session-authenticated upload API requests require a second CSRF boundary:
 
 The token endpoint itself requires `ROLE_USER` in production, is non-cacheable and is not indexable.
 
+
+## Login throttling
+
+Production form login uses Symfony's built-in login throttling with an explicit first-release policy:
+
+- 5 failed attempts per IP + username per 1 minute;
+- Symfony's companion global IP limiter therefore allows 25 failed attempts per IP per minute;
+- limiter state uses `cache.rate_limiter`.
+
+A successful login resets the username+IP limiter. The broader IP limiter intentionally remains in effect.
+
+The current cache-backed limiter is suitable for the first-release single-instance deployment. A future multi-instance deployment must move limiter state to deliberately shared storage before horizontal scaling is considered production-safe.
+
+The visible login failure remains generic; the UI does not reveal whether the username exists, the account status is blocked, the password is wrong or login throttling was triggered.
+
+Application-level rate limiting only runs after Symfony/PHP has booted. It is not a substitute for reverse-proxy/web-server/edge protection against denial-of-service traffic.
+
 ## HTTP behavior
 
 - `/login` is public and non-indexable.
