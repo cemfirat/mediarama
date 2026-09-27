@@ -62,7 +62,11 @@ SQL,
                 'last_failure_retryable' => $session->lastFailure?->retryable,
                 'last_failed_at' => $session->lastFailure?->failedAt->format(DATE_ATOM),
             ],
-            ['last_failure_retryable' => ParameterType::BOOLEAN],
+            [
+                'last_failure_retryable' => $session->lastFailure === null
+                    ? ParameterType::NULL
+                    : ParameterType::BOOLEAN,
+            ],
         );
     }
 

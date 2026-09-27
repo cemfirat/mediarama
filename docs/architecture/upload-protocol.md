@@ -136,7 +136,7 @@ Terminal content failures such as disallowed MIME, expected-size mismatch or dec
 
 The `finalizing` state remains crash-recoverable. Missing/transient finalization storage is recorded as retryable and does not convert `finalizing` into `failed`.
 
-`DELETE /api/uploads/{id}` abandons `created`, `uploading`, `uploaded` or `failed` sessions, removes chunk/temporary data and deletes the session. The reservation FK cascade is the final idempotent release path. `finalizing` and `completed` sessions cannot be abandoned because that would violate deterministic finalization recovery.
+`DELETE /api/uploads/{id}` abandons `created`, `uploading`, `uploaded` or `failed` sessions, removes chunk/temporary data and deletes the session. For `failed` sessions it also removes a deterministic permanent object that may exist after a terminal post-promotion integrity rejection. Expiry cleanup applies the same failed-object rule. The reservation FK cascade is the final idempotent release path. `finalizing` and `completed` sessions cannot be abandoned because that would violate deterministic finalization recovery.
 
 Downstream metadata/derivative failures remain solely in `media_assets.processing_state = failed`; they never retroactively change a completed UploadSession.
 

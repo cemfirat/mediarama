@@ -43,6 +43,16 @@ final readonly class AbandonUpload
             $this->storage->delete($temporary);
         }
 
+        if ($session->status === UploadStatus::Failed) {
+            $permanent = new StorageObjectId(
+                'media',
+                sprintf('originals/%s/source', $session->id->toRfc4122()),
+            );
+            if ($this->storage->exists($permanent)) {
+                $this->storage->delete($permanent);
+            }
+        }
+
         // upload_quota_reservations cascades from upload_sessions. A previously
         // released terminal reservation therefore remains safe and idempotent.
         $this->sessions->delete($session);
