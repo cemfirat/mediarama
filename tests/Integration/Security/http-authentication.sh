@@ -216,12 +216,20 @@ curl --fail --silent --show-error \
     --cookie-jar "$THROTTLE_BLOCK_JAR" \
     "$BASE_URL/login" \
     -o /tmp/auth-throttle-visible-failure.html
-grep -F "Sign-in failed. Check your credentials and account status." /tmp/auth-throttle-visible-failure.html
-if grep -Eqi 'rate.?limit|throttl|too many|username.*not found|account.*inactive' /tmp/auth-throttle-visible-failure.html; then
-    echo "FAIL throttled login revealed internal rejection reason"
-    exit 1
-fi
-echo "OK throttled login failure remains generic"
+php -r '
+  $html = (string) file_get_contents($argv[1]);
+  if (!preg_match("/<div class=\"uk-alert-danger\"[^>]*>\\s*<p>(.*?)<\\/p>/s", $html, $match)) {
+      fwrite(STDERR, "Visible login failure alert is missing.".PHP_EOL);
+      exit(1);
+  }
+  $message = trim(strip_tags($match[1]));
+  $expected = "Sign-in failed. Check your credentials and account status.";
+  if ($message !== $expected) {
+      fwrite(STDERR, "Visible login failure is not generic: ".$message.PHP_EOL);
+      exit(1);
+  }
+  echo "OK throttled login failure remains generic".PHP_EOL;
+' /tmp/auth-throttle-visible-failure.html
 
 APP_ENV=prod APP_DEBUG=0 php bin/console cache:pool:clear cache.rate_limiter --no-interaction
 
