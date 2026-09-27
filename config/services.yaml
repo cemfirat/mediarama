@@ -123,6 +123,9 @@ services:
     Mediarama\Media\Application\MediaDerivativeRegenerationLock:
         alias: Mediarama\Media\Infrastructure\Persistence\PostgresMediaDerivativeRegenerationLock
 
+    Mediarama\Media\Application\DerivativeCleanupRepository:
+        alias: Mediarama\Media\Infrastructure\Persistence\DbalDerivativeCleanupRepository
+
     Mediarama\Media\Application\ImageDerivativeGenerator:
         alias: Mediarama\Media\Infrastructure\Image\ImageMagickDerivativeGenerator
 
