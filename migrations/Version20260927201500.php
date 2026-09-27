@@ -19,8 +19,16 @@ final class Version20260927201500 extends AbstractMigration
         $this->addSql("ALTER TABLE platform_settings ADD setup_status VARCHAR(16) NOT NULL DEFAULT 'pending'");
         $this->addSql("ALTER TABLE platform_settings ADD setup_completed_at TIMESTAMPTZ DEFAULT NULL");
         $this->addSql("ALTER TABLE platform_settings ADD setup_completed_by UUID DEFAULT NULL");
+        $this->addSql("ALTER TABLE platform_settings ADD setup_completed_via VARCHAR(24) DEFAULT NULL");
         $this->addSql(
             "ALTER TABLE platform_settings ADD CONSTRAINT chk_platform_setup_status CHECK (setup_status IN ('pending', 'completed'))"
+        );
+        $this->addSql(
+            "ALTER TABLE platform_settings ADD CONSTRAINT chk_platform_setup_completed_via
+             CHECK (
+                 setup_completed_via IS NULL
+                 OR setup_completed_via IN ('migration', 'browser', 'cli', 'existing_admin')
+             )"
         );
         $this->addSql(
             'ALTER TABLE platform_settings
@@ -31,8 +39,17 @@ final class Version20260927201500 extends AbstractMigration
             "ALTER TABLE platform_settings
              ADD CONSTRAINT chk_platform_setup_completion
              CHECK (
-                 (setup_status = 'pending' AND setup_completed_at IS NULL AND setup_completed_by IS NULL)
-                 OR (setup_status = 'completed' AND setup_completed_at IS NOT NULL)
+                 (
+                     setup_status = 'pending'
+                     AND setup_completed_at IS NULL
+                     AND setup_completed_by IS NULL
+                     AND setup_completed_via IS NULL
+                 )
+                 OR (
+                     setup_status = 'completed'
+                     AND setup_completed_at IS NOT NULL
+                     AND setup_completed_via IS NOT NULL
+                 )
              )"
         );
 
@@ -40,7 +57,7 @@ final class Version20260927201500 extends AbstractMigration
         // are initialized immediately. Empty/new installations remain pending.
         $this->addSql(<<<'SQL'
 WITH existing_admin AS (
-    SELECT u.id
+    SELECT DISTINCT u.id, u.created_at
     FROM users u
     INNER JOIN user_groups ug ON ug.user_id = u.id
     INNER JOIN group_permissions gp ON gp.group_id = ug.group_id
@@ -53,6 +70,7 @@ UPDATE platform_settings ps
 SET setup_status = 'completed',
     setup_completed_at = CURRENT_TIMESTAMP,
     setup_completed_by = existing_admin.id,
+    setup_completed_via = 'migration',
     updated_at = CURRENT_TIMESTAMP
 FROM existing_admin
 WHERE ps.id = 1
@@ -63,7 +81,9 @@ SQL);
     {
         $this->addSql('ALTER TABLE platform_settings DROP CONSTRAINT chk_platform_setup_completion');
         $this->addSql('ALTER TABLE platform_settings DROP CONSTRAINT fk_platform_setup_completed_by');
+        $this->addSql('ALTER TABLE platform_settings DROP CONSTRAINT chk_platform_setup_completed_via');
         $this->addSql('ALTER TABLE platform_settings DROP CONSTRAINT chk_platform_setup_status');
+        $this->addSql('ALTER TABLE platform_settings DROP COLUMN setup_completed_via');
         $this->addSql('ALTER TABLE platform_settings DROP COLUMN setup_completed_by');
         $this->addSql('ALTER TABLE platform_settings DROP COLUMN setup_completed_at');
         $this->addSql('ALTER TABLE platform_settings DROP COLUMN setup_status');
