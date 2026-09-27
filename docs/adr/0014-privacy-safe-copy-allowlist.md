@@ -22,12 +22,14 @@ ExifTool's documented safe-removal guidance also warns that indiscriminate metad
 For ordinary image copies using the `privacy_safe` profile, Mediarama uses an allowlist boundary:
 
 1. remove inherited metadata with ExifTool before canonical Privacy-safe fields are written;
-2. preserve/re-copy rendering-relevant color-space metadata;
-3. preserve ICC profiles;
-4. preserve image orientation;
-5. preserve X/Y resolution and resolution-unit semantics;
-6. write only the canonical fields allowed by the Privacy-safe policy after the scrub;
-7. never fall back to returning the unsanitized copied container if ExifTool fails.
+2. clear common descriptive TIFF IFD0 metadata without deleting TIFF's structural image directory;
+3. preserve/re-copy rendering-relevant color-space metadata;
+4. preserve ICC profiles;
+5. preserve image orientation;
+6. preserve PNG gamma/sRGB rendering semantics;
+7. preserve X/Y resolution and resolution-unit semantics;
+8. write only the canonical fields allowed by the Privacy-safe policy after the scrub;
+9. never fall back to returning the unsanitized copied container if ExifTool fails.
 
 The shared canonical policy then adds the current title, description, creator and copyright while continuing to remove GPS and descriptive location according to ADR-0013.
 
@@ -47,7 +49,9 @@ Mediarama follows ExifTool's documented color-preservation approach:
 
 - remove general metadata;
 - exclude/preserve the ICC profile;
-- copy standard color-space tags from the source snapshot.
+- copy standard color-space tags from the source snapshot;
+- explicitly preserve PNG gamma and sRGB rendering-intent chunks proven by the real-format audit;
+- clear the common descriptive TIFF IFD0 surface while leaving structural TIFF image data intact.
 
 Orientation and density tags are also retained because removing them can change display/print semantics without changing encoded pixels.
 
@@ -87,7 +91,9 @@ Privacy-safe support for a format is valid only while the real runtime integrati
 - canonical allowed metadata is re-written;
 - location/GPS remains absent;
 - rendered pixel/orientation signature is unchanged;
-- JPEG ICC and orientation preservation remains verified.
+- JPEG ICC and orientation preservation remains verified;
+- PNG gamma/sRGB rendering semantics remain verified;
+- common descriptive TIFF IFD0 metadata does not survive the Privacy-safe scrub.
 
 If a format loses that capability, CI must fail instead of silently returning a weaker Privacy-safe copy.
 
