@@ -10,6 +10,7 @@ INPUT="$ROOT/input"
 REPORT="$ROOT/report.json"
 SUMMARY_JSON="$ROOT/summary.json"
 SUMMARY_MD="$ROOT/summary.md"
+RETAIN="$ROOT/review"
 
 cleanup() {
   rm -rf "$ROOT"
@@ -23,7 +24,8 @@ mkdir -p "$INPUT"
 php bin/benchmark-derivative-formats   --input-dir="$INPUT"   --output="$REPORT"   --formats=webp,jpeg,avif   --qualities=70,82   --profiles=smoke:320x320   --limit=1   --convert-binary="$IMAGEMAGICK_BINARY"   --identify-binary="$IMAGEMAGICK_IDENTIFY_BINARY"   --compare-binary="${IMAGEMAGICK_COMPARE_BINARY:-compare}" \
   --cwebp-binary="$CWEBP_BINARY" \
   --corpus-id="mediarama-ci-smoke" \
-  --corpus-revision="synthetic-v2"
+  --corpus-revision="synthetic-v2" \
+  --retain-dir="$RETAIN"
 
 REPORT="$REPORT" INPUT="$INPUT" php <<'PHP'
 <?php
@@ -142,6 +144,11 @@ if ($avifSupported) {
 
 echo "Derivative-format benchmark smoke checks passed.".PHP_EOL;
 PHP
+
+if [ "$(find "$RETAIN" -maxdepth 1 -type f | wc -l)" -ne 7 ]; then
+  echo "Expected one reference plus six retained codec candidates." >&2
+  exit 1
+fi
 
 
 php bin/summarize-derivative-format-benchmark \
