@@ -7,6 +7,7 @@ namespace Mediarama\Upload\Application;
 use DateTimeImmutable;
 use Mediarama\Media\Application\MediaStorage;
 use Mediarama\Media\Domain\StorageObjectId;
+use Mediarama\Upload\Domain\UploadStatus;
 
 final readonly class CleanupExpiredUploads
 {
@@ -27,6 +28,16 @@ final readonly class CleanupExpiredUploads
             $temporary = new StorageObjectId('media', $session->temporaryStorageKey);
             if ($this->storage->exists($temporary)) {
                 $this->storage->delete($temporary);
+            }
+
+            if ($session->status === UploadStatus::Failed) {
+                $permanent = new StorageObjectId(
+                    'media',
+                    sprintf('originals/%s/source', $session->id->toRfc4122()),
+                );
+                if ($this->storage->exists($permanent)) {
+                    $this->storage->delete($permanent);
+                }
             }
 
             // The reservation FK cascades from upload_sessions, so database

@@ -45,8 +45,9 @@ final readonly class FinalizeUpload
         $existing = $this->existingAsset($sessionId);
         if ($existing !== null) {
             if ($session->status === UploadStatus::Finalizing) {
-                $this->criticalSection->run(
+                $this->runCritical(
                     $sessionId,
+                    $actingUserId,
                     function () use ($sessionId, $actingUserId): void {
                         $locked = $this->sessions->get($sessionId);
                         $this->assertOwner($locked, $actingUserId);
@@ -97,8 +98,9 @@ final readonly class FinalizeUpload
                 throw $problem;
             }
 
-            $existing = $this->criticalSection->run(
+            $existing = $this->runCritical(
                 $sessionId,
+                $actingUserId,
                 function () use ($sessionId, $actingUserId): ?MediaAsset {
                     $locked = $this->sessions->get($sessionId);
                     $this->assertOwner($locked, $actingUserId);
@@ -182,8 +184,9 @@ final readonly class FinalizeUpload
             throw $problem;
         }
 
-        return $this->criticalSection->run(
+        return $this->runCritical(
             $sessionId,
+            $actingUserId,
             function () use (
                 $sessionId,
                 $actingUserId,
@@ -285,6 +288,30 @@ final readonly class FinalizeUpload
         }
     }
 
+    /**
+     * Run one short finalization DB critical section. Unexpected infrastructure
+     * failures are made observable without changing a recoverable finalizing
+     * session into terminal failed state.
+     */
+    private function runCritical(
+        Uuid $sessionId,
+        Uuid $actingUserId,
+        callable $operation,
+    ): mixed {
+        try {
+            return $this->criticalSection->run($sessionId, $operation);
+        } catch (UploadProblem $problem) {
+            throw $problem;
+        } catch (\Throwable $error) {
+            $problem = UploadProblem::fromFailure(
+                UploadFailureCode::FinalizationInterrupted,
+                $error,
+            );
+            $this->recordFailure($sessionId, $actingUserId, $problem);
+            throw $problem;
+        }
+    }
+
     private function recordFailure(
         Uuid $sessionId,
         Uuid $actingUserId,
@@ -301,7 +328,14 @@ final readonly class FinalizeUpload
                     $locked = $this->sessions->get($sessionId);
                     $this->assertOwner($locked, $actingUserId);
 
-                    if ($this->existingAsset($sessionId) !== null) {
+                    $existing = $this->existingAsset($sessionId);
+                    if (
+                        $existing !== null
+                        && !(
+                            $locked->status === UploadStatus::Finalizing
+                            && $problem->retryable
+                        )
+                    ) {
                         return;
                     }
 

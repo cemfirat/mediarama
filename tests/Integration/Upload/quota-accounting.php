@@ -311,6 +311,26 @@ try {
     requireQuotaCondition((int) $reserved === 123, 'Default unlimited policy did not persist reservation.');
     $db->delete('upload_sessions', ['id' => $defaultSession->id->toRfc4122()]);
 
+    // Explicit release is idempotent and does not delete the still-queryable
+    // UploadSession. Terminal failure/abandonment can therefore release quota
+    // before later session cleanup without double-release drift.
+    $releaseSession = quotaCreator($db, 0)($userId, null, 'release-idempotent.bin', 77, null);
+    $quota = new DbalUploadQuota($db, 0);
+    $quota->release($releaseSession->id);
+    $quota->release($releaseSession->id);
+    requireQuotaCondition(
+        reservationCount($db, $userId) === 0,
+        'Explicit quota release was not idempotent.',
+    );
+    requireQuotaCondition(
+        (int) $db->fetchOne(
+            'SELECT COUNT(*) FROM upload_sessions WHERE id = :id',
+            ['id' => $releaseSession->id->toRfc4122()],
+        ) === 1,
+        'Quota release unexpectedly deleted the UploadSession.',
+    );
+    $db->delete('upload_sessions', ['id' => $releaseSession->id->toRfc4122()]);
+
     // Persistence failure must roll back the reservation inserted before session save.
     $failedSessionId = Uuid::v7();
     try {
@@ -426,6 +446,7 @@ try {
     echo "OK concurrent reservations serialize on user row\n";
     echo "OK user override and multi-group quota semantics\n";
     echo "OK default unlimited policy still accounts reservations\n";
+    echo "OK explicit quota release is idempotent and preserves session observability\n";
     echo "OK failed session persistence rolls reservation back\n";
     echo "OK committed and soft-deleted originals count correctly\n";
     echo "OK physical purge releases committed usage\n";

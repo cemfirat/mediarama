@@ -76,6 +76,8 @@ Expected upload problems are mapped centrally to sanitized JSON responses rather
 
 Finalization distinguishes decoder/probe rejection from tool availability at the process boundary. A decoder-rejected asset is terminal: the session becomes `failed` and its quota reservation is released in the same PostgreSQL critical section. A missing/timeout/unavailable validation tool is retryable and keeps the reservation. A deterministic finalization source that has disappeared is terminal; storage-promotion interruption remains retryable.
 
+Unexpected database or Doctrine-Messenger interruption inside a finalization critical section is surfaced as retryable `upload_finalization_interrupted`. If the session has already reached `finalizing`, that state is preserved for the deterministic recovery path. Failed-session expiry cleanup removes both temporary data and a deterministic permanent original that may have been promoted before an integrity failure, then deletes the session. Explicit quota release is idempotent, so the later FK cascade cannot double-release quota.
+
 Downstream MediaAsset processing has its own `processing_state` and remains a separate failure domain.
 
 ## Resume
