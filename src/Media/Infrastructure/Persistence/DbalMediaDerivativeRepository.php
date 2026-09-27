@@ -28,7 +28,7 @@ final readonly class DbalMediaDerivativeRepository implements MediaDerivativeRep
             return;
         }
 
-        $this->connection->transactional(function () use ($derivatives): void {
+        $this->connection->transactional(function (Connection $_connection) use ($derivatives): void {
             foreach ($derivatives as $derivative) {
                 if (!$derivative instanceof MediaDerivative) {
                     throw new \InvalidArgumentException('Derivative batch contains an invalid value.');
