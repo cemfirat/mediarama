@@ -154,6 +154,22 @@ Mediarama does **not** reverse-geocode, round or otherwise derive a coarse locat
 
 ADR-0013 records this decision.
 
+### Privacy-safe inherited metadata boundary
+
+For ordinary image-copy exports, Privacy-safe is an **allowlist**, not an open-ended source-metadata copy.
+
+The exporter first removes inherited metadata from the generated copy, while explicitly preserving/re-copying rendering-relevant ICC/color-space information, orientation, PNG gamma/sRGB rendering semantics and density metadata. TIFF's structural image directory is retained while common descriptive IFD0 metadata is cleared. It then writes only the canonical fields permitted by the Privacy-safe policy.
+
+This means unknown EXIF/IPTC/XMP fields are removed by default. The application does not need to know a sensitive tag name in advance for that tag to be excluded.
+
+`current` intentionally continues to preserve inherited source metadata and overlay canonical edits.
+
+RAW XMP sidecars are generated from a new metadata artifact and therefore do not use the inherited-container scrub.
+
+A Privacy-safe export must fail if the ExifTool sanitization step fails; returning an unsanitized copy is not an acceptable fallback.
+
+ADR-0014 records this boundary.
+
 ## Format strategy
 
 Preferred write tool should support broad EXIF/IPTC/XMP compatibility and preserve unknown metadata where possible.

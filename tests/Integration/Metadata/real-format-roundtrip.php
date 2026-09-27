@@ -8,6 +8,7 @@ use Mediarama\Export\Application\MetadataExportPolicy;
 use Mediarama\Export\Domain\MetadataExportProfile;
 use Mediarama\Export\Infrastructure\ExifToolMetadataArguments;
 use Mediarama\Export\Infrastructure\ExifToolMetadataWriter;
+use Mediarama\Export\Infrastructure\ExifToolPrivacySafeCopyArguments;
 use Mediarama\Media\Domain\MediaAsset;
 use Mediarama\Media\Domain\MediaType;
 use Mediarama\Media\Domain\StorageObjectId;
@@ -91,6 +92,35 @@ function assertNear(?float $actual, float $expected, string $message): void
 }
 
 
+function visualSignature(string $convertBinary, string $path): string
+{
+    $process = new Process([
+        $convertBinary,
+        $path,
+        '-auto-orient',
+        '-strip',
+        '-format',
+        '%wx%h:%#',
+        'info:',
+    ]);
+    $process->setTimeout(30.0);
+    $process->run();
+
+    if (!$process->isSuccessful()) {
+        throw new RuntimeException(sprintf(
+            "Unable to calculate visual signature for %s: %s",
+            $path,
+            trim($process->getErrorOutput()),
+        ));
+    }
+
+    $signature = trim($process->getOutput());
+    requireCondition($signature !== '', 'Visual signature is empty for '.$path.'.');
+
+    return $signature;
+}
+
+
 function createImageFixture(
     string $name,
     string $path,
@@ -149,7 +179,13 @@ $formats = [
 $process = new ExifToolProcess($exiftoolBinary, 30.0);
 $parser = new ExifToolMetadataParser();
 $inspector = new LocalExifToolInspector($process, $parser, $root);
-$writer = new ExifToolMetadataWriter($process, new ExifToolMetadataArguments());
+$writer = new ExifToolMetadataWriter(
+    $process,
+    new ExifToolMetadataArguments(),
+    new ExifToolPrivacySafeCopyArguments(),
+);
+$iccProfile = '/usr/share/color/icc/sRGB.icc';
+requireCondition(is_file($iccProfile), 'CI sRGB ICC fixture is missing.');
 
 try {
     foreach ($formats as $name => $format) {
@@ -169,6 +205,8 @@ try {
             '-XMP-dc:Creator=Fixture Creator',
             '-XMP-dc:Rights=Fixture Copyright',
             '-XMP-iptcCore:Location=Vienna Embedded',
+            '-XMP-photoshop:Instructions=PRIVATE-WORKFLOW-'.$name,
+            '-XMP-xmp:CreatorTool=PRIVATE-TOOL-'.$name,
             '-XMP-exif:GPSLatitude=48.2082',
             '-XMP-exif:GPSLongitude=16.3738',
             '--',
@@ -178,14 +216,81 @@ try {
         if ($name === 'jpeg') {
             // Keep a second legacy location representation in the source so the
             // Privacy-safe test proves that clearing the canonical XMP location
-            // cannot reveal a fallback IPTC sublocation.
+            // cannot reveal a fallback IPTC sublocation. Also preserve a real ICC
+            // profile and EXIF orientation across the privacy scrub boundary.
             runCommand([
                 $exiftoolBinary,
                 '-overwrite_original',
                 '-IPTC:Sub-location=Vienna Legacy',
+                '-EXIF:Orientation#=6',
+                '-EXIF:ColorSpace#=1',
+                '-ICC_Profile<='.$iccProfile,
                 '--',
                 $sourcePath,
             ], 30.0);
+        }
+
+        if ($name === 'tiff') {
+            // TIFF cannot drop structural IFD0 wholesale. Seed a common IFD0
+            // descriptive field so the Privacy-safe path proves CommonIFD0 is
+            // scrubbed without damaging the image-bearing directory.
+            runCommand([
+                $exiftoolBinary,
+                '-overwrite_original',
+                '-IFD0:Artist=PRIVATE-IFD0-TIFF',
+                '--',
+                $sourcePath,
+            ], 30.0);
+        }
+
+        if ($name === 'png') {
+            // gAMA/sRGB are display/color semantics and must survive the metadata
+            // privacy scrub even though arbitrary PNG textual metadata must not.
+            runCommand([
+                $exiftoolBinary,
+                '-overwrite_original',
+                '-PNG:Gamma=2.2',
+                '-PNG:SRGBRendering#=0',
+                '--',
+                $sourcePath,
+            ], 30.0);
+        }
+
+        $sourceVisualSignature = visualSignature($convertBinary, $sourcePath);
+        $sourceMetadataJson = $process->run([
+            '-json',
+            '-struct',
+            '-G1',
+            '-a',
+            '-n',
+            '--',
+            $sourcePath,
+        ]);
+        requireCondition(
+            str_contains($sourceMetadataJson, 'PRIVATE-WORKFLOW-'.$name),
+            'Source fixture is missing inherited private metadata for '.$name.'.',
+        );
+
+        if ($name === 'tiff') {
+            requireCondition(
+                str_contains($sourceMetadataJson, 'PRIVATE-IFD0-TIFF'),
+                'TIFF source fixture is missing inherited IFD0 metadata.',
+            );
+        }
+
+        if ($name === 'png') {
+            requireCondition(
+                str_contains($sourceMetadataJson, '"PNG:Gamma": 2.2')
+                && str_contains($sourceMetadataJson, '"PNG:SRGBRendering": 0'),
+                'PNG source fixture is missing rendering-critical color metadata.',
+            );
+        }
+
+        $sourceIccHash = null;
+        if ($name === 'jpeg') {
+            $sourceIcc = $process->run(['-b', '-ICC_Profile', '--', $sourcePath]);
+            requireCondition($sourceIcc !== '', 'JPEG source fixture is missing ICC profile.');
+            $sourceIccHash = hash('sha256', $sourceIcc);
         }
 
         $sourceHash = hash_file('sha256', $sourcePath);
@@ -239,6 +344,19 @@ try {
         requireCondition($current->creator === 'Mediarama Export', 'Current metadata creator did not round-trip for '.$name.'.');
         requireCondition($current->copyright === 'Mediarama Test', 'Current metadata copyright did not round-trip for '.$name.'.');
         requireCondition($current->locationName === 'Vienna Export', 'Current metadata location did not round-trip for '.$name.'.');
+        $currentMetadataJson = $process->run([
+            '-json',
+            '-struct',
+            '-G1',
+            '-a',
+            '-n',
+            '--',
+            $currentPath,
+        ]);
+        requireCondition(
+            str_contains($currentMetadataJson, 'PRIVATE-WORKFLOW-'.$name),
+            'Current export unexpectedly removed inherited source metadata for '.$name.'.',
+        );
         assertNear($current->latitude, 48.21, 'Current metadata latitude did not round-trip for '.$name.'.');
         assertNear($current->longitude, 16.37, 'Current metadata longitude did not round-trip for '.$name.'.');
 
@@ -262,7 +380,65 @@ try {
         requireCondition($privacy->latitude === null, 'Privacy-safe export retained latitude for '.$name.'.');
         requireCondition($privacy->longitude === null, 'Privacy-safe export retained longitude for '.$name.'.');
 
-        echo 'OK '.$name.' metadata extract/current/privacy-safe round-trip'.PHP_EOL;
+        $privacyMetadataJson = $process->run([
+            '-json',
+            '-struct',
+            '-G1',
+            '-a',
+            '-n',
+            '--',
+            $privacyPath,
+        ]);
+        requireCondition(
+            !str_contains($privacyMetadataJson, 'PRIVATE-WORKFLOW-'.$name)
+            && !str_contains($privacyMetadataJson, 'PRIVATE-TOOL-'.$name),
+            'Privacy-safe export retained inherited private metadata for '.$name.'.',
+        );
+
+        if ($name === 'tiff') {
+            requireCondition(
+                !str_contains($privacyMetadataJson, 'PRIVATE-IFD0-TIFF'),
+                'Privacy-safe TIFF export retained common descriptive IFD0 metadata.',
+            );
+        }
+
+        if ($name === 'png') {
+            requireCondition(
+                str_contains($privacyMetadataJson, '"PNG:Gamma": 2.2')
+                && str_contains($privacyMetadataJson, '"PNG:SRGBRendering": 0'),
+                'Privacy-safe PNG export did not preserve gamma/sRGB rendering semantics.',
+            );
+        }
+
+        requireCondition(
+            visualSignature($convertBinary, $privacyPath) === $sourceVisualSignature,
+            'Privacy-safe metadata scrub changed rendered pixels/orientation for '.$name.'.',
+        );
+
+        if ($name === 'jpeg') {
+            $privacyIcc = $process->run(['-b', '-ICC_Profile', '--', $privacyPath]);
+            requireCondition(
+                $privacyIcc !== ''
+                && hash('sha256', $privacyIcc) === $sourceIccHash,
+                'Privacy-safe JPEG export did not preserve the source ICC profile.',
+            );
+
+            $privacyOrientation = trim($process->run([
+                '-s',
+                '-s',
+                '-s',
+                '-n',
+                '-Orientation',
+                '--',
+                $privacyPath,
+            ]));
+            requireCondition(
+                $privacyOrientation === '6',
+                'Privacy-safe JPEG export did not preserve EXIF orientation.',
+            );
+        }
+
+        echo 'OK '.$name.' metadata extract/current/privacy-safe allowlist round-trip'.PHP_EOL;
     }
 } finally {
     removeTree($root);
