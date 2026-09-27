@@ -27,6 +27,26 @@ final class ImageWatermarkConfigurationTest extends TestCase
         self::assertSame('SouthEast', $configuration->imageMagickGravity());
     }
 
+    public function testGeometryMarginOnlyInsetsRelevantGravityAxes(): void
+    {
+        self::assertSame(
+            '+7+7',
+            (new ImageWatermarkConfiguration('', gravity: 'southeast'))->geometryOffset(7),
+        );
+        self::assertSame(
+            '+0+7',
+            (new ImageWatermarkConfiguration('', gravity: 'north'))->geometryOffset(7),
+        );
+        self::assertSame(
+            '+7+0',
+            (new ImageWatermarkConfiguration('', gravity: 'east'))->geometryOffset(7),
+        );
+        self::assertSame(
+            '+0+0',
+            (new ImageWatermarkConfiguration('', gravity: 'center'))->geometryOffset(7),
+        );
+    }
+
     public function testWidthPercentMustBeBounded(): void
     {
         $this->expectException(InvalidArgumentException::class);
