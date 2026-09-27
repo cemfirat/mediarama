@@ -130,7 +130,7 @@ Initial policies:
 - `original` — untouched original bytes;
 - `current` — write current canonical metadata into a generated copy, including location when present;
 - `privacy_safe` — current non-location descriptive metadata with exact GPS, descriptive `location_name` and other explicitly sensitive fields omitted;
-- `custom` — explicit field/group selection; `location_name` is included only when selected.
+- `custom` — authoritative explicit canonical field selection on a sanitized generated copy; unselected inherited source metadata does not survive.
 
 Sensitive groups include at least:
 
@@ -167,6 +167,30 @@ This means unknown EXIF/IPTC/XMP fields are removed by default. The application 
 RAW XMP sidecars are generated from a new metadata artifact and therefore do not use the inherited-container scrub.
 
 A Privacy-safe export must fail if the ExifTool sanitization step fails; returning an unsanitized copy is not an acceptable fallback.
+
+### Custom authoritative selection
+
+Ordinary Custom image-copy exports use the same inherited-metadata scrub foundation as Privacy-safe before selected canonical fields are written.
+
+Custom currently supports explicit selection of:
+
+- title;
+- description;
+- creator;
+- copyright;
+- descriptive location;
+- latitude;
+- longitude.
+
+Rendering-critical ICC/color/orientation/PNG/density state is infrastructure and remains preserved even when not listed as a Custom field.
+
+Descriptive location and GPS are separate opt-ins. Selecting one does not implicitly include the other.
+
+Unknown Custom field keys are rejected rather than silently ignored.
+
+RAW Custom XMP sidecars remain fresh canonical-only artifacts and therefore do not need the inherited-container scrub.
+
+ADR-0016 records this decision.
 
 ADR-0014 records this boundary.
 
