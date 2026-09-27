@@ -46,6 +46,7 @@ jobs:
       APP_ENV: test
       APP_DEBUG: 0
       APP_SECRET: mediarama-ci-only
+      MEDIARAMA_SETUP_TOKEN: mediarama-ci-first-run-token-2026-09-27-abcdef
       DATABASE_URL: postgresql://mediarama:mediarama@127.0.0.1:5432/mediarama?serverVersion=18&charset=utf8
       MESSENGER_TRANSPORT_DSN: doctrine://default?queue_name=async&auto_setup=false
       MEDIA_STORAGE_PATH: /tmp/mediarama-media
@@ -194,6 +195,9 @@ jobs:
 
       - name: Verify safe new-installation publication defaults
         run: php tests/Integration/Platform/publication-settings.php
+
+      - name: Verify secure first-run administrator bootstrap
+        run: bash tests/Integration/Security/http-first-run-setup.sh
 
       - name: Verify derivative regeneration persistence and locking
         run: php tests/Integration/Media/derivative-regeneration.php
