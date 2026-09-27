@@ -54,7 +54,24 @@ Storage keys are deterministic:
 
 `derivatives/{media-id}/v{version}/{profile}.{format}`
 
-Changing processing behavior requires incrementing the processing version.
+Changing processing behavior requires incrementing the configured processing-version floor.
+
+## Explicit regeneration
+
+Normal asynchronous processing remains retry-idempotent: if a derivative already exists for the configured `media_id + kind + profile + processing_version` identity, the worker skips it.
+
+The explicit `mediarama:media:regenerate <media-id>` command has different semantics. For image media it deliberately creates a **new complete versioned derivative set** instead of merely filling missing files:
+
+- a PostgreSQL advisory lock serializes regeneration for the same media/kind pair;
+- the target version is `max(configured processing-version floor, latest persisted image version + 1)`;
+- every configured image profile is generated first;
+- all derivative records are published in one database transaction;
+- public gallery/search queries therefore switch from the old version set to the new version set atomically at the database boundary;
+- older derivative versions remain addressable, preserving long-lived immutable URLs/caches;
+- if generation or batch persistence fails, newly generated storage artifacts are cleaned up and the old persisted version remains authoritative.
+
+The advisory lock is session-scoped and fail-fast. A second concurrent regeneration for the same media/kind is rejected rather than racing for the same deterministic storage keys. A crashed database session releases its advisory lock automatically.
+
 
 ## Watermarks
 
