@@ -64,6 +64,7 @@ function auditCreateFixture(
     string $path,
     string $root,
     string $convert,
+    string $heifEnc,
 ): void {
     if (!in_array($name, ['avif', 'heic'], true)) {
         auditRequire([
@@ -86,10 +87,13 @@ function auditCreateFixture(
         $png,
     ], 'create '.$name.' PNG source');
 
-    $command = ['heif-enc', $png];
+    $command = [$heifEnc];
     if ($name === 'avif') {
         $command[] = '-A';
     }
+    $command[] = '--rotate-cw';
+    $command[] = '90';
+    $command[] = $png;
     $command[] = '-q';
     $command[] = '90';
     $command[] = '-o';
@@ -184,6 +188,7 @@ function auditLeakedNeedles(array $metadata, array $needles): array
 $convert = getenv('IMAGEMAGICK_BINARY') ?: 'convert';
 $identify = getenv('IMAGEMAGICK_IDENTIFY_BINARY') ?: 'identify';
 $exiftool = getenv('EXIFTOOL_BINARY') ?: 'exiftool';
+$heifEnc = getenv('HEIF_ENC_AUDIT_BINARY') ?: 'heif-enc';
 $root = sys_get_temp_dir().'/mediarama-privacy-audit-'.getmypid();
 $iccProfile = '/usr/share/color/icc/sRGB.icc';
 
@@ -225,19 +230,7 @@ try {
         $scrubbed = $root.'/scrubbed-'.$name.'.'.$extension;
 
         try {
-            auditCreateFixture($name, $source, $root, $convert);
-
-            $itemTransformSeed = null;
-            if (in_array($name, ['avif', 'heic'], true)) {
-                $itemTransformSeed = auditRun([
-                    $exiftool,
-                    '-overwrite_original',
-                    '-ItemProp:Rotation#=3',
-                    '-ItemProp:Mirroring#=1',
-                    '--',
-                    $source,
-                ], 30.0);
-            }
+            auditCreateFixture($name, $source, $root, $convert, $heifEnc);
 
             if ($name !== 'png' && $iccProfile !== '') {
                 auditRequire([
@@ -321,11 +314,6 @@ try {
 
             $result = [
                 'format' => $name,
-                'item_transform_seed' => $itemTransformSeed === null ? null : [
-                    'ok' => $itemTransformSeed['ok'],
-                    'stdout' => trim($itemTransformSeed['stdout']),
-                    'stderr' => trim($itemTransformSeed['stderr']),
-                ],
                 'seed_warnings' => trim($seedResult['stderr']),
                 'scrub_command_ok' => $scrub['ok'],
                 'scrub_warnings' => trim($scrub['stderr']),
