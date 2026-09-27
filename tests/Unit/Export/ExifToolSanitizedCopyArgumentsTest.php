@@ -4,14 +4,14 @@ declare(strict_types=1);
 
 namespace Mediarama\Tests\Unit\Export;
 
-use Mediarama\Export\Infrastructure\ExifToolPrivacySafeCopyArguments;
+use Mediarama\Export\Infrastructure\ExifToolSanitizedCopyArguments;
 use PHPUnit\Framework\TestCase;
 
-final class ExifToolPrivacySafeCopyArgumentsTest extends TestCase
+final class ExifToolSanitizedCopyArgumentsTest extends TestCase
 {
     public function testUsesAllowlistScrubAndPreservesRenderingCriticalMetadata(): void
     {
-        $arguments = (new ExifToolPrivacySafeCopyArguments())->build();
+        $arguments = (new ExifToolSanitizedCopyArguments())->build();
 
         self::assertSame('-all=', $arguments[0]);
         self::assertContains('-CommonIFD0=', $arguments);

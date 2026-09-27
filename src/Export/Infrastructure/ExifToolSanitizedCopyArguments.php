@@ -5,13 +5,14 @@ declare(strict_types=1);
 namespace Mediarama\Export\Infrastructure;
 
 /**
- * ExifTool arguments that remove inherited source metadata from a generated
- * Privacy-safe copy while preserving rendering-relevant color/orientation data.
+ * ExifTool arguments that remove inherited user/privacy metadata from generated
+ * sanitized copies while preserving rendering-critical image/container state.
  *
- * This is intentionally separate from ExifToolMetadataArguments: RAW sidecars
- * are new metadata artifacts and do not inherit an original container.
+ * Privacy-safe and Custom copies use this boundary. Current intentionally keeps
+ * inherited source metadata, while RAW XMP sidecars are fresh artifacts and do
+ * not inherit an original container.
  */
-final readonly class ExifToolPrivacySafeCopyArguments
+final readonly class ExifToolSanitizedCopyArguments
 {
     /** @return list<string> */
     public function build(): array
@@ -35,7 +36,6 @@ final readonly class ExifToolPrivacySafeCopyArguments
             '-ColorSpaceTags',
 
             // Orientation is display semantics rather than descriptive identity.
-            // Removing it from an unrotated source can visibly rotate the export.
             '-Orientation',
 
             // PNG gAMA/sRGB chunks are display semantics but are not covered by

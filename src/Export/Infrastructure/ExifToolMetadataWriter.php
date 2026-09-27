@@ -25,7 +25,7 @@ final readonly class ExifToolMetadataWriter implements MetadataWriter
     public function __construct(
         private ExifToolProcess $process,
         private ExifToolMetadataArguments $arguments,
-        private ExifToolPrivacySafeCopyArguments $privacySafeCopyArguments,
+        private ExifToolSanitizedCopyArguments $sanitizedCopyArguments,
     ) {
     }
 
@@ -66,8 +66,12 @@ final readonly class ExifToolMetadataWriter implements MetadataWriter
 
             $arguments = [
                 '-overwrite_original',
-                ...($policy->profile === MetadataExportProfile::PrivacySafe
-                    ? $this->privacySafeCopyArguments->build()
+                ...(in_array(
+                    $policy->profile,
+                    [MetadataExportProfile::PrivacySafe, MetadataExportProfile::Custom],
+                    true,
+                )
+                    ? $this->sanitizedCopyArguments->build()
                     : []),
                 ...$this->arguments->build($media, $policy),
                 '--',

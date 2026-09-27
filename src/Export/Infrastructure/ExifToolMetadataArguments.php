@@ -40,6 +40,8 @@ final readonly class ExifToolMetadataArguments
             'creator' => ['-XMP-dc:Creator=', $media->creator],
             'copyright' => ['-XMP-dc:Rights=', $media->copyright],
             'location_name' => ['-XMP-iptcCore:Location=', $media->locationName],
+            'latitude' => ['-XMP-exif:GPSLatitude=', $media->latitude],
+            'longitude' => ['-XMP-exif:GPSLongitude=', $media->longitude],
         ];
 
         $allowed = $policy->profile === MetadataExportProfile::Custom
@@ -50,22 +52,15 @@ final readonly class ExifToolMetadataArguments
             if (
                 $value === null
                 || ($allowed !== null && !isset($allowed[$name]))
-                || ($policy->profile === MetadataExportProfile::PrivacySafe && $name === 'location_name')
+                || (
+                    $policy->profile === MetadataExportProfile::PrivacySafe
+                    && in_array($name, ['location_name', 'latitude', 'longitude'], true)
+                )
             ) {
                 continue;
             }
 
             $arguments[] = $prefix.$value;
-        }
-
-        if ($policy->profile !== MetadataExportProfile::PrivacySafe
-            && $policy->profile !== MetadataExportProfile::Custom) {
-            if ($media->latitude !== null) {
-                $arguments[] = '-XMP-exif:GPSLatitude='.$media->latitude;
-            }
-            if ($media->longitude !== null) {
-                $arguments[] = '-XMP-exif:GPSLongitude='.$media->longitude;
-            }
         }
 
         return $arguments;

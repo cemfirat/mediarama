@@ -8,7 +8,7 @@ use Mediarama\Export\Application\MetadataExportPolicy;
 use Mediarama\Export\Domain\MetadataExportProfile;
 use Mediarama\Export\Infrastructure\ExifToolMetadataArguments;
 use Mediarama\Export\Infrastructure\ExifToolMetadataWriter;
-use Mediarama\Export\Infrastructure\ExifToolPrivacySafeCopyArguments;
+use Mediarama\Export\Infrastructure\ExifToolSanitizedCopyArguments;
 use Mediarama\Media\Domain\MediaAsset;
 use Mediarama\Media\Domain\MediaType;
 use Mediarama\Media\Domain\StorageObjectId;
@@ -182,7 +182,7 @@ $inspector = new LocalExifToolInspector($process, $parser, $root);
 $writer = new ExifToolMetadataWriter(
     $process,
     new ExifToolMetadataArguments(),
-    new ExifToolPrivacySafeCopyArguments(),
+    new ExifToolSanitizedCopyArguments(),
 );
 $iccProfile = '/usr/share/color/icc/sRGB.icc';
 requireCondition(is_file($iccProfile), 'CI sRGB ICC fixture is missing.');
@@ -438,7 +438,69 @@ try {
             );
         }
 
-        echo 'OK '.$name.' metadata extract/current/privacy-safe allowlist round-trip'.PHP_EOL;
+        $source = fopen($sourcePath, 'rb');
+        requireCondition($source !== false, 'Unable to reopen '.$name.' source for custom export.');
+        $customStream = $writer->write(
+            $source,
+            $media,
+            new MetadataExportPolicy(
+                MetadataExportProfile::Custom,
+                ['title'],
+            ),
+        );
+        fclose($source);
+
+        $customName = 'custom-'.$name.'.'.$extension;
+        $customPath = $root.'/'.$customName;
+        writeStreamToFile($customStream, $customPath);
+
+        $custom = $inspector->inspect(new StorageObjectId('media', $customName));
+        requireCondition($custom->title === 'Current '.$name, 'Custom export lost selected title for '.$name.'.');
+        requireCondition($custom->description === null, 'Custom export retained unselected description for '.$name.'.');
+        requireCondition($custom->creator === null, 'Custom export retained unselected creator for '.$name.'.');
+        requireCondition($custom->copyright === null, 'Custom export retained unselected copyright for '.$name.'.');
+        requireCondition($custom->locationName === null, 'Custom export retained unselected location for '.$name.'.');
+        requireCondition(
+            $custom->latitude === null && $custom->longitude === null,
+            'Custom export retained unselected GPS for '.$name.'.',
+        );
+
+        $customMetadataJson = $process->run([
+            '-json',
+            '-struct',
+            '-G1',
+            '-a',
+            '-n',
+            '--',
+            $customPath,
+        ]);
+        requireCondition(
+            !str_contains($customMetadataJson, 'PRIVATE-WORKFLOW-'.$name)
+            && !str_contains($customMetadataJson, 'PRIVATE-TOOL-'.$name),
+            'Custom export retained inherited private metadata for '.$name.'.',
+        );
+
+        if ($name === 'tiff') {
+            requireCondition(
+                !str_contains($customMetadataJson, 'PRIVATE-IFD0-TIFF'),
+                'Custom TIFF export retained inherited common IFD0 metadata.',
+            );
+        }
+
+        if ($name === 'png') {
+            requireCondition(
+                str_contains($customMetadataJson, '"PNG:Gamma": 2.2')
+                && str_contains($customMetadataJson, '"PNG:SRGBRendering": 0'),
+                'Custom PNG export did not preserve gamma/sRGB rendering semantics.',
+            );
+        }
+
+        requireCondition(
+            visualSignature($convertBinary, $customPath) === $sourceVisualSignature,
+            'Custom metadata scrub changed rendered pixels/orientation for '.$name.'.',
+        );
+
+        echo 'OK '.$name.' metadata extract/current/privacy-safe/custom authoritative round-trip'.PHP_EOL;
     }
 } finally {
     removeTree($root);

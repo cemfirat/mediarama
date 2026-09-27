@@ -186,6 +186,39 @@ try {
         'custom descriptive-location opt-in does not infer or include GPS',
     );
 
+    $customGpsPath = $root.'/custom-gps.xmp';
+    saveSidecar(
+        $export(
+            $media,
+            new MetadataExportPolicy(
+                MetadataExportProfile::Custom,
+                ['latitude', 'longitude'],
+            ),
+        ),
+        $customGpsPath,
+    );
+    $customGps = $parser->parse($process->run([
+        '-json',
+        '-struct',
+        '-G1',
+        '-a',
+        '-n',
+        '--',
+        $customGpsPath,
+    ]));
+
+    requireSidecar(
+        $customGps->latitude !== null
+        && abs($customGps->latitude - 48.2082) < 0.0001
+        && $customGps->longitude !== null
+        && abs($customGps->longitude - 16.3738) < 0.0001,
+        'custom sidecar can explicitly include GPS coordinates',
+    );
+    requireSidecar(
+        $customGps->locationName === null,
+        'custom GPS opt-in does not implicitly include descriptive location',
+    );
+
     try {
         $export($media, new MetadataExportPolicy(MetadataExportProfile::Original));
         throw new RuntimeException('Original profile unexpectedly produced a sidecar.');

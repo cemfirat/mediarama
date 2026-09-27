@@ -53,6 +53,8 @@ For every format the test verifies:
 - the Privacy-safe profile removes inherited non-allowlisted metadata rather than relying on a tag denylist;
 - Privacy-safe removes exact GPS and canonical descriptive location while re-writing allowed non-location canonical metadata;
 - the decoded visual signature remains unchanged across the metadata scrub.
+- the Custom profile uses the same scrub boundary and contains only explicitly selected canonical metadata;
+- unselected creator/copyright/location/GPS/private source values do not survive Custom copy export;
 
 The JPEG case additionally carries a real ICC profile plus EXIF orientation and verifies both survive byte-for-byte/semantically through the Privacy-safe scrub.
 
@@ -76,4 +78,4 @@ The sidecar writer:
 - rejects the Original profile because that profile means original media bytes, not a generated metadata artifact;
 - uses ExifTool to create a standard XMP file from Mediarama's canonical database values.
 
-CI validates the sidecar through a real ExifTool read-back, including GPS and descriptive-location removal for the Privacy-safe profile plus explicit descriptive-location selection for the Custom profile.
+CI validates the sidecar through a real ExifTool read-back, including GPS and descriptive-location removal for the Privacy-safe profile, explicit descriptive-location selection for Custom, and explicit Custom GPS selection without implicitly including descriptive location.
