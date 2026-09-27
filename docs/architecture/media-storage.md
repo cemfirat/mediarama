@@ -165,6 +165,16 @@ Explicit regeneration never overwrites the currently published derivative identi
 
 A successful retry may detect the same valid object and avoid duplicate database records.
 
+### Superseded derivative retention
+
+Superseded generations are not deleted immediately after regeneration.
+
+The accepted default retention policy in ADR-0013 keeps the newest three generations per media/kind and only makes an older generation eligible after its newest record is at least 400 days old. Both conditions must be true. The age is deliberately longer than the current one-year immutable public cache lifetime.
+
+`mediarama:media:cleanup-derivatives` is preview-only by default. `--execute` transactionally converts eligible derivative records into durable storage-cleanup jobs before physical deletion is attempted.
+
+The cleanup boundary never scans arbitrary storage. Eligible keys must remain inside the deterministic `derivatives/{media-id}/v{version}/...` namespace or the transaction aborts.
+
 ## Checksums
 
 Mediarama calculates SHA-256 for originals during ingestion.
@@ -205,6 +215,8 @@ This applies to:
 - orphan detection.
 
 A failed storage delete is operational debt, not a reason to resurrect a database entity.
+
+For superseded derivatives and failed-generation orphans, that operational debt is persisted in `storage_cleanup_jobs`. Claims are retryable; stale claims can be reclaimed; an already-missing object is an idempotent success. This means a process may stop after the database transaction, during storage deletion, or after physical deletion without losing the reconciliation path.
 
 ## Orphan cleanup
 
