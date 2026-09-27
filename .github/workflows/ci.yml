@@ -469,10 +469,10 @@ jobs:
           request_ok "http://127.0.0.1:8080/collections/$COLLECTION_ID" /tmp/collection.html
           grep -F "Fixture Photo" /tmp/collection.html
 
-          expect_search_count 1 "http://127.0.0.1:8080/api/media?q=Fixture" /tmp/public-search.json
+          expect_search_count 1 "http://127.0.0.1:8080/api/media?q=Fixture%20Photo" /tmp/public-search.json
           if ! curl --fail --silent --show-error \
             -D /tmp/public-search.headers \
-            "http://127.0.0.1:8080/api/media?q=Fixture" \
+            "http://127.0.0.1:8080/api/media?q=Fixture%20Photo" \
             -o /tmp/public-search-header-body.json; then
             cat /tmp/mediarama-http.log || true
             exit 1
@@ -516,7 +516,7 @@ jobs:
 
           expect_status 404 "http://127.0.0.1:8080/collections/$COLLECTION_ID"
           expect_status 404 "http://127.0.0.1:8080/media/$MEDIA_ID/derivatives/v$THUMBNAIL_VERSION/thumbnail"
-          expect_search_count 0 "http://127.0.0.1:8080/api/media?q=Fixture" /tmp/private-parent-search.json
+          expect_search_count 0 "http://127.0.0.1:8080/api/media?q=Fixture%20Photo" /tmp/private-parent-search.json
 
           php <<'PHP'
           <?php
@@ -537,7 +537,7 @@ jobs:
             exit 1
           fi
           expect_status 404 "http://127.0.0.1:8080/media/$MEDIA_ID/derivatives/v$THUMBNAIL_VERSION/thumbnail"
-          expect_search_count 0 "http://127.0.0.1:8080/api/media?q=Fixture" /tmp/pending-search.json
+          expect_search_count 0 "http://127.0.0.1:8080/api/media?q=Fixture%20Photo" /tmp/pending-search.json
 
           php <<'PHP'
           <?php
