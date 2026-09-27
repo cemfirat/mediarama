@@ -19,6 +19,7 @@ use Mediarama\Upload\Application\UploadContentPolicy;
 use Mediarama\Upload\Application\UploadDestinationAuthorizer;
 use Mediarama\Upload\Application\UploadFinalizationCriticalSection;
 use Mediarama\Upload\Application\UploadFinalizationRepository;
+use Mediarama\Upload\Application\UploadQuota;
 use Mediarama\Upload\Application\UploadSessionRepository;
 use Mediarama\Upload\Domain\UploadSession;
 use Mediarama\Upload\Domain\UploadStatus;
@@ -150,6 +151,24 @@ final class FinalizeUploadStructuralValidationTest extends TestCase
             }
         };
 
+        $quota = new class implements UploadQuota {
+            public int $commits = 0;
+
+            public function reserve(
+                Uuid $sessionId,
+                Uuid $userId,
+                int $bytes,
+                callable $persistSession,
+            ): void {
+                $persistSession();
+            }
+
+            public function commit(Uuid $sessionId): void
+            {
+                ++$this->commits;
+            }
+        };
+
         $criticalSection = new class implements UploadFinalizationCriticalSection {
             public int $calls = 0;
 
@@ -181,6 +200,7 @@ final class FinalizeUploadStructuralValidationTest extends TestCase
             $structure,
             $authorizer,
             $finalizations,
+            $quota,
             $criticalSection,
             $bus,
         );
@@ -198,6 +218,7 @@ final class FinalizeUploadStructuralValidationTest extends TestCase
         self::assertSame(0, $storage->promotions);
         self::assertSame(0, $media->saves);
         self::assertSame(0, $finalizations->remembers);
+        self::assertSame(0, $quota->commits);
         self::assertSame(0, $criticalSection->calls);
         self::assertSame(0, $bus->dispatches);
     }

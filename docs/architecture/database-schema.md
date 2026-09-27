@@ -258,6 +258,32 @@ Aggregates are derived/cached, not the source of truth.
 
 Parts need not be rows if the selected storage multipart mechanism owns part state. A DB table for parts should only be added if the implementation needs it.
 
+## upload quota accounting
+
+Committed quota usage is derived from owned immutable originals:
+
+`SUM(media_assets.byte_size WHERE owner_id = :user)`
+
+Soft-deleted media continue to count until the MediaAsset/storage object is physically purged. Generated derivatives are system-managed overhead and are not charged to upload quota.
+
+`upload_quota_reservations`:
+
+- `upload_session_id uuid primary key fk upload_sessions on delete cascade`
+- `user_id uuid fk users`
+- `reserved_bytes bigint >= 0`
+- `created_at timestamptz`
+
+The UploadSession FK is `DEFERRABLE INITIALLY DEFERRED` so reservation and session creation can share one transaction while the reservation row is inserted first.
+
+Policy tables:
+
+- `user_storage_quotas(user_id primary key, limit_bytes, updated_at)`
+- `group_storage_quotas(group_id primary key, limit_bytes, updated_at)`
+
+`limit_bytes = 0` means explicitly unlimited. Missing rows mean no override. User policy wins over group policy; otherwise any unlimited group makes quota unlimited, and the largest finite group limit wins. If no policy applies, `UPLOAD_DEFAULT_QUOTA_BYTES` is used.
+
+Reservation creation serializes on the existing user row with `SELECT ... FOR UPDATE`. Committed and reserved usage are read in one PostgreSQL statement/snapshot. Finalization persists the MediaAsset and deletes the reservation in the same database transaction, avoiding a duplicate mutable committed counter.
+
 ## import_runs
 
 - `id uuid primary key`

@@ -26,6 +26,7 @@ use Mediarama\Upload\Application\UploadDestinationAuthorizer;
 use Mediarama\Upload\Infrastructure\LocalContentInspector;
 use Mediarama\Upload\Infrastructure\Persistence\DbalUploadFinalizationCriticalSection;
 use Mediarama\Upload\Infrastructure\Persistence\DbalUploadFinalizationRepository;
+use Mediarama\Upload\Infrastructure\Persistence\DbalUploadQuota;
 use Mediarama\Upload\Infrastructure\Persistence\DbalUploadSessionRepository;
 use Mediarama\Upload\Domain\UploadSession;
 use Symfony\Component\Messenger\Bridge\Doctrine\Transport\DoctrineTransport;
@@ -204,6 +205,7 @@ function finalizer(
         mediaStructureValidator($storage, $barrierDirectory, $workerName),
         allowAnyDestination(),
         new DbalUploadFinalizationRepository($db),
+        new DbalUploadQuota($db, 0),
         new DbalUploadFinalizationCriticalSection($db),
         doctrineTransportBus($db),
     );
@@ -251,7 +253,15 @@ function createUploadedSession(
     );
     $session->markUploaded();
 
-    (new DbalUploadSessionRepository($db))->save($session);
+    $sessions = new DbalUploadSessionRepository($db);
+    (new DbalUploadQuota($db, 0))->reserve(
+        $session->id,
+        $userId,
+        $size,
+        static function () use ($sessions, $session): void {
+            $sessions->save($session);
+        },
+    );
     writeFixtureToSession($storage, $session, $fixturePath);
 
     return $session;
@@ -288,6 +298,13 @@ function verifyCompletedScenario(
             ['id' => $id],
         ) === 1,
         'Expected exactly one upload finalization mapping.',
+    );
+    requireCondition(
+        (int) $db->fetchOne(
+            'SELECT COUNT(*) FROM upload_quota_reservations WHERE upload_session_id = :id',
+            ['id' => $id],
+        ) === 0,
+        'Finalization did not convert the quota reservation into committed usage.',
     );
     requireCondition(
         queueCount($db) === $expectedQueueCount,
@@ -574,6 +591,7 @@ try {
 
     echo "OK concurrent finalizers converge on one MediaAsset\n";
     echo "OK exactly one immutable original and one mapping\n";
+    echo "OK finalization converts quota reservation exactly once\n";
     echo "OK exactly one processing dispatch for the race\n";
     echo "OK retry before promotion\n";
     echo "OK retry after promotion before MediaAsset persistence\n";

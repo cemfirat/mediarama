@@ -69,6 +69,7 @@ jobs:
       IMAGEMAGICK_PROCESS_TIMEOUT_SECONDS: 60
       UPLOAD_MAX_ASSET_BYTES: 2147483648
       UPLOAD_MAX_CHUNK_BYTES: 16777216
+      UPLOAD_DEFAULT_QUOTA_BYTES: 0
       COPPERMINE_DATABASE_URL: mysql://readonly:readonly@127.0.0.1:3306/coppermine
       COPPERMINE_TABLE_PREFIX: cpg_
       COPPERMINE_ALBUMS_ROOT: /tmp/coppermine-albums
@@ -169,6 +170,9 @@ jobs:
       - name: Run unit tests
         run: vendor/bin/phpunit
 
+      - name: Verify persistent upload quota accounting
+        run: php tests/Integration/Upload/quota-accounting.php
+
       - name: Verify concurrent upload finalization and crash recovery
         run: php tests/Integration/Upload/finalize-concurrency.php
 
@@ -205,6 +209,7 @@ jobs:
               'comment' => (int) $db->fetchOne("SELECT COUNT(*) FROM comments WHERE body = 'Fixture comment'") === 1,
               'rating' => (int) $db->fetchOne('SELECT COUNT(*) FROM ratings WHERE value = 4') === 1,
               'reset-required user' => (int) $db->fetchOne("SELECT COUNT(*) FROM users WHERE username = 'fixture-user' AND status = 'password_reset_required'") === 1,
+              'imported group quota' => (int) $db->fetchOne("SELECT COUNT(*) FROM group_storage_quotas WHERE limit_bytes = 2097152") === 1,
               'empty async queue' => (int) $db->fetchOne("SELECT COUNT(*) FROM messenger_messages WHERE queue_name = 'async'") === 0,
           ];
 

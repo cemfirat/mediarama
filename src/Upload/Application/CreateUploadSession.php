@@ -26,8 +26,6 @@ final readonly class CreateUploadSession
     ): UploadSession {
         $this->authorizer->assertCanUpload($userId, $targetCollectionId);
         $this->policy->assertAssetSize($expectedSize);
-        $this->quota->reserve($userId, $expectedSize);
-
         $session = UploadSession::create(
             $userId,
             $targetCollectionId,
@@ -36,7 +34,14 @@ final readonly class CreateUploadSession
             $expectedMime,
         );
 
-        $this->sessions->save($session);
+        $this->quota->reserve(
+            $session->id,
+            $userId,
+            $expectedSize,
+            function () use ($session): void {
+                $this->sessions->save($session);
+            },
+        );
 
         return $session;
     }

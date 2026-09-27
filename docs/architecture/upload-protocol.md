@@ -97,9 +97,28 @@ Default example configuration:
 
 These are deployment policy values, not hard-coded product limits.
 
+## Persistent quota accounting
+
+Every created UploadSession has a PostgreSQL-backed reservation, even when the effective policy is unlimited.
+
+Effective quota policy is resolved in this order:
+
+1. explicit user quota;
+2. otherwise normalized group quota policies — any unlimited group wins, otherwise the largest finite group quota wins;
+3. otherwise `UPLOAD_DEFAULT_QUOTA_BYTES`.
+
+A value of `0` is explicit unlimited. The default deployment value is also `0`, so accounting is active without imposing an arbitrary first-release storage cap.
+
+Session creation locks the user row and performs the usage check, reservation insert and UploadSession persistence in one transaction. Committed usage is derived from owned immutable MediaAssets through an indexed `owner_id` lookup; generated derivatives are not charged.
+
+If a finite policy would be exceeded, `POST /api/uploads` returns HTTP `422` with stable error code `upload_quota_exceeded` plus the effective limit, committed bytes, reserved bytes and requested bytes. No UploadSession or reservation is persisted for the rejected request.
+
+Successful finalization persists the MediaAsset and removes the reservation in the same existing finalization transaction. Expired-session deletion releases reservations through the database FK cascade, so cleanup is idempotent after crashes.
+
+Coppermine `group_quota` values are imported from KiB to bytes. The normalized Mediarama policy preserves Coppermine's multi-group rule: any zero/unlimited group makes quota unlimited, otherwise the maximum finite group quota wins.
+
 ## Remaining hardening
 
-- persistent quota reservations/accounting (#38);
 - observable retry/failure API (#37);
 - richer resource-scoped collection sharing/access policy;
 - full authenticated HTTP + PostgreSQL + filesystem upload-flow coverage beyond the existing finalization/security integration tests.
