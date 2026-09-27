@@ -36,7 +36,7 @@ final class CleanupSupersededDerivativesCommand extends Command
                 'older-than-days',
                 null,
                 InputOption::VALUE_REQUIRED,
-                'Only generations whose newest record is older than this age are eligible.',
+                'Only generations that have been outside the retained newest set for this many days are eligible.',
                 (string) CleanupSupersededDerivatives::DEFAULT_RETENTION_DAYS,
             )
             ->addOption(
