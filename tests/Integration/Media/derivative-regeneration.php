@@ -11,6 +11,7 @@ use Mediarama\Media\Domain\MediaDerivative;
 use Mediarama\Media\Domain\StorageObjectId;
 use Mediarama\Media\Infrastructure\Persistence\DbalMediaDerivativeRepository;
 use Mediarama\Media\Infrastructure\Persistence\PostgresMediaDerivativeRegenerationLock;
+use Symfony\Component\Process\Process;
 use Symfony\Component\Uid\Uuid;
 
 function requireRegeneration(bool $condition, string $message): void
@@ -20,6 +21,48 @@ function requireRegeneration(bool $condition, string $message): void
     }
 
     echo 'OK '.$message.PHP_EOL;
+}
+
+
+function removeRegenerationTree(string $path): void
+{
+    if (!is_dir($path)) {
+        return;
+    }
+
+    $items = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($path, FilesystemIterator::SKIP_DOTS),
+        RecursiveIteratorIterator::CHILD_FIRST,
+    );
+
+    foreach ($items as $item) {
+        if ($item->isDir()) {
+            @rmdir($item->getPathname());
+        } else {
+            @unlink($item->getPathname());
+        }
+    }
+
+    @rmdir($path);
+}
+
+/** @param list<string> $command */
+function runRegenerationCommand(array $command): string
+{
+    $process = new Process($command);
+    $process->setTimeout(60.0);
+    $process->run();
+
+    if (!$process->isSuccessful()) {
+        throw new RuntimeException(sprintf(
+            "Command failed (%s): %s\n%s",
+            implode(' ', $command),
+            trim($process->getErrorOutput()),
+            trim($process->getOutput()),
+        ));
+    }
+
+    return $process->getOutput();
 }
 
 function derivative(
@@ -67,18 +110,50 @@ $db2 = DriverManager::getConnection($params);
 
 $mediaId = Uuid::v7();
 $now = (new DateTimeImmutable())->format(DATE_ATOM);
+$mediaRoot = rtrim((string) getenv('MEDIA_STORAGE_PATH'), DIRECTORY_SEPARATOR);
+$sourceRelative = 'originals/regeneration/'.$mediaId->toRfc4122().'.jpg';
+$sourcePath = $mediaRoot.DIRECTORY_SEPARATOR.$sourceRelative;
+$derivativeRoot = $mediaRoot.DIRECTORY_SEPARATOR.'derivatives'.DIRECTORY_SEPARATOR.$mediaId->toRfc4122();
+
+if ($mediaRoot === '') {
+    throw new RuntimeException('MEDIA_STORAGE_PATH must be configured.');
+}
+
+$sourceDirectory = dirname($sourcePath);
+if (!is_dir($sourceDirectory) && !mkdir($sourceDirectory, 0770, true) && !is_dir($sourceDirectory)) {
+    throw new RuntimeException('Unable to create regeneration source directory.');
+}
+
+$convertBinary = trim((string) getenv('IMAGEMAGICK_BINARY'));
+if ($convertBinary === '') {
+    throw new RuntimeException('IMAGEMAGICK_BINARY must be configured.');
+}
+
+runRegenerationCommand([
+    $convertBinary,
+    '-size',
+    '120x80',
+    'xc:white',
+    $sourcePath,
+]);
+
+$sourceSize = filesize($sourcePath);
+$sourceChecksum = hash_file('sha256', $sourcePath);
+if ($sourceSize === false || $sourceChecksum === false) {
+    throw new RuntimeException('Unable to inspect regeneration source fixture.');
+}
 
 try {
     $db1->insert('media_assets', [
         'id' => $mediaId->toRfc4122(),
         'owner_id' => null,
         'storage_disk' => 'media',
-        'storage_key' => 'originals/regeneration/'.$mediaId->toRfc4122().'.jpg',
+        'storage_key' => $sourceRelative,
         'original_filename' => 'regeneration.jpg',
         'mime_type' => 'image/jpeg',
         'media_type' => 'image',
-        'byte_size' => 123,
-        'checksum_sha256' => str_repeat('a', 64),
+        'byte_size' => $sourceSize,
+        'checksum_sha256' => $sourceChecksum,
         'width' => 64,
         'height' => 64,
         'duration_ms' => null,
@@ -181,7 +256,68 @@ try {
         'regeneration advisory lock is released after the operation',
     );
 
-    echo "Derivative regeneration persistence/locking integration checks passed.".PHP_EOL;
+    $firstOutput = runRegenerationCommand([
+        PHP_BINARY,
+        dirname(__DIR__, 3).'/bin/console',
+        'mediarama:media:regenerate',
+        $mediaId->toRfc4122(),
+        '--no-interaction',
+    ]);
+    requireRegeneration(
+        str_contains($firstOutput, 'processing version 2'),
+        'console regeneration publishes a complete next-version derivative set',
+    );
+
+    $versionTwoProfiles = $db1->fetchFirstColumn(
+        <<<'SQL'
+SELECT profile
+FROM media_derivatives
+WHERE media_id = :media
+  AND kind = 'image'
+  AND processing_version = 2
+ORDER BY profile
+SQL,
+        ['media' => $mediaId->toRfc4122()],
+    );
+    requireRegeneration(
+        $versionTwoProfiles === ['large', 'preview', 'thumbnail'],
+        'console regeneration persisted every configured image profile at version 2',
+    );
+
+    foreach (['thumbnail', 'preview', 'large'] as $profile) {
+        requireRegeneration(
+            is_file($derivativeRoot.'/v2/'.$profile.'.webp'),
+            'version 2 '.$profile.' storage object exists',
+        );
+    }
+
+    $secondOutput = runRegenerationCommand([
+        PHP_BINARY,
+        dirname(__DIR__, 3).'/bin/console',
+        'mediarama:media:regenerate',
+        $mediaId->toRfc4122(),
+        '--no-interaction',
+    ]);
+    requireRegeneration(
+        str_contains($secondOutput, 'processing version 3'),
+        'repeated console regeneration advances to another immutable version',
+    );
+
+    $versionThreeCount = (int) $db1->fetchOne(
+        'SELECT COUNT(*) FROM media_derivatives WHERE media_id = :media AND kind = :kind AND processing_version = 3',
+        ['media' => $mediaId->toRfc4122(), 'kind' => 'image'],
+    );
+    requireRegeneration(
+        $versionThreeCount === 3,
+        'second console regeneration persisted a complete version 3 set',
+    );
+    requireRegeneration(
+        is_file($derivativeRoot.'/v2/thumbnail.webp')
+        && is_file($derivativeRoot.'/v3/thumbnail.webp'),
+        'older versioned derivative files remain addressable after regeneration',
+    );
+
+    echo "Derivative regeneration persistence/locking/CLI integration checks passed.".PHP_EOL;
 } finally {
     $db1->executeStatement(
         'DELETE FROM media_assets WHERE id = :id',
@@ -190,4 +326,7 @@ try {
 
     $db1->close();
     $db2->close();
+
+    @unlink($sourcePath);
+    removeRegenerationTree($derivativeRoot);
 }
