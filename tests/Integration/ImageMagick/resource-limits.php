@@ -8,6 +8,7 @@ use Mediarama\Media\Application\ImageDerivativeProfile;
 use Mediarama\Media\Domain\MediaAsset;
 use Mediarama\Media\Domain\MediaType;
 use Mediarama\Media\Domain\StorageObjectId;
+use Mediarama\Media\Infrastructure\Image\CwebpEncoder;
 use Mediarama\Media\Infrastructure\Image\ImageMagickDerivativeGenerator;
 use Mediarama\Media\Infrastructure\Image\ImageMagickProcess;
 use Mediarama\Media\Infrastructure\Image\ImageMagickResourceLimits;
@@ -65,8 +66,10 @@ function removeTree(string $path): void
     @rmdir($path);
 }
 
+$cwebpBinary = trim((string) getenv('CWEBP_BINARY'));
 $convertBinary = trim((string) getenv('IMAGEMAGICK_BINARY'));
 $identifyBinary = trim((string) getenv('IMAGEMAGICK_IDENTIFY_BINARY'));
+requireCondition($cwebpBinary !== '', 'CWEBP_BINARY must be configured.');
 requireCondition($convertBinary !== '', 'IMAGEMAGICK_BINARY must be configured.');
 requireCondition($identifyBinary !== '', 'IMAGEMAGICK_IDENTIFY_BINARY must be configured.');
 
@@ -142,6 +145,7 @@ try {
         $storage,
         $runner,
         new ImageMagickWatermarkRenderer($runner, new ImageWatermarkConfiguration('')),
+        new CwebpEncoder($cwebpBinary, 15.0),
     );
     requireRuntimeFailure(
         static fn () => $generator->generate($asset, $profile, 1),
