@@ -6,6 +6,8 @@ namespace Mediarama\Upload\Infrastructure\Storage;
 
 use Mediarama\Upload\Application\ChunkStorage;
 use Mediarama\Upload\Domain\UploadChunk;
+use Mediarama\Upload\Domain\UploadFailureCode;
+use Mediarama\Upload\Domain\UploadProblem;
 use Symfony\Component\Uid\Uuid;
 
 final readonly class LocalChunkStorage implements ChunkStorage
@@ -22,7 +24,7 @@ final readonly class LocalChunkStorage implements ChunkStorage
 
         $dir = $this->sessionDirectory($sessionId);
         if (!is_dir($dir) && !mkdir($dir, 0770, true) && !is_dir($dir)) {
-            throw new \RuntimeException('Unable to create upload chunk directory.');
+            throw UploadProblem::fromFailure(UploadFailureCode::ChunkStorageUnavailable);
         }
 
         $path = $this->chunkPath($sessionId, $chunk->index);
@@ -30,7 +32,7 @@ final readonly class LocalChunkStorage implements ChunkStorage
 
         $out = fopen($tmp, 'wb');
         if ($out === false) {
-            throw new \RuntimeException('Unable to create chunk file.');
+            throw UploadProblem::fromFailure(UploadFailureCode::ChunkStorageUnavailable);
         }
 
         $hash = hash_init('sha256');
@@ -40,7 +42,7 @@ final readonly class LocalChunkStorage implements ChunkStorage
             while (!feof($stream)) {
                 $buffer = fread($stream, 1024 * 1024);
                 if ($buffer === false) {
-                    throw new \RuntimeException('Unable to read chunk input.');
+                    throw UploadProblem::fromFailure(UploadFailureCode::ChunkStorageUnavailable);
                 }
                 if ($buffer === '') {
                     continue;
@@ -48,7 +50,7 @@ final readonly class LocalChunkStorage implements ChunkStorage
                 $written += strlen($buffer);
                 hash_update($hash, $buffer);
                 if (fwrite($out, $buffer) === false) {
-                    throw new \RuntimeException('Unable to write chunk.');
+                    throw UploadProblem::fromFailure(UploadFailureCode::ChunkStorageUnavailable);
                 }
             }
         } finally {
@@ -57,25 +59,30 @@ final readonly class LocalChunkStorage implements ChunkStorage
 
         if ($written !== $chunk->size) {
             @unlink($tmp);
-            throw new \DomainException('Chunk byte count does not match declared size.');
+            throw UploadProblem::fromFailure(UploadFailureCode::ChunkSizeMismatch);
         }
 
         if (hash_final($hash) !== $chunk->checksumSha256) {
             @unlink($tmp);
-            throw new \DomainException('Chunk checksum mismatch.');
+            throw UploadProblem::fromFailure(UploadFailureCode::ChunkChecksumMismatch);
         }
 
         if (!rename($tmp, $path)) {
             @unlink($tmp);
-            throw new \RuntimeException('Unable to finalize chunk.');
+            throw UploadProblem::fromFailure(UploadFailureCode::ChunkStorageUnavailable);
         }
 
-        file_put_contents($path.'.json', json_encode([
+        $metadata = json_encode([
             'index' => $chunk->index,
             'offset' => $chunk->offset,
             'size' => $chunk->size,
             'checksum' => $chunk->checksumSha256,
-        ], JSON_THROW_ON_ERROR));
+        ], JSON_THROW_ON_ERROR);
+
+        if (file_put_contents($path.'.json', $metadata, LOCK_EX) === false) {
+            @unlink($path);
+            throw UploadProblem::fromFailure(UploadFailureCode::ChunkStorageUnavailable);
+        }
     }
 
     public function listChunks(Uuid $sessionId): array
@@ -87,13 +94,22 @@ final readonly class LocalChunkStorage implements ChunkStorage
 
         $chunks = [];
         foreach (glob($dir.'/chunk-*.json') ?: [] as $metaFile) {
-            $data = json_decode((string) file_get_contents($metaFile), true, flags: JSON_THROW_ON_ERROR);
-            $chunks[] = new UploadChunk(
-                (int) $data['index'],
-                (int) $data['offset'],
-                (int) $data['size'],
-                (string) $data['checksum'],
-            );
+            $encoded = file_get_contents($metaFile);
+            if ($encoded === false) {
+                throw UploadProblem::fromFailure(UploadFailureCode::ChunksIncomplete);
+            }
+
+            try {
+                $data = json_decode($encoded, true, flags: JSON_THROW_ON_ERROR);
+                $chunks[] = new UploadChunk(
+                    (int) ($data['index'] ?? -1),
+                    (int) ($data['offset'] ?? -1),
+                    (int) ($data['size'] ?? -1),
+                    (string) ($data['checksum'] ?? ''),
+                );
+            } catch (\JsonException|\InvalidArgumentException $error) {
+                throw UploadProblem::fromFailure(UploadFailureCode::ChunksIncomplete, $error);
+            }
         }
 
         usort($chunks, static fn (UploadChunk $a, UploadChunk $b): int => $a->index <=> $b->index);
@@ -105,49 +121,62 @@ final readonly class LocalChunkStorage implements ChunkStorage
     {
         $chunks = $this->listChunks($sessionId);
         if ($chunks === []) {
-            throw new \DomainException('No upload chunks available.');
+            throw UploadProblem::fromFailure(UploadFailureCode::ChunksIncomplete);
         }
 
         $target = rtrim($this->mediaRoot, '/').'/'.$targetStorageKey;
         $targetDir = dirname($target);
         if (!is_dir($targetDir) && !mkdir($targetDir, 0770, true) && !is_dir($targetDir)) {
-            throw new \RuntimeException('Unable to create temporary upload directory.');
+            throw UploadProblem::fromFailure(UploadFailureCode::AssemblyStorageUnavailable);
         }
 
         $tmp = $target.'.assembling';
         $out = fopen($tmp, 'wb');
         if ($out === false) {
-            throw new \RuntimeException('Unable to create assembled upload.');
+            throw UploadProblem::fromFailure(UploadFailureCode::AssemblyStorageUnavailable);
         }
 
         $expectedOffset = 0;
+
         try {
-            foreach ($chunks as $chunk) {
-                if ($chunk->offset !== $expectedOffset) {
-                    throw new \DomainException('Upload chunks are incomplete or out of sequence.');
+            try {
+                foreach ($chunks as $chunk) {
+                    if ($chunk->offset !== $expectedOffset) {
+                        throw UploadProblem::fromFailure(UploadFailureCode::ChunksIncomplete);
+                    }
+
+                    $in = fopen($this->chunkPath($sessionId, $chunk->index), 'rb');
+                    if ($in === false) {
+                        throw UploadProblem::fromFailure(UploadFailureCode::ChunksIncomplete);
+                    }
+
+                    try {
+                        $copied = stream_copy_to_stream($in, $out);
+                    } finally {
+                        fclose($in);
+                    }
+
+                    if ($copied !== $chunk->size) {
+                        throw UploadProblem::fromFailure(UploadFailureCode::ChunksIncomplete);
+                    }
+
+                    $expectedOffset += $chunk->size;
                 }
 
-                $in = fopen($this->chunkPath($sessionId, $chunk->index), 'rb');
-                if ($in === false) {
-                    throw new \DomainException('Upload chunk is missing.');
+                if ($expectedOffset !== $expectedSize) {
+                    throw UploadProblem::fromFailure(UploadFailureCode::ChunksIncomplete);
                 }
-                stream_copy_to_stream($in, $out);
-                fclose($in);
-
-                $expectedOffset += $chunk->size;
+            } finally {
+                fclose($out);
             }
-        } finally {
-            fclose($out);
-        }
-
-        if ($expectedOffset !== $expectedSize) {
+        } catch (\Throwable $error) {
             @unlink($tmp);
-            throw new \DomainException('Assembled upload size does not match expected size.');
+            throw $error;
         }
 
         if (!rename($tmp, $target)) {
             @unlink($tmp);
-            throw new \RuntimeException('Unable to finalize assembled upload.');
+            throw UploadProblem::fromFailure(UploadFailureCode::AssemblyStorageUnavailable);
         }
     }
 

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Mediarama\Upload\Application;
 
 use Mediarama\Upload\Domain\UploadChunk;
+use Mediarama\Upload\Domain\UploadProblem;
 use Mediarama\Upload\Domain\UploadStatus;
 use Symfony\Component\Uid\Uuid;
 
@@ -27,24 +28,38 @@ final readonly class ReceiveUploadChunk
         $session = $this->sessions->get($sessionId);
 
         if (!$session->userId->equals($actingUserId)) {
-            throw new \DomainException('Upload session does not belong to the acting user.');
+            throw UploadProblem::sessionNotFound();
         }
 
         if ($session->isExpired()) {
-            throw new \DomainException('Upload session has expired.');
+            throw UploadProblem::expired();
         }
 
         if (!in_array($session->status, [UploadStatus::Created, UploadStatus::Uploading], true)) {
-            throw new \DomainException('Upload session is not accepting chunks.');
+            throw UploadProblem::invalidState();
         }
 
-        $this->policy->assertChunkSize($chunk->size);
+        try {
+            $this->policy->assertChunkSize($chunk->size);
 
-        if ($session->status === UploadStatus::Created) {
-            $session->begin();
-            $this->sessions->save($session);
+            if ($session->status === UploadStatus::Created) {
+                $session->begin();
+                $this->sessions->save($session);
+            }
+
+            $this->chunks->writeChunk($sessionId, $chunk, $stream);
+
+            if ($session->lastFailureCode !== null) {
+                $session->clearFailure();
+                $this->sessions->save($session);
+            }
+        } catch (UploadProblem $problem) {
+            if ($problem->failureCode !== null) {
+                $session->recordFailure($problem->failureCode);
+                $this->sessions->save($session);
+            }
+
+            throw $problem;
         }
-
-        $this->chunks->writeChunk($sessionId, $chunk, $stream);
     }
 }

@@ -7,6 +7,7 @@ namespace Mediarama\Upload\Infrastructure\Persistence;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\ParameterType;
 use Mediarama\Upload\Application\UploadSessionRepository;
+use Mediarama\Upload\Domain\UploadProblem;
 use Mediarama\Upload\Domain\UploadSession;
 use Symfony\Component\Uid\Uuid;
 
@@ -71,7 +72,7 @@ SQL,
         );
 
         if ($row === false) {
-            throw new \DomainException('Upload session not found.');
+            throw UploadProblem::sessionNotFound();
         }
 
         return DbalUploadSessionMapper::fromRow($row);

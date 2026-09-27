@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Mediarama\Upload\Application;
 
+use Mediarama\Upload\Domain\UploadProblem;
+use Mediarama\Upload\Domain\UploadStatus;
 use Symfony\Component\Uid\Uuid;
 
 final readonly class CompleteChunkedUpload
@@ -19,18 +21,31 @@ final readonly class CompleteChunkedUpload
         $session = $this->sessions->get($sessionId);
 
         if (!$session->userId->equals($actingUserId)) {
-            throw new \DomainException('Upload session does not belong to the acting user.');
+            throw UploadProblem::sessionNotFound();
         }
 
         if ($session->isExpired()) {
-            throw new \DomainException('Upload session has expired.');
+            throw UploadProblem::expired();
         }
 
-        $this->chunks->assemble(
-            $sessionId,
-            $session->expectedSize,
-            $session->temporaryStorageKey,
-        );
+        if (!in_array($session->status, [UploadStatus::Created, UploadStatus::Uploading], true)) {
+            throw UploadProblem::invalidState();
+        }
+
+        try {
+            $this->chunks->assemble(
+                $sessionId,
+                $session->expectedSize,
+                $session->temporaryStorageKey,
+            );
+        } catch (UploadProblem $problem) {
+            if ($problem->failureCode !== null) {
+                $session->recordFailure($problem->failureCode);
+                $this->sessions->save($session);
+            }
+
+            throw $problem;
+        }
 
         $session->markUploaded();
         $this->sessions->save($session);

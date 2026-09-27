@@ -72,6 +72,8 @@ UploadSession persistence carries structured last-failure metadata:
 
 The model deliberately stores no raw exception message or stack trace. Retryable failures do not automatically turn the session into `failed`; terminal failures do. A successful state transition clears stale failure metadata.
 
+Expected upload problems are mapped centrally to sanitized JSON responses rather than exposing exception messages. Chunk checksum/size and incomplete-assembly problems remain retryable and are persisted on the session. Requests for another user's upload deliberately use the same `upload_not_found` response as a missing session.
+
 Downstream MediaAsset processing has its own `processing_state` and remains a separate failure domain.
 
 ## Resume

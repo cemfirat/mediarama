@@ -7,6 +7,7 @@ namespace Mediarama\Http\Controller\Upload;
 use Mediarama\Security\Application\CurrentUser;
 use Mediarama\Upload\Application\ChunkStorage;
 use Mediarama\Upload\Application\UploadSessionRepository;
+use Mediarama\Upload\Domain\UploadProblem;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Attribute\Route;
@@ -28,13 +29,20 @@ final readonly class UploadStatusController
         $actor = $this->currentUser->requireUser()->id;
 
         if (!$session->userId->equals($actor)) {
-            throw new \DomainException('Upload session does not belong to the acting user.');
+            throw UploadProblem::sessionNotFound();
         }
 
         return new JsonResponse([
             'id' => $session->id->toRfc4122(),
             'status' => $session->status->value,
             'expected_size' => $session->expectedSize,
+            'failure' => $session->lastFailureCode === null ? null : [
+                'code' => $session->lastFailureCode->value,
+                'stage' => $session->lastFailureStage?->value,
+                'retryable' => $session->lastFailureRetryable,
+                'at' => $session->lastFailedAt?->format(DATE_ATOM),
+                'message' => $session->lastFailureCode->publicMessage(),
+            ],
             'chunks' => array_map(static fn ($chunk): array => [
                 'index' => $chunk->index,
                 'offset' => $chunk->offset,

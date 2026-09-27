@@ -6,6 +6,7 @@ namespace Mediarama\Upload\Infrastructure\Persistence;
 
 use Doctrine\DBAL\Connection;
 use Mediarama\Upload\Application\UploadFinalizationCriticalSection;
+use Mediarama\Upload\Domain\UploadProblem;
 use Symfony\Component\Uid\Uuid;
 
 final readonly class DbalUploadFinalizationCriticalSection implements UploadFinalizationCriticalSection
@@ -23,7 +24,7 @@ final readonly class DbalUploadFinalizationCriticalSection implements UploadFina
             );
 
             if ($lockedId === false) {
-                throw new \DomainException('Upload session not found.');
+                throw UploadProblem::sessionNotFound();
             }
 
             return $operation();

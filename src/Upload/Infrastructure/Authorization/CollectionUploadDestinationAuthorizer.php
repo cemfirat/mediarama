@@ -6,6 +6,7 @@ namespace Mediarama\Upload\Infrastructure\Authorization;
 
 use Mediarama\Collection\Application\CollectionUploadPermissionRepository;
 use Mediarama\Upload\Application\UploadDestinationAuthorizer;
+use Mediarama\Upload\Domain\UploadProblem;
 use Symfony\Component\Uid\Uuid;
 
 final readonly class CollectionUploadDestinationAuthorizer implements UploadDestinationAuthorizer
@@ -21,7 +22,7 @@ final readonly class CollectionUploadDestinationAuthorizer implements UploadDest
         }
 
         if (!$this->permissions->userCanUpload($userId, $collectionId)) {
-            throw new \DomainException('User is not allowed to upload to the target collection.');
+            throw UploadProblem::destinationForbidden();
         }
     }
 }
