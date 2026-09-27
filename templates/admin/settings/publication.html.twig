@@ -47,8 +47,7 @@
                     <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
                     <input type="hidden" name="action" value="apply_profile">
                     <input type="hidden" name="profile" value="private_workspace">
-                    <button class="uk-button uk-button-default" type="submit"
-                        {% if settings.deploymentProfile.value == 'private_workspace' %}disabled{% endif %}>
+                    <button class="uk-button uk-button-default" type="submit">
                         Apply profile
                     </button>
                 </form>
@@ -63,8 +62,7 @@
                     <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
                     <input type="hidden" name="action" value="apply_profile">
                     <input type="hidden" name="profile" value="public_publishing">
-                    <button class="uk-button uk-button-default" type="submit"
-                        {% if settings.deploymentProfile.value == 'public_publishing' %}disabled{% endif %}>
+                    <button class="uk-button uk-button-default" type="submit">
                         Apply profile
                     </button>
                 </form>
@@ -79,8 +77,7 @@
                     <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
                     <input type="hidden" name="action" value="apply_profile">
                     <input type="hidden" name="profile" value="internal_isolated">
-                    <button class="uk-button uk-button-default" type="submit"
-                        {% if settings.deploymentProfile.value == 'internal_isolated' %}disabled{% endif %}>
+                    <button class="uk-button uk-button-default" type="submit">
                         Apply profile
                     </button>
                 </form>
