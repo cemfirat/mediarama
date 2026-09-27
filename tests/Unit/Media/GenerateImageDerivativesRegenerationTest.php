@@ -9,6 +9,7 @@ use Mediarama\Media\Application\GenerateImageDerivatives;
 use Mediarama\Media\Application\ImageDerivativeGenerator;
 use Mediarama\Media\Application\ImageDerivativeProfile;
 use Mediarama\Media\Application\MediaDerivativeRepository;
+use Mediarama\Media\Application\MediaDerivativeRegenerationLock;
 use Mediarama\Media\Application\MediaStorage;
 use Mediarama\Media\Application\StoredObject;
 use Mediarama\Media\Domain\MediaAsset;
@@ -98,6 +99,7 @@ final class GenerateImageDerivativesRegenerationTest extends TestCase
             $repository,
             $generator,
             $storage,
+            $this->immediateLock(),
             [
                 new ImageDerivativeProfile('thumbnail', 480, 480),
                 new ImageDerivativeProfile('preview', 1600, 1600),
@@ -186,6 +188,7 @@ final class GenerateImageDerivativesRegenerationTest extends TestCase
             $repository,
             $generator,
             $this->trackingStorage(),
+            $this->immediateLock(),
             [new ImageDerivativeProfile('thumbnail', 480, 480)],
             3,
         );
@@ -275,6 +278,7 @@ final class GenerateImageDerivativesRegenerationTest extends TestCase
             $repository,
             $generator,
             $storage,
+            $this->immediateLock(),
             [
                 new ImageDerivativeProfile('thumbnail', 480, 480),
                 new ImageDerivativeProfile('preview', 1600, 1600),
@@ -305,6 +309,17 @@ final class GenerateImageDerivativesRegenerationTest extends TestCase
             123,
             str_repeat('a', 64),
         );
+    }
+
+
+    private function immediateLock(): MediaDerivativeRegenerationLock
+    {
+        return new class implements MediaDerivativeRegenerationLock {
+            public function synchronized(Uuid $mediaId, string $kind, callable $operation): mixed
+            {
+                return $operation();
+            }
+        };
     }
 
     private function trackingStorage(): MediaStorage
