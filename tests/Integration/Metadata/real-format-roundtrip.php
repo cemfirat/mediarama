@@ -245,6 +245,7 @@ try {
         $privacy = $inspector->inspect(new StorageObjectId('media', $privacyName));
         requireCondition($privacy->title === 'Current '.$name, 'Privacy-safe export lost current title for '.$name.'.');
         requireCondition($privacy->creator === 'Mediarama Export', 'Privacy-safe export lost current creator for '.$name.'.');
+        requireCondition($privacy->locationName === null, 'Privacy-safe export retained descriptive location for '.$name.'.');
         requireCondition($privacy->latitude === null, 'Privacy-safe export retained latitude for '.$name.'.');
         requireCondition($privacy->longitude === null, 'Privacy-safe export retained longitude for '.$name.'.');
 
