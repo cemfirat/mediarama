@@ -6,6 +6,7 @@ namespace Mediarama\Upload\Infrastructure\Persistence;
 
 use DateTimeImmutable;
 use Doctrine\DBAL\Connection;
+use Doctrine\DBAL\ParameterType;
 use Mediarama\Upload\Application\UploadProblem;
 use Mediarama\Upload\Application\UploadSessionRepository;
 use Mediarama\Upload\Domain\UploadFailure;
@@ -58,11 +59,10 @@ SQL,
                 'updated_at' => $session->updatedAt->format(DATE_ATOM),
                 'last_failure_code' => $session->lastFailure?->code,
                 'last_failure_stage' => $session->lastFailure?->stage->value,
-                'last_failure_retryable' => $session->lastFailure === null
-                    ? null
-                    : ($session->lastFailure->retryable ? 'true' : 'false'),
+                'last_failure_retryable' => $session->lastFailure?->retryable,
                 'last_failed_at' => $session->lastFailure?->failedAt->format(DATE_ATOM),
             ],
+            ['last_failure_retryable' => ParameterType::BOOLEAN],
         );
     }
 
