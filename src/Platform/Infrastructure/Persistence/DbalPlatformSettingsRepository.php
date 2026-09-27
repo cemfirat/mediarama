@@ -6,6 +6,7 @@ namespace Mediarama\Platform\Infrastructure\Persistence;
 
 use DateTimeImmutable;
 use Doctrine\DBAL\Connection;
+use Doctrine\DBAL\ParameterType;
 use Mediarama\Platform\Application\PlatformSettingsRepository;
 use Mediarama\Platform\Domain\DeploymentProfile;
 use Mediarama\Platform\Domain\PlatformSettings;
@@ -75,6 +76,9 @@ SQL,
                 'publishing' => $settings->publicPublishingEnabled,
                 'index_default' => $settings->searchIndexDefault->value,
                 'updated' => $updatedAt,
+            ],
+            [
+                'publishing' => ParameterType::BOOLEAN,
             ],
         );
 
