@@ -17,6 +17,7 @@ final readonly class GenerateImageDerivatives
         private MediaDerivativeRegenerationLock $regenerationLock,
         private array $profiles,
         private int $processingVersion,
+        private ?DerivativeCleanupRepository $cleanup = null,
     ) {
         if ($processingVersion < 1) {
             throw new \InvalidArgumentException('Image processing version must be at least 1.');
@@ -81,11 +82,29 @@ final readonly class GenerateImageDerivatives
     private function cleanupGenerated(array $generated): void
     {
         foreach ($generated as $derivative) {
+            $cleanupJob = null;
+
+            if ($this->cleanup !== null) {
+                try {
+                    // Persist cleanup debt before touching storage. If the process dies
+                    // after the delete but before acknowledgement, the retry sees a
+                    // missing object and safely completes the same idempotent job.
+                    $cleanupJob = $this->cleanup->enqueueOrphanedDerivative($derivative);
+                } catch (\Throwable) {
+                    // Preserve the primary generation/persistence failure and still try
+                    // the immediate best-effort delete below.
+                }
+            }
+
             try {
                 $this->storage->delete($derivative->storage);
+
+                if ($cleanupJob !== null) {
+                    $this->cleanup?->completeStorageJob($cleanupJob->id);
+                }
             } catch (\Throwable) {
-                // Preserve the primary generation/persistence failure. A deterministic
-                // orphan can be safely overwritten by the next regeneration attempt.
+                // A successfully persisted cleanup job remains retryable. If queue
+                // persistence itself was unavailable, preserve the primary failure.
             }
         }
     }
