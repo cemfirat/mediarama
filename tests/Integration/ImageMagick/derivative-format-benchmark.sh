@@ -3,6 +3,7 @@ set -euo pipefail
 
 : "${IMAGEMAGICK_BINARY:?IMAGEMAGICK_BINARY must be set}"
 : "${IMAGEMAGICK_IDENTIFY_BINARY:?IMAGEMAGICK_IDENTIFY_BINARY must be set}"
+: "${CWEBP_BINARY:?CWEBP_BINARY must be set}"
 
 ROOT="$(mktemp -d /tmp/mediarama-format-benchmark-smoke.XXXXXX)"
 INPUT="$ROOT/input"
@@ -17,7 +18,8 @@ mkdir -p "$INPUT"
 
 "$IMAGEMAGICK_BINARY"   -size 640x360   "gradient:#1f2a44-#e5bf8c"   -fill '#f8f8f8'   -draw 'rectangle 40,40 240,160'   -fill '#202020'   -draw 'circle 440,180 510,180'   "$INPUT/smoke-source.png"
 
-php bin/benchmark-derivative-formats   --input-dir="$INPUT"   --output="$REPORT"   --formats=webp,jpeg,avif   --qualities=70,82   --profiles=smoke:320x320   --limit=1   --convert-binary="$IMAGEMAGICK_BINARY"   --identify-binary="$IMAGEMAGICK_IDENTIFY_BINARY"   --compare-binary="${IMAGEMAGICK_COMPARE_BINARY:-compare}"
+php bin/benchmark-derivative-formats   --input-dir="$INPUT"   --output="$REPORT"   --formats=webp,jpeg,avif   --qualities=70,82   --profiles=smoke:320x320   --limit=1   --convert-binary="$IMAGEMAGICK_BINARY"   --identify-binary="$IMAGEMAGICK_IDENTIFY_BINARY"   --compare-binary="${IMAGEMAGICK_COMPARE_BINARY:-compare}" \
+  --cwebp-binary="$CWEBP_BINARY"
 
 REPORT="$REPORT" INPUT="$INPUT" php <<'PHP'
 <?php
@@ -78,6 +80,16 @@ $jpeg = array_values(array_filter(
 
 requireBenchmarkSmoke(count($webp) === 2, 'WebP quality curve contains both requested samples');
 requireBenchmarkSmoke(count($jpeg) === 2, 'JPEG quality curve contains both requested samples');
+
+requireBenchmarkSmoke(
+    count(array_unique(array_column($webp, 'byte_size'))) === 2,
+    'WebP quality curve changes output size through cwebp',
+);
+requireBenchmarkSmoke(
+    is_string($report['runtime']['cwebp_version'] ?? null)
+    && ($report['runtime']['cwebp_version'] ?? '') !== '',
+    'benchmark records the cwebp runtime version',
+);
 
 foreach ([...$webp, ...$jpeg] as $sample) {
     requireBenchmarkSmoke(($sample['byte_size'] ?? 0) > 0, 'successful sample records output bytes');
