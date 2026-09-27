@@ -10,6 +10,7 @@ use Doctrine\DBAL\ParameterType;
 use Mediarama\Media\Application\DerivativeCleanupRepository;
 use Mediarama\Media\Application\DerivativeCleanupSummary;
 use Mediarama\Media\Application\StorageCleanupJob;
+use Mediarama\Media\Domain\MediaDerivative;
 use Mediarama\Media\Domain\StorageObjectId;
 use Symfony\Component\Uid\Uuid;
 
@@ -17,6 +18,69 @@ final readonly class DbalDerivativeCleanupRepository implements DerivativeCleanu
 {
     public function __construct(private Connection $connection)
     {
+    }
+
+    public function enqueueOrphanedDerivative(MediaDerivative $derivative): StorageCleanupJob
+    {
+        $expectedPrefix = sprintf(
+            'derivatives/%s/v%d/',
+            $derivative->mediaId->toRfc4122(),
+            $derivative->processingVersion,
+        );
+
+        if (!str_starts_with($derivative->storage->key, $expectedPrefix)) {
+            throw new \LogicException('Refusing to queue an orphaned derivative outside its deterministic owned prefix.');
+        }
+
+        $now = (new DateTimeImmutable())->format(DATE_ATOM);
+        $id = Uuid::v7();
+
+        $row = $this->connection->fetchAssociative(
+            <<<'SQL'
+INSERT INTO storage_cleanup_jobs (
+    id, storage_disk, storage_key, reason, metadata, status, attempts,
+    claimed_at, last_error, created_at, updated_at
+) VALUES (
+    :id, :disk, :key, :reason, CAST(:metadata AS JSONB), 'pending', 0,
+    NULL, NULL, :created, :updated
+)
+ON CONFLICT (storage_disk, storage_key) DO UPDATE SET
+    reason = EXCLUDED.reason,
+    metadata = EXCLUDED.metadata,
+    status = 'pending',
+    claimed_at = NULL,
+    last_error = NULL,
+    updated_at = EXCLUDED.updated_at
+RETURNING id, storage_disk, storage_key
+SQL,
+            [
+                'id' => $id->toRfc4122(),
+                'disk' => $derivative->storage->disk,
+                'key' => $derivative->storage->key,
+                'reason' => 'orphaned_derivative',
+                'metadata' => json_encode([
+                    'media_id' => $derivative->mediaId->toRfc4122(),
+                    'kind' => $derivative->kind,
+                    'profile' => $derivative->profile,
+                    'processing_version' => $derivative->processingVersion,
+                    'byte_size' => $derivative->byteSize,
+                ], JSON_THROW_ON_ERROR),
+                'created' => $now,
+                'updated' => $now,
+            ],
+        );
+
+        if ($row === false) {
+            throw new \RuntimeException('Unable to persist orphaned derivative cleanup job.');
+        }
+
+        return new StorageCleanupJob(
+            Uuid::fromString((string) $row['id']),
+            new StorageObjectId(
+                (string) $row['storage_disk'],
+                (string) $row['storage_key'],
+            ),
+        );
     }
 
     public function previewSuperseded(
