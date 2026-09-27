@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\DriverManager;
+use Doctrine\DBAL\ParameterType;
 use Doctrine\DBAL\Tools\DsnParser;
 use Mediarama\Collection\Infrastructure\Persistence\DbalCollectionAccessPolicy;
 use Symfony\Component\Uid\Uuid;
@@ -67,24 +68,31 @@ function insertCollection(
 ): void {
     $now = (new DateTimeImmutable())->format(DATE_ATOM);
 
-    $db->insert('collections', [
-        'id' => $id->toRfc4122(),
-        'owner_id' => $ownerId->toRfc4122(),
-        'parent_id' => $parentId?->toRfc4122(),
-        'cover_media_id' => null,
-        'slug' => null,
-        'title' => $title,
-        'description' => null,
-        'visibility' => $visibility,
-        'position' => 0,
-        'created_at' => $now,
-        'updated_at' => $now,
-        'deleted_at' => null,
-        'password_protected' => $passwordProtected,
-        'password_hash' => null,
-        'password_hint' => null,
-        'password_reset_required' => $passwordResetRequired,
-    ]);
+    $db->insert(
+        'collections',
+        [
+            'id' => $id->toRfc4122(),
+            'owner_id' => $ownerId->toRfc4122(),
+            'parent_id' => $parentId?->toRfc4122(),
+            'cover_media_id' => null,
+            'slug' => null,
+            'title' => $title,
+            'description' => null,
+            'visibility' => $visibility,
+            'position' => 0,
+            'created_at' => $now,
+            'updated_at' => $now,
+            'deleted_at' => null,
+            'password_protected' => $passwordProtected,
+            'password_hash' => null,
+            'password_hint' => null,
+            'password_reset_required' => $passwordResetRequired,
+        ],
+        [
+            'password_protected' => ParameterType::BOOLEAN,
+            'password_reset_required' => ParameterType::BOOLEAN,
+        ],
+    );
 }
 
 function grant(
@@ -111,20 +119,28 @@ try {
     insertUser($db, $groupViewer, 'collection-access-group-'.$groupViewer->toRfc4122());
     insertUser($db, $unrelated, 'collection-access-unrelated-'.$unrelated->toRfc4122());
 
-    $db->insert('groups', [
-        'id' => $group->toRfc4122(),
-        'slug' => 'collection-access-'.$group->toRfc4122(),
-        'name' => 'Collection Access Integration',
-        'is_system' => false,
-        'created_at' => (new DateTimeImmutable())->format(DATE_ATOM),
-        'updated_at' => (new DateTimeImmutable())->format(DATE_ATOM),
-    ]);
-    $db->insert('user_groups', [
-        'user_id' => $groupViewer->toRfc4122(),
-        'group_id' => $group->toRfc4122(),
-        'is_primary' => true,
-        'created_at' => (new DateTimeImmutable())->format(DATE_ATOM),
-    ]);
+    $db->insert(
+        'groups',
+        [
+            'id' => $group->toRfc4122(),
+            'slug' => 'collection-access-'.$group->toRfc4122(),
+            'name' => 'Collection Access Integration',
+            'is_system' => false,
+            'created_at' => (new DateTimeImmutable())->format(DATE_ATOM),
+            'updated_at' => (new DateTimeImmutable())->format(DATE_ATOM),
+        ],
+        ['is_system' => ParameterType::BOOLEAN],
+    );
+    $db->insert(
+        'user_groups',
+        [
+            'user_id' => $groupViewer->toRfc4122(),
+            'group_id' => $group->toRfc4122(),
+            'is_primary' => true,
+            'created_at' => (new DateTimeImmutable())->format(DATE_ATOM),
+        ],
+        ['is_primary' => ParameterType::BOOLEAN],
+    );
 
     $publicRoot = Uuid::v7();
     $publicChild = Uuid::v7();
@@ -236,6 +252,15 @@ try {
     requireAccess(
         !$policy->canAddMedia($groupViewer, $addTarget),
         'view-only group grant does not imply media-add capability',
+    );
+    grant($db, $addTarget, 'collection.media.add', groupId: $group);
+    requireAccess(
+        $policy->canAddMedia($groupViewer, $addTarget),
+        'explicit media-add group grant can add media',
+    );
+    requireAccess(
+        !$policy->canView($groupViewer, $addTarget),
+        'media-add group grant does not expose private collection',
     );
     requireAccess(
         !$policy->canAddMedia($viewer, $restrictedUser),

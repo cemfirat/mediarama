@@ -51,7 +51,7 @@ The owner remains able to manage/view the resource.
 
 A child never widens access beyond an inaccessible ancestor.
 
-The DBAL policy walks the complete parent chain. Deleted nodes and hierarchy cycles fail closed.
+The DBAL policy builds the actor-visible Collection set from root Collections downward. A child is only reached when its parent is already visible and the child itself passes the actor rule. Deleted nodes fail closed; cyclic/disconnected hierarchy cannot enter the root-derived visible set. Active `parent_id` relationships are indexed for this recursive query.
 
 ## Capabilities remain independent
 
@@ -67,7 +67,7 @@ The upload create/finalize boundary delegates `collection.media.add` to this sha
 
 Public gallery/search must continue using their dedicated public DTO/query boundary.
 
-Future authenticated library search (#34) should consume these same Collection semantics at the query boundary rather than loading inaccessible rows and filtering them afterward.
+Future authenticated library search (#34) should prepend the same reusable `actor_visible_collections` CTE at its query boundary rather than loading inaccessible rows and filtering them afterward.
 
 ## Verification
 
