@@ -61,8 +61,8 @@ services:
             $probeSizeBytes: '%env(int:FFPROBE_PROBE_SIZE_BYTES)%'
             $analyzeDurationMicroseconds: '%env(int:FFPROBE_ANALYZE_DURATION_US)%'
 
-    Mediarama\Collection\Application\CollectionUploadPermissionRepository:
-        alias: Mediarama\Collection\Infrastructure\Persistence\DbalCollectionUploadPermissionRepository
+    Mediarama\Collection\Application\CollectionAccessPolicy:
+        alias: Mediarama\Collection\Infrastructure\Persistence\DbalCollectionAccessPolicy
 
     Mediarama\Upload\Application\UploadDestinationAuthorizer:
         alias: Mediarama\Upload\Infrastructure\Authorization\CollectionUploadDestinationAuthorizer
