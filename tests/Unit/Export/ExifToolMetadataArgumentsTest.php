@@ -74,6 +74,28 @@ final class ExifToolMetadataArgumentsTest extends TestCase
         self::assertSame(['-XMP-iptcCore:Location=Vienna'], $arguments);
     }
 
+    public function testCustomProfileCanExplicitlyIncludeGpsWithoutOtherMetadata(): void
+    {
+        $media = $this->media();
+        $media->title = 'Not selected';
+        $media->locationName = 'Not selected';
+        $media->latitude = 48.21;
+        $media->longitude = 16.37;
+
+        $arguments = (new ExifToolMetadataArguments())->build(
+            $media,
+            new MetadataExportPolicy(
+                MetadataExportProfile::Custom,
+                ['latitude', 'longitude'],
+            ),
+        );
+
+        self::assertSame([
+            '-XMP-exif:GPSLatitude=48.21',
+            '-XMP-exif:GPSLongitude=16.37',
+        ], $arguments);
+    }
+
     private function media(): MediaAsset
     {
         return MediaAsset::create(
