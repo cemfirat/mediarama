@@ -53,6 +53,22 @@ Orientation and density tags are also retained because removing them can change 
 
 CI uses a real ICC fixture and real image formats to verify the output rather than assuming ExifTool behaves identically across containers.
 
+## Research evidence
+
+The production boundary is based on the completed research in PR #89.
+
+That research verified the candidate scrub on JPEG, TIFF, PNG, WebP, AVIF and HEIC with:
+
+- immutable source bytes;
+- no seeded sensitive metadata leaks;
+- stable decode/geometry;
+- EXIF orientation preservation;
+- ICC/color-state preservation where seeded;
+- PNG gamma/sRGB rendering-intent preservation;
+- real AVIF/HEIC item rotation preserved through the scrub.
+
+The research intentionally kept this Accepted ADR with the production implementation so the repository has one authoritative ADR-0014.
+
 ## Supported copy formats
 
 The existing ExifTool copy-export matrix remains:
