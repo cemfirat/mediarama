@@ -228,6 +228,8 @@ try {
     requireWatermark($derivative->height === 100, 'watermarked derivative height matches resized source');
     requireWatermark(($derivative->metadata['orientation_normalized'] ?? false) === true, 'orientation-normalized metadata is retained');
     requireWatermark(($derivative->metadata['watermarked'] ?? false) === true, 'derivative is marked watermarked');
+    requireWatermark(($derivative->metadata['encoder'] ?? null) === 'cwebp', 'watermarked derivative records cwebp backend');
+    requireWatermark(($derivative->metadata['encoder_quality'] ?? null) === 90, 'watermarked derivative records cwebp quality');
     requireWatermark(($derivative->metadata['watermark_gravity'] ?? null) === 'southeast', 'watermark gravity is recorded');
     requireWatermark(($derivative->metadata['watermark_size_percent'] ?? null) === 25, 'watermark size policy is recorded');
     requireWatermark(($derivative->metadata['watermark_opacity_percent'] ?? null) === 50, 'watermark opacity policy is recorded');
