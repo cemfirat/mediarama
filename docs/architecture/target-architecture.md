@@ -298,10 +298,12 @@ collection.manage
 comment.create
 comment.moderate
 moderation.approve
-system.manage
+system.admin
 ```
 
 A Collection can apply resource-level policy to users/groups.
+
+`ROLE_USER` is only a coarse authenticated HTTP boundary. Privileged system administration uses the Mediarama `system.admin` permission derived from group membership; browser settings mutations also require CSRF.
 
 Authorization is evaluated before producing a view model or executing a command. Themes cannot override it.
 
