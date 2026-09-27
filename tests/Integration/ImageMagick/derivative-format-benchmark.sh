@@ -45,7 +45,7 @@ function requireBenchmarkSmoke(bool $condition, string $message): void
     echo 'OK '.$message.PHP_EOL;
 }
 
-requireBenchmarkSmoke(($report['schema_version'] ?? null) === 1, 'benchmark report schema is versioned');
+requireBenchmarkSmoke(($report['schema_version'] ?? null) === 2, 'benchmark report schema is versioned');
 requireBenchmarkSmoke(count($report['sources'] ?? []) === 1, 'benchmark reports one smoke source');
 requireBenchmarkSmoke(
     ($report['privacy']['source_paths_included'] ?? null) === false,
@@ -89,6 +89,10 @@ requireBenchmarkSmoke(
     is_string($report['runtime']['cwebp_version'] ?? null)
     && ($report['runtime']['cwebp_version'] ?? '') !== '',
     'benchmark records the cwebp runtime version',
+);
+requireBenchmarkSmoke(
+    ($report['matrix']['encoder_backends']['webp'] ?? null) === 'cwebp',
+    'benchmark records cwebp as the WebP encoder backend',
 );
 
 foreach ([...$webp, ...$jpeg] as $sample) {
