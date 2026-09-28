@@ -276,7 +276,9 @@ $raw = $db->fetchOne(
     'SELECT smart_rule FROM collections WHERE id = :id',
     ['id' => (string) getenv('SMART_COLLECTION_ID')],
 );
-$rule = json_decode((string) $raw, true, flags: JSON_THROW_ON_ERROR);
+$rule = \Mediarama\Collection\Domain\SmartCollectionRule::fromArray(
+    json_decode((string) $raw, true, flags: JSON_THROW_ON_ERROR),
+)->payload();
 $expected = [
     ['field' => 'media_type', 'operator' => 'eq', 'value' => 'image'],
     ['field' => 'location_name', 'operator' => 'contains', 'value' => 'Vienna'],
