@@ -196,6 +196,8 @@ is retryable/idempotent.
 - `title text`
 - `description text nullable`
 - `visibility varchar`
+- `mode varchar` (`manual | smart`), default `manual`
+- `smart_rule jsonb nullable` (required only when mode is `smart`)
 - `search_index_policy varchar` (`inherit | index | noindex`)
 - `public_published_at timestamptz nullable`
 - `public_updated_at timestamptz nullable`
@@ -207,6 +209,10 @@ is retryable/idempotent.
 - `deleted_at nullable`
 
 A collection is not a storage directory.
+
+Manual Collections persist membership in `collection_media`. Smart Collections persist a versioned validated Mediarama rule and resolve membership dynamically; their result rows are not copied into `collection_media`. Existing and Coppermine-imported Collections remain manual.
+
+Smart v1 additionally requires a non-null owner and `visibility = private`. The database rejects public Smart rows and rejects `collection_media` inserts/retargets to Smart Collections. Existing upload/add authorization also treats Smart Collections as non-manual destinations.
 
 Public publication timestamps are intentionally separate from ordinary creation/update timestamps. Existing rows are not backfilled from `created_at`; see `docs/architecture/publication-timeline.md`.
 
@@ -382,6 +388,17 @@ Reservation creation serializes on the existing user row with `SELECT ... FOR UP
 - primary key `(import_run_id, entity_type, source_id)`
 
 This makes Coppermine import resumable and auditable.
+
+## Smart Collection rule JSON
+
+Smart Collection rules are structured application-owned JSON, not arbitrary
+SQL and not raw metadata query paths. V1 rules are validated against a fixed
+allowlist of normalized fields/operators, bounded for depth/predicate/list
+complexity and compiled only to fixed SQL fragments with bound values.
+
+Exact GPS (`latitude`/`longitude`) and arbitrary
+`metadata`/`metadata_provenance` paths are intentionally outside the V1
+rule grammar.
 
 ## JSONB policy
 

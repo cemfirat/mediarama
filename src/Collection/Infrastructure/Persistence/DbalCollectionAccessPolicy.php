@@ -48,6 +48,7 @@ SELECT CASE WHEN EXISTS (
     FROM collections collection
     WHERE collection.id = :collection
       AND collection.deleted_at IS NULL
+      AND collection.mode = 'manual'
       AND (
           collection.owner_id = :user
           OR EXISTS (
