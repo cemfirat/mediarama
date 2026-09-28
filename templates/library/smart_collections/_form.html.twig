@@ -4,6 +4,12 @@
 </div>
 
 <div class="uk-margin">
+    <label class="uk-form-label" for="smart-description">Description <span class="uk-text-muted">(optional)</span></label>
+    <textarea class="uk-textarea" id="smart-description" name="description" rows="3" maxlength="5000">{{ collection_description ?: '' }}</textarea>
+    <div class="uk-text-meta uk-margin-small-top">This becomes public presentation text only if you deliberately publish the Smart Collection.</div>
+</div>
+
+<div class="uk-margin">
     <label class="uk-form-label" for="smart-group">Combine rules</label>
     <select class="uk-select uk-width-small" id="smart-group" name="group_operator">
         <option value="and" {% if group_operator == 'and' %}selected{% endif %}>AND</option>

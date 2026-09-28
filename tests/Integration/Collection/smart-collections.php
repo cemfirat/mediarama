@@ -311,16 +311,13 @@ try {
         echo "OK database rejects persisted membership for Smart Collections".PHP_EOL;
     }
 
-    try {
-        $db->update(
-            'collections',
-            ['visibility' => 'public'],
+    requireSmart(
+        (string) $db->fetchOne(
+            'SELECT visibility FROM collections WHERE id = :id',
             ['id' => $smartCollection->toRfc4122()],
-        );
-        throw new RuntimeException('Expected Smart Collection public visibility update to fail.');
-    } catch (Doctrine\DBAL\Exception) {
-        echo "OK database rejects public visibility for Smart v1".PHP_EOL;
-    }
+        ) === 'private',
+        'Smart configuration remains private until a separate publication action',
+    );
 
     requireSmart(
         smartIds($resolver->resolve($owner, $smartCollection, 50, 0))

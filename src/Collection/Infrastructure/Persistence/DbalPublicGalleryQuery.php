@@ -11,6 +11,7 @@ use Mediarama\Collection\Application\PublicCollectionResult;
 use Mediarama\Collection\Application\PublicGalleryQuery;
 use Mediarama\Collection\Application\PublicMediaDetailResult;
 use Mediarama\Collection\Application\PublicMediaResult;
+use Mediarama\Collection\Application\PublicSmartCollectionResolver;
 use Mediarama\Platform\Application\PlatformSettingsRepository;
 use Mediarama\Platform\Domain\SearchIndexPolicy;
 use Symfony\Component\Uid\Uuid;
@@ -20,6 +21,7 @@ final readonly class DbalPublicGalleryQuery implements PublicGalleryQuery
     public function __construct(
         private Connection $connection,
         private PlatformSettingsRepository $settings,
+        private PublicSmartCollectionResolver $smart,
     ) {
     }
 
@@ -66,6 +68,25 @@ final readonly class DbalPublicGalleryQuery implements PublicGalleryQuery
 
         if ($limit < 1 || $limit > 240 || $offset < 0) {
             throw new \InvalidArgumentException('Invalid public gallery pagination.');
+        }
+
+        $mode = $this->connection->fetchOne(
+            <<<'SQL'
+SELECT c.mode
+FROM collections c
+JOIN effective_public_collections visible
+  ON visible.collection_id = c.id
+WHERE c.id = :collection
+SQL,
+            ['collection' => $collectionId->toRfc4122()],
+        );
+
+        if ($mode === false) {
+            return [];
+        }
+
+        if ((string) $mode === 'smart') {
+            return $this->smart->media($collectionId, $limit, $offset);
         }
 
         $rows = $this->connection->fetchAllAssociative(
@@ -330,6 +351,7 @@ SQL,
         return <<<'SQL'
 SELECT
     c.id,
+    c.mode,
     c.title,
     c.description,
     c.public_published_at,
@@ -385,14 +407,30 @@ SQL;
     ): PublicCollectionResult {
         $policy = SearchIndexPolicy::from((string) $row['search_index_policy']);
 
+        $mediaCount = (int) $row['media_count'];
+        $coverMediaId = $row['cover_media_id'] !== null
+            ? Uuid::fromString((string) $row['cover_media_id'])
+            : null;
+        $coverVersion = $row['cover_thumbnail_version'] !== null
+            ? (int) $row['cover_thumbnail_version']
+            : null;
+
+        if ((string) $row['mode'] === 'smart') {
+            $collectionId = Uuid::fromString((string) $row['id']);
+            $mediaCount = $this->smart->count($collectionId);
+            $cover = $this->smart->cover($collectionId);
+            $coverMediaId = $cover?->mediaId;
+            $coverVersion = $cover?->thumbnailVersion;
+        }
+
         return new PublicCollectionResult(
             Uuid::fromString((string) $row['id']),
             (string) $row['title'],
             $row['description'] !== null ? (string) $row['description'] : null,
-            (int) $row['media_count'],
+            $mediaCount,
             (int) $row['child_count'],
-            $row['cover_media_id'] !== null ? Uuid::fromString((string) $row['cover_media_id']) : null,
-            $row['cover_thumbnail_version'] !== null ? (int) $row['cover_thumbnail_version'] : null,
+            $coverMediaId,
+            $coverVersion,
             $row['public_published_at'] !== null ? new DateTimeImmutable((string) $row['public_published_at']) : null,
             $row['public_updated_at'] !== null ? new DateTimeImmutable((string) $row['public_updated_at']) : null,
             $policy->resolve($siteDefault),

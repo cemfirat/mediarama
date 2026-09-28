@@ -112,6 +112,9 @@ services:
     Mediarama\Collection\Application\SmartCollectionManagement:
         alias: Mediarama\Collection\Infrastructure\Persistence\DbalSmartCollectionManagement
 
+    Mediarama\Collection\Application\SmartCollectionPublication:
+        alias: Mediarama\Collection\Infrastructure\Persistence\DbalSmartCollectionPublication
+
     Mediarama\Upload\Application\UploadDestinationAuthorizer:
         alias: Mediarama\Upload\Infrastructure\Authorization\CollectionUploadDestinationAuthorizer
 
@@ -313,6 +316,9 @@ services:
         arguments:
             $albumsRoot: '%env(COPPERMINE_ALBUMS_ROOT)%'
 
+
+    Mediarama\Collection\Application\PublicSmartCollectionResolver:
+        alias: Mediarama\Collection\Infrastructure\Persistence\DbalPublicSmartCollectionResolver
 
     Mediarama\Collection\Application\PublicGalleryQuery:
         alias: Mediarama\Collection\Infrastructure\Persistence\DbalPublicGalleryQuery

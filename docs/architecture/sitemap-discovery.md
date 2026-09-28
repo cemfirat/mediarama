@@ -67,6 +67,16 @@ A child cannot re-enter the sitemap through an inaccessible parent.
 
 The Collection policy controls the Collection page only. It does not silently change the MediaAsset's SEO preference.
 
+A deliberately published Smart Collection follows the same Collection URL and
+index-policy rules. Its rule is resolved dynamically only for media shown on
+that page; rule JSON is never emitted into XML.
+
+For Smart Collection image discovery, Mediarama uses the first 120 dynamically
+ordered page results, then independently requires the normal public MediaAsset
+boundary and effective MediaAsset index policy. Private/restricted matching
+MediaAssets therefore cannot enter the sitemap merely because a Smart rule
+matches them.
+
 ## MediaAsset detail-page discovery
 
 Mediarama now has a stable public MediaAsset HTML identity:

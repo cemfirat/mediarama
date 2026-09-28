@@ -8,10 +8,12 @@ use Mediarama\Collection\Application\LibraryFilterSmartCollectionRuleFactory;
 use Mediarama\Collection\Application\SmartCollectionConfigurator;
 use Mediarama\Collection\Application\SmartCollectionManagement;
 use Mediarama\Collection\Application\SmartCollectionManagementResult;
+use Mediarama\Collection\Application\SmartCollectionPublication;
 use Mediarama\Collection\Application\SmartCollectionResolver;
 use Mediarama\Collection\Application\SmartCollectionRuleFormFactory;
 use Mediarama\Collection\Application\SmartCollectionUnavailableException;
 use Mediarama\Http\Support\LibraryMediaSearchCriteriaFactory;
+use Mediarama\Platform\Domain\SearchIndexPolicy;
 use Mediarama\Security\Application\CurrentUser;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
@@ -29,6 +31,7 @@ final class SmartCollectionController extends AbstractController
         private readonly SmartCollectionManagement $management,
         private readonly SmartCollectionResolver $resolver,
         private readonly SmartCollectionConfigurator $configurator,
+        private readonly SmartCollectionPublication $publication,
         private readonly SmartCollectionRuleFormFactory $ruleForm,
         private readonly LibraryFilterSmartCollectionRuleFactory $filterRule,
         private readonly LibraryMediaSearchCriteriaFactory $criteriaFactory,
@@ -74,6 +77,7 @@ final class SmartCollectionController extends AbstractController
                 $id = $this->management->create(
                     $user->id,
                     $request->request->getString('title'),
+                    $this->nullableString($request->request->get('description')),
                     $rule,
                 );
 
@@ -84,6 +88,7 @@ final class SmartCollectionController extends AbstractController
             } catch (\InvalidArgumentException $exception) {
                 return $this->renderForm(
                     title: $request->request->getString('title'),
+                    description: $this->nullableString($request->request->get('description')),
                     groupOperator: $request->request->getString('group_operator', 'and'),
                     rows: $this->requestRows($request),
                     error: $exception->getMessage(),
@@ -94,6 +99,7 @@ final class SmartCollectionController extends AbstractController
 
         return $this->renderForm(
             title: '',
+            description: null,
             groupOperator: 'and',
             rows: $this->ruleForm->blankRows(),
         );
@@ -114,6 +120,7 @@ final class SmartCollectionController extends AbstractController
             $id = $this->management->create(
                 $user->id,
                 $request->request->getString('title'),
+                null,
                 $rule,
             );
         } catch (\InvalidArgumentException) {
@@ -158,6 +165,7 @@ final class SmartCollectionController extends AbstractController
                     $user->id,
                     $collectionId,
                     $request->request->getString('title'),
+                    $this->nullableString($request->request->get('description')),
                     $rule,
                 );
 
@@ -172,6 +180,7 @@ final class SmartCollectionController extends AbstractController
                     $request,
                     error: $exception->getMessage(),
                     overrideTitle: $request->request->getString('title'),
+                    overrideDescription: $this->nullableString($request->request->get('description')),
                     overrideGroup: $request->request->getString('group_operator', 'and'),
                     overrideRows: $this->requestRows($request),
                     status: Response::HTTP_BAD_REQUEST,
@@ -180,6 +189,92 @@ final class SmartCollectionController extends AbstractController
         }
 
         return $this->renderDetail($collection, $user->id, $request);
+    }
+
+    #[Route(
+        '/library/smart-collections/{id}/publish',
+        name: 'library_smart_collection_publish',
+        requirements: ['id' => '[0-9a-fA-F-]{36}'],
+        methods: ['POST'],
+    )]
+    public function publish(string $id, Request $request): Response
+    {
+        $user = $this->user();
+        $collectionId = $this->id($id);
+        $this->requireCsrf(
+            'smart_collection_publish_'.$collectionId->toRfc4122(),
+            (string) $request->request->get('_csrf_token', ''),
+        );
+
+        $policy = SearchIndexPolicy::tryFrom(
+            $request->request->getString('search_index_policy', 'noindex'),
+        );
+        if (
+            $policy === null
+            || $policy === SearchIndexPolicy::Inherit
+        ) {
+            return $this->renderDetail(
+                $this->owned($user->id, $collectionId),
+                $user->id,
+                $request,
+                error: 'Choose an explicit index or noindex policy before publishing.',
+                status: Response::HTTP_BAD_REQUEST,
+            );
+        }
+
+        try {
+            $coverMediaId = $this->nullableId(
+                $request->request->getString('cover_media_id', ''),
+            );
+            $this->publication->publish(
+                $user->id,
+                $collectionId,
+                $policy,
+                $coverMediaId,
+            );
+        } catch (SmartCollectionUnavailableException) {
+            throw $this->createNotFoundException();
+        } catch (\InvalidArgumentException $exception) {
+            return $this->renderDetail(
+                $this->owned($user->id, $collectionId),
+                $user->id,
+                $request,
+                error: $exception->getMessage(),
+                status: Response::HTTP_BAD_REQUEST,
+            );
+        }
+
+        return $this->redirectToRoute(
+            'library_smart_collection_show',
+            ['id' => $collectionId->toRfc4122(), 'published' => 1],
+        );
+    }
+
+    #[Route(
+        '/library/smart-collections/{id}/unpublish',
+        name: 'library_smart_collection_unpublish',
+        requirements: ['id' => '[0-9a-fA-F-]{36}'],
+        methods: ['POST'],
+    )]
+    public function unpublish(string $id, Request $request): Response
+    {
+        $user = $this->user();
+        $collectionId = $this->id($id);
+        $this->requireCsrf(
+            'smart_collection_unpublish_'.$collectionId->toRfc4122(),
+            (string) $request->request->get('_csrf_token', ''),
+        );
+
+        try {
+            $this->publication->unpublish($user->id, $collectionId);
+        } catch (SmartCollectionUnavailableException) {
+            throw $this->createNotFoundException();
+        }
+
+        return $this->redirectToRoute(
+            'library_smart_collection_show',
+            ['id' => $collectionId->toRfc4122(), 'unpublished' => 1],
+        );
     }
 
     #[Route(
@@ -237,6 +332,7 @@ final class SmartCollectionController extends AbstractController
 
     private function renderForm(
         string $title,
+        ?string $description,
         string $groupOperator,
         array $rows,
         ?string $error = null,
@@ -246,6 +342,7 @@ final class SmartCollectionController extends AbstractController
             '@Mediarama/library/smart_collections/form.html.twig',
             [
                 'collection_title' => $title,
+                'collection_description' => $description,
                 'group_operator' => $groupOperator,
                 'rows' => $this->padRows($rows),
                 'error' => $error,
@@ -263,6 +360,7 @@ final class SmartCollectionController extends AbstractController
         Request $request,
         ?string $error = null,
         ?string $overrideTitle = null,
+        ?string $overrideDescription = null,
         ?string $overrideGroup = null,
         ?array $overrideRows = null,
         int $status = Response::HTTP_OK,
@@ -283,6 +381,7 @@ final class SmartCollectionController extends AbstractController
             [
                 'collection' => $collection,
                 'collection_title' => $overrideTitle ?? $collection->title,
+                'collection_description' => $overrideDescription ?? $collection->description,
                 'group_operator' => $overrideGroup ?? (string) $collection->rule->payload()['op'],
                 'rows' => $editableRows !== null ? $this->padRows($editableRows) : null,
                 'items' => $items,
@@ -292,6 +391,8 @@ final class SmartCollectionController extends AbstractController
                 'error' => $error,
                 'saved' => $request->query->getBoolean('saved'),
                 'created' => $request->query->getBoolean('created'),
+                'published' => $request->query->getBoolean('published'),
+                'unpublished' => $request->query->getBoolean('unpublished'),
                 'edit_csrf_token' => $this->csrf
                     ->getToken('smart_collection_edit_'.$collection->id->toRfc4122())
                     ->getValue(),
@@ -300,6 +401,12 @@ final class SmartCollectionController extends AbstractController
                     ->getValue(),
                 'manual_csrf_token' => $this->csrf
                     ->getToken('smart_collection_manual_'.$collection->id->toRfc4122())
+                    ->getValue(),
+                'publish_csrf_token' => $this->csrf
+                    ->getToken('smart_collection_publish_'.$collection->id->toRfc4122())
+                    ->getValue(),
+                'unpublish_csrf_token' => $this->csrf
+                    ->getToken('smart_collection_unpublish_'.$collection->id->toRfc4122())
                     ->getValue(),
             ],
             new Response(status: $status),
@@ -386,6 +493,29 @@ final class SmartCollectionController extends AbstractController
         }
 
         return $rows;
+    }
+
+    private function nullableString(mixed $value): ?string
+    {
+        $value = trim((string) $value);
+
+        return $value === '' ? null : $value;
+    }
+
+    private function nullableId(string $value): ?Uuid
+    {
+        $value = trim($value);
+        if ($value === '') {
+            return null;
+        }
+
+        try {
+            return Uuid::fromString($value);
+        } catch (\InvalidArgumentException) {
+            throw new \InvalidArgumentException(
+                'Cover MediaAsset must be a valid UUID.',
+            );
+        }
     }
 
     private function privateResponse(Response $response): Response

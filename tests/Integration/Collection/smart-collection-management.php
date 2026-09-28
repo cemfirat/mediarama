@@ -62,7 +62,7 @@ try {
         ]],
     ]);
 
-    $collectionId = $management->create($owner, 'My Smart Images', $rule);
+    $collectionId = $management->create($owner, 'My Smart Images', null, $rule);
 
     $row = $db->fetchAssociative(
         'SELECT owner_id, title, visibility, mode, smart_rule, deleted_at
@@ -114,6 +114,7 @@ try {
         $owner,
         $collectionId,
         'Nikon picks',
+        'Public-facing description draft',
         $updatedRule,
     );
 
@@ -121,6 +122,7 @@ try {
     requireSmartManagement(
         $updated !== null
         && $updated->title === 'Nikon picks'
+        && $updated->description === 'Public-facing description draft'
         && $updated->rule->payload()['rules'][0]['field'] === 'camera_model',
         'owner can update title and validated Smart rule',
     );
@@ -130,6 +132,7 @@ try {
             $other,
             $collectionId,
             'Unauthorized',
+            null,
             $updatedRule,
         );
         throw new RuntimeException('Expected non-owner update to fail.');
