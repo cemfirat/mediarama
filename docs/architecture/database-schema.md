@@ -367,6 +367,50 @@ Policy tables:
 
 Reservation creation serializes on the existing user row with `SELECT ... FOR UPDATE`. Committed and reserved usage are read in one PostgreSQL statement/snapshot. Finalization persists the MediaAsset and deletes the reservation in the same database transaction, avoiding a duplicate mutable committed counter.
 
+## organization intelligence
+
+Organization intelligence is proposal-first. Generation does not write normal
+Collection/tag state.
+
+`organization_runs`:
+
+- `id uuid primary key`;
+- `requester_id uuid fk users`;
+- `producer_kind varchar` (`metadata | ai_external | ai_local`);
+- nullable provider/model/version audit identity, forbidden for metadata runs;
+- `status varchar` (`draft | ready_for_review | failed | cancelled`);
+- timestamps.
+
+`organization_run_media` snapshots the authorized selected scope:
+
+- `run_id uuid fk organization_runs`;
+- `media_id uuid fk media_assets`;
+- stable `position`;
+- primary key `(run_id, media_id)`.
+
+`organization_proposals`:
+
+- `id uuid primary key`;
+- `run_id uuid fk organization_runs`;
+- allowlisted proposal type;
+- review status;
+- validated versioned `payload jsonb`;
+- bounded rationale;
+- review/timestamps.
+
+`organization_proposal_media` is relational affected-media state. Composite
+foreign keys require every affected MediaAsset to belong to the same run scope.
+
+`organization_proposal_evidence` stores ordered evidence source
+(`metadata | inference`) plus a bounded human-readable summary. It is not a
+raw provider-response archive.
+
+The organization tables deliberately do not persist source storage paths,
+original filenames, exact GPS, raw metadata snapshots, credentials or arbitrary
+provider request/response bodies.
+
+See ADR-0017 and `docs/architecture/organization-assistant.md`.
+
 ## import_runs
 
 - `id uuid primary key`
