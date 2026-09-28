@@ -75,6 +75,7 @@ PUBLIC_VIDEO_MEDIA_ID="$MEDIA_ID" PUBLIC_VIDEO_COLLECTION_ID="$COLLECTION_ID" PU
 <?php
 require 'vendor/autoload.php';
 
+use Doctrine\DBAL\ParameterType;
 use Doctrine\DBAL\Tools\DsnParser;
 use Symfony\Component\Uid\Uuid;
 
@@ -146,6 +147,9 @@ $db->insert('collections', [
     'password_hint' => null,
     'password_reset_required' => false,
     'search_index_policy' => 'inherit',
+], [
+    'password_protected' => ParameterType::BOOLEAN,
+    'password_reset_required' => ParameterType::BOOLEAN,
 ]);
 
 $db->insert('collection_media', [
