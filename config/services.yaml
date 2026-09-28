@@ -317,5 +317,8 @@ services:
             $albumsRoot: '%env(COPPERMINE_ALBUMS_ROOT)%'
 
 
+    Mediarama\Collection\Application\PublicSmartCollectionResolver:
+        alias: Mediarama\Collection\Infrastructure\Persistence\DbalPublicSmartCollectionResolver
+
     Mediarama\Collection\Application\PublicGalleryQuery:
         alias: Mediarama\Collection\Infrastructure\Persistence\DbalPublicGalleryQuery
