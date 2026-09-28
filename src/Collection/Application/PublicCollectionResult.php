@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Mediarama\Collection\Application;
 
+use DateTimeImmutable;
 use Symfony\Component\Uid\Uuid;
 
 final readonly class PublicCollectionResult
@@ -16,6 +17,8 @@ final readonly class PublicCollectionResult
         public int $childCount,
         public ?Uuid $coverMediaId,
         public ?int $coverThumbnailVersion,
+        public ?DateTimeImmutable $publishedAt,
+        public ?DateTimeImmutable $publicUpdatedAt,
         public bool $indexable,
     ) {
     }
