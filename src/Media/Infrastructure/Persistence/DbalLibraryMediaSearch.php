@@ -46,6 +46,46 @@ final readonly class DbalLibraryMediaSearch implements LibraryMediaSearch
             }
         }
 
+        if ($c->mediaType !== null) {
+            $where[] = 'm.media_type = :media_type';
+            $params['media_type'] = $c->mediaType;
+        }
+
+        if ($c->locationName !== null && trim($c->locationName) !== '') {
+            $where[] = "POSITION(LOWER(:location_name) IN LOWER(COALESCE(m.location_name, ''))) > 0";
+            $params['location_name'] = trim($c->locationName);
+        }
+
+        if ($c->tag !== null && trim($c->tag) !== '') {
+            $where[] = 'EXISTS (
+                SELECT 1
+                FROM media_tags library_mt
+                JOIN tags library_t ON library_t.id = library_mt.tag_id
+                WHERE library_mt.media_id = m.id
+                  AND (
+                      library_t.slug = :tag
+                      OR LOWER(library_t.name) = LOWER(:tag)
+                  )
+            )';
+            $params['tag'] = trim($c->tag);
+        }
+
+        if ($c->minimumRating !== null) {
+            $where[] = '(SELECT AVG(library_r.value)::double precision
+                         FROM ratings library_r
+                         WHERE library_r.media_id = m.id) >= :minimum_rating';
+            $params['minimum_rating'] = $c->minimumRating;
+        }
+
+        if ($c->orientation !== null) {
+            $where[] = match ($c->orientation) {
+                'portrait' => 'm.width < m.height',
+                'landscape' => 'm.width > m.height',
+                'square' => 'm.width = m.height',
+                default => throw new \InvalidArgumentException('Invalid orientation filter.'),
+            };
+        }
+
         if ($c->minimumIso !== null) {
             $where[] = 'm.iso >= :minimum_iso';
             $params['minimum_iso'] = $c->minimumIso;

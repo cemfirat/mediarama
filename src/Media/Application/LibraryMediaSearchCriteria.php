@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Mediarama\Media\Application;
 
 use DateTimeImmutable;
+use Mediarama\Media\Domain\MediaType;
 
 final readonly class LibraryMediaSearchCriteria
 {
@@ -14,6 +15,11 @@ final readonly class LibraryMediaSearchCriteria
         public ?string $cameraMake = null,
         public ?string $cameraModel = null,
         public ?string $lens = null,
+        public ?string $mediaType = null,
+        public ?string $locationName = null,
+        public ?string $tag = null,
+        public ?float $minimumRating = null,
+        public ?string $orientation = null,
         public ?int $minimumIso = null,
         public ?int $maximumIso = null,
         public ?DateTimeImmutable $capturedFrom = null,
@@ -24,6 +30,21 @@ final readonly class LibraryMediaSearchCriteria
     ) {
         if ($limit < 1 || $limit > 200 || $offset < 0) {
             throw new \InvalidArgumentException('Invalid media search pagination.');
+        }
+
+        if ($mediaType !== null && MediaType::tryFrom($mediaType) === null) {
+            throw new \InvalidArgumentException('Invalid media type filter.');
+        }
+
+        if ($minimumRating !== null && ($minimumRating < 1.0 || $minimumRating > 5.0)) {
+            throw new \InvalidArgumentException('Minimum average rating must be between 1 and 5.');
+        }
+
+        if (
+            $orientation !== null
+            && !in_array($orientation, ['portrait', 'landscape', 'square'], true)
+        ) {
+            throw new \InvalidArgumentException('Invalid orientation filter.');
         }
 
         if ($minimumIso !== null && $minimumIso <= 0) {

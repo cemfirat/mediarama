@@ -42,6 +42,48 @@ final class LibraryFilterSmartCollectionRuleFactory
             ];
         }
 
+        if ($criteria->mediaType !== null) {
+            $rules[] = [
+                'field' => 'media_type',
+                'operator' => 'eq',
+                'value' => $criteria->mediaType,
+            ];
+        }
+
+        $locationName = trim((string) $criteria->locationName);
+        if ($locationName !== '') {
+            $rules[] = [
+                'field' => 'location_name',
+                'operator' => 'contains',
+                'value' => $locationName,
+            ];
+        }
+
+        $tag = trim((string) $criteria->tag);
+        if ($tag !== '') {
+            $rules[] = [
+                'field' => 'tag',
+                'operator' => 'has_tag',
+                'value' => $tag,
+            ];
+        }
+
+        if ($criteria->minimumRating !== null) {
+            $rules[] = [
+                'field' => 'rating_average',
+                'operator' => 'gte',
+                'value' => $criteria->minimumRating,
+            ];
+        }
+
+        if ($criteria->orientation !== null) {
+            $rules[] = [
+                'field' => 'orientation',
+                'operator' => 'eq',
+                'value' => $criteria->orientation,
+            ];
+        }
+
         if ($criteria->capturedFrom !== null && $criteria->capturedUntil !== null) {
             $rules[] = [
                 'field' => 'captured_at',

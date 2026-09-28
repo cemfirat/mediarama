@@ -31,6 +31,28 @@
             <div><label class="uk-form-label">Camera make<input class="uk-input" name="camera_make" value="{{ filters.camera_make }}"></label></div>
             <div><label class="uk-form-label">Camera model<input class="uk-input" name="camera_model" value="{{ filters.camera_model }}"></label></div>
             <div><label class="uk-form-label">Lens<input class="uk-input" name="lens" value="{{ filters.lens }}"></label></div>
+            <div>
+                <label class="uk-form-label">Media type</label>
+                <select class="uk-select" name="media_type">
+                    <option value="" {% if filters.media_type == '' %}selected{% endif %}>Any</option>
+                    <option value="image" {% if filters.media_type == 'image' %}selected{% endif %}>Image</option>
+                    <option value="video" {% if filters.media_type == 'video' %}selected{% endif %}>Video</option>
+                    <option value="audio" {% if filters.media_type == 'audio' %}selected{% endif %}>Audio</option>
+                    <option value="document" {% if filters.media_type == 'document' %}selected{% endif %}>Document</option>
+                </select>
+            </div>
+            <div><label class="uk-form-label">Location name<input class="uk-input" name="location_name" value="{{ filters.location_name }}" placeholder="Coarse place name"></label></div>
+            <div><label class="uk-form-label">Tag<input class="uk-input" name="tag" value="{{ filters.tag }}" placeholder="Tag name or slug"></label></div>
+            <div><label class="uk-form-label">Minimum average rating<input class="uk-input" type="number" min="1" max="5" step="0.1" name="rating_min" value="{{ filters.rating_min }}"></label></div>
+            <div>
+                <label class="uk-form-label">Orientation</label>
+                <select class="uk-select" name="orientation">
+                    <option value="" {% if filters.orientation == '' %}selected{% endif %}>Any</option>
+                    <option value="portrait" {% if filters.orientation == 'portrait' %}selected{% endif %}>Portrait</option>
+                    <option value="landscape" {% if filters.orientation == 'landscape' %}selected{% endif %}>Landscape</option>
+                    <option value="square" {% if filters.orientation == 'square' %}selected{% endif %}>Square</option>
+                </select>
+            </div>
             <div><label class="uk-form-label">ISO minimum<input class="uk-input" type="number" min="1" name="iso_min" value="{{ filters.iso_min }}"></label></div>
             <div><label class="uk-form-label">ISO maximum<input class="uk-input" type="number" min="1" name="iso_max" value="{{ filters.iso_max }}"></label></div>
             <div><label class="uk-form-label">Captured from<input class="uk-input" type="date" name="captured_from" value="{{ filters.captured_from }}"></label></div>
@@ -68,7 +90,7 @@
         </form>
     {% else %}
         <div class="uk-alert-warning" uk-alert>
-            <p>This view contains filters that Smart Collection rule V1 cannot represent safely yet. Free-text, ISO and exact coordinate-presence filters are intentionally not serialized.</p>
+            <p>This view contains filters that Smart Collection rule V1 cannot represent safely. Free-text, ISO and exact coordinate-presence filters are intentionally not serialized.</p>
         </div>
     {% endif %}
 </section>
