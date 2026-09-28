@@ -15,6 +15,7 @@ use Symfony\Component\Routing\Attribute\Route;
 final class PublicSitemapController extends AbstractController
 {
     private const COLLECTIONS_PER_SITEMAP = 250;
+    private const MEDIA_PER_SITEMAP = 1000;
 
     public function __construct(
         private readonly PublicSitemapQuery $sitemap,
@@ -31,10 +32,15 @@ final class PublicSitemapController extends AbstractController
             throw $this->createNotFoundException();
         }
 
-        $collectionCount = $this->sitemap->indexableCollectionCount();
-        $pageCount = max(
+        $collectionPageCount = max(
             1,
-            (int) ceil($collectionCount / self::COLLECTIONS_PER_SITEMAP),
+            (int) ceil(
+                $this->sitemap->indexableCollectionCount()
+                / self::COLLECTIONS_PER_SITEMAP
+            ),
+        );
+        $mediaPageCount = (int) ceil(
+            $this->sitemap->indexableMediaCount() / self::MEDIA_PER_SITEMAP,
         );
 
         $lines = [
@@ -42,10 +48,19 @@ final class PublicSitemapController extends AbstractController
             '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
         ];
 
-        for ($page = 1; $page <= $pageCount; ++$page) {
+        for ($page = 1; $page <= $collectionPageCount; ++$page) {
             $lines[] = '  <sitemap>';
             $lines[] = '    <loc>'.$this->xml($this->urls->route(
                 'public_sitemap_collections',
+                ['page' => $page],
+            )).'</loc>';
+            $lines[] = '  </sitemap>';
+        }
+
+        for ($page = 1; $page <= $mediaPageCount; ++$page) {
+            $lines[] = '  <sitemap>';
+            $lines[] = '    <loc>'.$this->xml($this->urls->route(
+                'public_sitemap_media',
                 ['page' => $page],
             )).'</loc>';
             $lines[] = '  </sitemap>';
@@ -69,10 +84,12 @@ final class PublicSitemapController extends AbstractController
             throw $this->createNotFoundException();
         }
 
-        $collectionCount = $this->sitemap->indexableCollectionCount();
         $pageCount = max(
             1,
-            (int) ceil($collectionCount / self::COLLECTIONS_PER_SITEMAP),
+            (int) ceil(
+                $this->sitemap->indexableCollectionCount()
+                / self::COLLECTIONS_PER_SITEMAP
+            ),
         );
 
         if ($page > $pageCount) {
@@ -120,6 +137,49 @@ final class PublicSitemapController extends AbstractController
                 $lines[] = '    </image:image>';
             }
 
+            $lines[] = '  </url>';
+        }
+
+        $lines[] = '</urlset>';
+
+        return $this->xmlResponse(implode("\n", $lines)."\n");
+    }
+
+    #[Route(
+        '/sitemaps/media-{page}.xml',
+        name: 'public_sitemap_media',
+        requirements: ['page' => '[1-9]\d*'],
+        methods: ['GET'],
+    )]
+    public function media(int $page): Response
+    {
+        if (!$this->settings->current()->publicPublishingEnabled) {
+            throw $this->createNotFoundException();
+        }
+
+        $mediaCount = $this->sitemap->indexableMediaCount();
+        $pageCount = (int) ceil($mediaCount / self::MEDIA_PER_SITEMAP);
+
+        if ($pageCount < 1 || $page > $pageCount) {
+            throw $this->createNotFoundException();
+        }
+
+        $media = $this->sitemap->indexableMedia(
+            self::MEDIA_PER_SITEMAP,
+            ($page - 1) * self::MEDIA_PER_SITEMAP,
+        );
+
+        $lines = [
+            '<?xml version="1.0" encoding="UTF-8"?>',
+            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+        ];
+
+        foreach ($media as $item) {
+            $lines[] = '  <url>';
+            $lines[] = '    <loc>'.$this->xml($this->urls->route(
+                'public_media_show',
+                ['id' => $item->id->toRfc4122()],
+            )).'</loc>';
             $lines[] = '  </url>';
         }
 
