@@ -1,6 +1,10 @@
 {% extends 'base.html.twig' %}
 
-{% block title %}Collections · Mediarama{% endblock %}
+{% block title %}{{ seo.pageTitle }}{% endblock %}
+
+{% block head %}
+    {% include '@Mediarama/public/_seo.html.twig' with {seo: seo} only %}
+{% endblock %}
 
 {% block body %}
 <header class="uk-margin-large-bottom">
