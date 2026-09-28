@@ -75,6 +75,11 @@ final class LibraryBrowserController extends AbstractController
             'camera_make',
             'camera_model',
             'lens',
+            'media_type',
+            'location_name',
+            'tag',
+            'rating_min',
+            'orientation',
             'iso_min',
             'iso_max',
             'captured_from',
@@ -101,6 +106,11 @@ final class LibraryBrowserController extends AbstractController
             || trim((string) $criteria->cameraMake) !== ''
             || trim((string) $criteria->cameraModel) !== ''
             || trim((string) $criteria->lens) !== ''
+            || $criteria->mediaType !== null
+            || trim((string) $criteria->locationName) !== ''
+            || trim((string) $criteria->tag) !== ''
+            || $criteria->minimumRating !== null
+            || $criteria->orientation !== null
             || $criteria->capturedFrom !== null
             || $criteria->capturedUntil !== null;
     }

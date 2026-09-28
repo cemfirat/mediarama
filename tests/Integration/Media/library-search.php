@@ -6,6 +6,10 @@ use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\DriverManager;
 use Doctrine\DBAL\ParameterType;
 use Doctrine\DBAL\Tools\DsnParser;
+use Mediarama\Collection\Application\LibraryFilterSmartCollectionRuleFactory;
+use Mediarama\Collection\Application\SmartCollectionRuleCompiler;
+use Mediarama\Collection\Infrastructure\Persistence\DbalSmartCollectionManagement;
+use Mediarama\Collection\Infrastructure\Persistence\DbalSmartCollectionResolver;
 use Mediarama\Media\Application\LibraryMediaSearchCriteria;
 use Mediarama\Media\Infrastructure\Persistence\DbalLibraryMediaSearch;
 use Symfony\Component\Uid\Uuid;
@@ -131,6 +135,9 @@ function insertSearchMedia(
     ?float $longitude = null,
     ?string $locationName = null,
     ?string $deletedAt = null,
+    string $mediaType = 'image',
+    int $width = 64,
+    int $height = 48,
 ): void {
     $now = (new DateTimeImmutable())->format(DATE_ATOM);
     $idString = $id->toRfc4122();
@@ -140,13 +147,13 @@ function insertSearchMedia(
         'owner_id' => $ownerId->toRfc4122(),
         'storage_disk' => 'local',
         'storage_key' => 'library-search/'.$idString.'/source',
-        'original_filename' => strtolower(str_replace(' ', '-', $title)).'.jpg',
-        'mime_type' => 'image/jpeg',
-        'media_type' => 'image',
+        'original_filename' => strtolower(str_replace(' ', '-', $title)).($mediaType === 'video' ? '.mp4' : '.jpg'),
+        'mime_type' => $mediaType === 'video' ? 'video/mp4' : 'image/jpeg',
+        'media_type' => $mediaType,
         'byte_size' => 4,
         'checksum_sha256' => hash('sha256', $idString),
-        'width' => 64,
-        'height' => 48,
+        'width' => $width,
+        'height' => $height,
         'duration_ms' => null,
         'title' => $title,
         'description' => 'Description for '.$title,
@@ -299,6 +306,10 @@ try {
         cameraMake: 'Viewer Camera',
         iso: 100,
         capturedAt: '2026-01-01T10:00:00+00:00',
+        locationName: 'Vienna Facet',
+        mediaType: 'video',
+        width: 48,
+        height: 64,
     );
     insertSearchMedia(
         $db,
@@ -365,7 +376,10 @@ try {
         iso: 400,
         latitude: 47.0,
         longitude: 15.0,
-        locationName: 'Hidden Exact Place',
+        locationName: 'Vienna Facet Secret',
+        mediaType: 'video',
+        width: 48,
+        height: 64,
     );
     insertSearchMedia(
         $db,
@@ -437,6 +451,36 @@ try {
     addSearchMembership($db, $restrictedHidden, $restrictedHiddenMedia);
     addSearchMembership($db, $private, $mixedMembership);
     addSearchMembership($db, $restrictedUser, $mixedMembership);
+
+    $facetTag = Uuid::v7();
+    $db->insert('tags', [
+        'id' => $facetTag->toRfc4122(),
+        'slug' => 'wedding',
+        'name' => 'Wedding',
+        'created_at' => (new DateTimeImmutable())->format(DATE_ATOM),
+        'updated_at' => (new DateTimeImmutable())->format(DATE_ATOM),
+    ]);
+    foreach ([$ownedUncollected, $privateHidden] as $taggedMedia) {
+        $db->insert('media_tags', [
+            'media_id' => $taggedMedia->toRfc4122(),
+            'tag_id' => $facetTag->toRfc4122(),
+            'source' => 'manual',
+        ]);
+    }
+    $db->insert('ratings', [
+        'user_id' => $viewer->toRfc4122(),
+        'media_id' => $ownedUncollected->toRfc4122(),
+        'value' => 5,
+        'created_at' => (new DateTimeImmutable())->format(DATE_ATOM),
+        'updated_at' => (new DateTimeImmutable())->format(DATE_ATOM),
+    ]);
+    $db->insert('ratings', [
+        'user_id' => $owner->toRfc4122(),
+        'media_id' => $privateHidden->toRfc4122(),
+        'value' => 5,
+        'created_at' => (new DateTimeImmutable())->format(DATE_ATOM),
+        'updated_at' => (new DateTimeImmutable())->format(DATE_ATOM),
+    ]);
 
     $search = new DbalLibraryMediaSearch($db);
 
@@ -537,6 +581,106 @@ try {
         'capture-date filter remains authorization-aware',
     );
 
+    foreach ([
+        'media type' => new LibraryMediaSearchCriteria(mediaType: 'video', limit: 200),
+        'coarse location name' => new LibraryMediaSearchCriteria(locationName: 'Vienna Facet', limit: 200),
+        'normalized tag' => new LibraryMediaSearchCriteria(tag: 'Wedding', limit: 200),
+        'average rating' => new LibraryMediaSearchCriteria(minimumRating: 4.0, limit: 200),
+        'orientation' => new LibraryMediaSearchCriteria(orientation: 'portrait', limit: 200),
+    ] as $facetName => $facetCriteria) {
+        requireResultIds(
+            resultIds($search->search($viewer, $facetCriteria)),
+            [$ownedUncollected],
+            $facetName.' facet respects authenticated media visibility',
+        );
+    }
+
+    $combinedFacets = new LibraryMediaSearchCriteria(
+        mediaType: 'video',
+        locationName: 'Vienna Facet',
+        tag: 'Wedding',
+        minimumRating: 4.0,
+        orientation: 'portrait',
+        limit: 200,
+    );
+    requireResultIds(
+        resultIds($search->search($viewer, $combinedFacets)),
+        [$ownedUncollected],
+        'combined Smart V1 Library facets compose with deterministic AND semantics',
+    );
+
+    $facetRule = (new LibraryFilterSmartCollectionRuleFactory())->create($combinedFacets);
+    $facetSmart = (new DbalSmartCollectionManagement($db))->create(
+        $viewer,
+        'Saved facet equivalence',
+        null,
+        $facetRule,
+    );
+    $facetResolver = new DbalSmartCollectionResolver($db, new SmartCollectionRuleCompiler());
+    requireResultIds(
+        resultIds($facetResolver->resolve($viewer, $facetSmart, 200)),
+        [$ownedUncollected],
+        'saved facet rule resolves the same owner-visible match as Library filtering',
+    );
+
+    $db->delete('media_tags', [
+        'media_id' => $ownedUncollected->toRfc4122(),
+        'tag_id' => $facetTag->toRfc4122(),
+    ]);
+    requireResultIds(
+        resultIds($search->search($viewer, $combinedFacets)),
+        [],
+        'tag removal immediately changes Library facet results',
+    );
+    requireResultIds(
+        resultIds($facetResolver->resolve($viewer, $facetSmart, 200)),
+        [],
+        'tag removal immediately changes saved Smart membership',
+    );
+
+    $db->insert('media_tags', [
+        'media_id' => $ownedUncollected->toRfc4122(),
+        'tag_id' => $facetTag->toRfc4122(),
+        'source' => 'manual',
+    ]);
+    $db->update(
+        'ratings',
+        ['value' => 2, 'updated_at' => (new DateTimeImmutable())->format(DATE_ATOM)],
+        [
+            'user_id' => $viewer->toRfc4122(),
+            'media_id' => $ownedUncollected->toRfc4122(),
+        ],
+    );
+    requireResultIds(
+        resultIds($search->search($viewer, $combinedFacets)),
+        [],
+        'rating change immediately changes Library facet results',
+    );
+    requireResultIds(
+        resultIds($facetResolver->resolve($viewer, $facetSmart, 200)),
+        [],
+        'rating change immediately changes saved Smart membership',
+    );
+
+    $db->update(
+        'ratings',
+        ['value' => 5, 'updated_at' => (new DateTimeImmutable())->format(DATE_ATOM)],
+        [
+            'user_id' => $viewer->toRfc4122(),
+            'media_id' => $ownedUncollected->toRfc4122(),
+        ],
+    );
+    requireResultIds(
+        resultIds($search->search($viewer, $combinedFacets)),
+        [$ownedUncollected],
+        'restored normalized facet state restores Library result',
+    );
+    requireResultIds(
+        resultIds($facetResolver->resolve($viewer, $facetSmart, 200)),
+        [$ownedUncollected],
+        'restored normalized facet state restores Smart membership',
+    );
+
     requireResultIds(
         resultIds($search->search(
             $unrelated,
@@ -548,6 +692,10 @@ try {
 
     echo "Actor-aware library media search integration checks passed.".PHP_EOL;
 } finally {
+    if (isset($facetSmart)) {
+        $db->delete('collections', ['id' => $facetSmart->toRfc4122()]);
+    }
+
     foreach (array_reverse($mediaIds) as $mediaId) {
         $db->executeStatement('DELETE FROM media_assets WHERE id = :id', [
             'id' => $mediaId->toRfc4122(),
@@ -558,6 +706,10 @@ try {
         $db->executeStatement('DELETE FROM collections WHERE id = :id', [
             'id' => $collectionId->toRfc4122(),
         ]);
+    }
+
+    if (isset($facetTag)) {
+        $db->delete('tags', ['id' => $facetTag->toRfc4122()]);
     }
 
     $db->executeStatement('DELETE FROM groups WHERE id = :id', [

@@ -74,6 +74,11 @@ The authenticated library query supports:
 - `camera_make`;
 - `camera_model`;
 - `lens`;
+- `media_type`;
+- `location_name` (coarse descriptive location text only);
+- `tag` (normalized tag slug/name);
+- `rating_min` (normalized average rating);
+- `orientation` (`portrait | landscape | square`, derived from canonical width/height);
 - `iso_min`;
 - `iso_max`;
 - `captured_from`;
@@ -83,6 +88,13 @@ The authenticated library query supports:
 - `offset`.
 
 Authorization remains part of the SQL query regardless of which metadata filter is used.
+
+The Smart-compatible filter predicates intentionally mirror the V1 rule
+compiler: text facets use case-insensitive contains semantics, tags query the
+normalized `tags/media_tags` relationship, rating uses relational
+`ratings`, and orientation is derived from canonical dimensions. Exact
+latitude/longitude are never returned by this search DTO and are not Smart
+facets; the coordinate-presence filter remains search-only.
 
 ## Indexes
 
@@ -98,8 +110,7 @@ Relevant PostgreSQL indexes include:
 
 ## Next steps
 
-- collection/tag filters;
-- rating/label filters;
+- collection filters;
 - cursor pagination for very large libraries;
-- faceting for camera/lens/date/location;
-- UI integration for authenticated library search.
+- value/count suggestions for camera/lens/date/location/tag facets;
+- measured query-plan review against large real libraries.

@@ -18,6 +18,11 @@ final class LibraryMediaSearchCriteriaFactory
             cameraMake: $input->getString('camera_make') ?: null,
             cameraModel: $input->getString('camera_model') ?: null,
             lens: $input->getString('lens') ?: null,
+            mediaType: $this->nullableString($input, 'media_type'),
+            locationName: $this->nullableString($input, 'location_name'),
+            tag: $this->nullableString($input, 'tag'),
+            minimumRating: $this->rating($input, 'rating_min'),
+            orientation: $this->nullableString($input, 'orientation'),
             minimumIso: $this->positiveInteger($input, 'iso_min'),
             maximumIso: $this->positiveInteger($input, 'iso_max'),
             capturedFrom: $this->date($input, 'captured_from'),
@@ -26,6 +31,36 @@ final class LibraryMediaSearchCriteriaFactory
             limit: min(max($input->getInt('limit', 50), 1), 200),
             offset: max($input->getInt('offset', 0), 0),
         );
+    }
+
+    private function nullableString(InputBag $input, string $key): ?string
+    {
+        if (!$input->has($key)) {
+            return null;
+        }
+
+        $value = trim($input->getString($key));
+
+        return $value === '' ? null : $value;
+    }
+
+    private function rating(InputBag $input, string $key): ?float
+    {
+        if (!$input->has($key)) {
+            return null;
+        }
+
+        $value = trim($input->getString($key));
+        if ($value === '' || !is_numeric($value)) {
+            throw new \InvalidArgumentException('Invalid rating.');
+        }
+
+        $rating = (float) $value;
+        if ($rating < 1.0 || $rating > 5.0) {
+            throw new \InvalidArgumentException('Invalid rating.');
+        }
+
+        return $rating;
     }
 
     private function positiveInteger(InputBag $input, string $key): ?int

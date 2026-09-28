@@ -104,15 +104,23 @@ JSON Library API.
 A current Library filter may be saved as a Smart Collection only when the
 mapping is lossless in V1.
 
-Currently saveable:
+Saveable Library filters:
 
+- media type;
+- captured-from / captured-until;
 - creator;
-- camera make;
-- camera model;
+- camera make/model;
 - lens;
-- captured-from / captured-until.
+- coarse location name;
+- normalized tag name/slug;
+- minimum average rating;
+- orientation derived from canonical width/height.
 
-Currently not silently serialized:
+Tag and rating facets query normalized relational tables. Coarse location uses
+`location_name` only; exact latitude/longitude are never exposed as Smart
+facets.
+
+Search-only criteria that are still not silently serialized:
 
 - full-text query;
 - ISO range;
@@ -120,6 +128,13 @@ Currently not silently serialized:
 
 Those filters keep working for Library search, but the UI explains that they
 cannot yet be saved as a Smart Collection rule.
+
+For every saveable facet, Library filtering and Smart V1 use equivalent
+predicate semantics. Tag and rating filters read normalized relational state,
+orientation derives from canonical dimensions, and coarse location uses
+`location_name` only. The V1 Smart candidate universe remains the Collection
+owner's MediaAssets as defined above; saving a filter never copies shared media
+into Smart membership and never grants access.
 
 ## Publication
 
