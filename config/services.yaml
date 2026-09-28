@@ -25,6 +25,12 @@ services:
             - '../src/Export/Application/MetadataExportPolicy.php'
             - '../src/Security/Application/AuthenticatedUser.php'
             - '../src/Security/Infrastructure/Authentication/SecurityUser.php'
+            - '../src/Organization/Application/ApprovedOrganizationAiPresentationGateway.php'
+            - '../src/Organization/Application/OrganizationAiMediaInput.php'
+            - '../src/Organization/Application/OrganizationAiPresentationAsset.php'
+            - '../src/Organization/Application/OrganizationAiPreflightMedia.php'
+            - '../src/Organization/Application/OrganizationAiRequest.php'
+            - '../src/Organization/Application/OrganizationAiRequestSummary.php'
 
     Mediarama\Media\Infrastructure\Metadata\ExifToolProcess:
         arguments:
@@ -328,3 +334,13 @@ services:
 
     Mediarama\Organization\Application\OrganizationMetadataSnapshotQuery:
         alias: Mediarama\Organization\Infrastructure\Persistence\DbalOrganizationMetadataSnapshotQuery
+
+    Mediarama\Organization\Application\OrganizationAiPreflightStore:
+        alias: Mediarama\Organization\Infrastructure\Persistence\DbalOrganizationAiPreflightStore
+
+    Mediarama\Organization\Application\OrganizationAiPresentationAssetReader:
+        alias: Mediarama\Organization\Infrastructure\Persistence\DbalOrganizationAiPresentationAssetReader
+
+    Mediarama\Organization\Application\OrganizationAiProviderRegistry:
+        arguments:
+            $providers: !tagged_iterator mediarama.organization_ai_provider

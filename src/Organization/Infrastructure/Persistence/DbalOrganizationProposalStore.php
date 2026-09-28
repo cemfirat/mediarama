@@ -271,6 +271,57 @@ SQL,
         });
     }
 
+    public function markFailed(
+        Uuid $requesterId,
+        Uuid $runId,
+    ): void {
+        $this->connection->transactional(function (Connection $connection) use (
+            $requesterId,
+            $runId,
+        ): void {
+            $status = $connection->fetchOne(
+                <<<'SQL'
+SELECT status
+FROM organization_runs
+WHERE id = :run
+  AND requester_id = :requester
+FOR UPDATE
+SQL,
+                [
+                    'run' => $runId->toRfc4122(),
+                    'requester' => $requesterId->toRfc4122(),
+                ],
+            );
+
+            if ($status === false) {
+                throw new OrganizationRunUnavailableException(
+                    'Organization run is unavailable.',
+                );
+            }
+
+            if ((string) $status === OrganizationRunStatus::Failed->value) {
+                return;
+            }
+
+            if ((string) $status !== OrganizationRunStatus::Draft->value) {
+                throw new \DomainException(
+                    'Only a draft organization run can fail during proposal generation.',
+                );
+            }
+
+            $connection->executeStatement(
+                'UPDATE organization_runs
+                 SET status = :status,
+                     updated_at = CURRENT_TIMESTAMP
+                 WHERE id = :run',
+                [
+                    'status' => OrganizationRunStatus::Failed->value,
+                    'run' => $runId->toRfc4122(),
+                ],
+            );
+        });
+    }
+
     public function run(
         Uuid $requesterId,
         Uuid $runId,
