@@ -245,14 +245,14 @@ grep -F 'Owner by creator' /tmp/smart-detail.html >/dev/null
 grep -F 'Alice Photo' /tmp/smart-detail.html >/dev/null
 grep -F 'Dynamic · not materialized' /tmp/smart-detail.html >/dev/null
 
-php <<PHP
+SMART_COLLECTION_ID="$COLLECTION_ID" php <<'PHP'
 <?php
 require 'vendor/autoload.php';
 $dsn = new Doctrine\DBAL\Tools\DsnParser(['postgresql' => 'pdo_pgsql', 'postgres' => 'pdo_pgsql']);
 $db = Doctrine\DBAL\DriverManager::getConnection($dsn->parse((string) getenv('DATABASE_URL')));
 $count = (int) $db->fetchOne(
     'SELECT COUNT(*) FROM collection_media WHERE collection_id = :id',
-    ['id' => '$COLLECTION_ID'],
+    ['id' => (string) getenv('SMART_COLLECTION_ID')],
 );
 if ($count !== 0) {
     throw new RuntimeException('Smart management materialized collection_media rows.');
@@ -265,15 +265,18 @@ EDIT_TOKEN="$(first_token /tmp/smart-detail.html)"
 EDIT_STATUS="$(curl --silent --show-error     --cookie "$OWNER_JAR"     --cookie-jar "$OWNER_JAR"     --output /tmp/smart-edit.html     --write-out '%{http_code}'     --data-urlencode "_csrf_token=$EDIT_TOKEN"     --data-urlencode 'title=Nikon Smart'     --data-urlencode 'group_operator=and'     --data-urlencode 'field[]=camera_model'     --data-urlencode 'operator[]=contains'     --data-urlencode 'value[]=Nikon'     --data-urlencode 'secondary[]='     "$BASE_URL/library/smart-collections/$COLLECTION_ID")"
 expect_status 302 "$EDIT_STATUS" "owner can edit Smart title and validated rule"
 
-php <<PHP
+SMART_COLLECTION_ID="$COLLECTION_ID" php <<'PHP'
 <?php
 require 'vendor/autoload.php';
 $dsn = new Doctrine\DBAL\Tools\DsnParser(['postgresql' => 'pdo_pgsql', 'postgres' => 'pdo_pgsql']);
 $db = Doctrine\DBAL\DriverManager::getConnection($dsn->parse((string) getenv('DATABASE_URL')));
 $row = $db->fetchAssociative(
     'SELECT title, smart_rule FROM collections WHERE id = :id',
-    ['id' => '$COLLECTION_ID'],
+    ['id' => (string) getenv('SMART_COLLECTION_ID')],
 );
+if ($row === false) {
+    throw new RuntimeException('Edited Smart Collection is missing.');
+}
 $rule = json_decode((string) $row['smart_rule'], true, flags: JSON_THROW_ON_ERROR);
 if (
     ($row['title'] ?? null) !== 'Nikon Smart'
@@ -297,14 +300,14 @@ DELETE_TOKEN="$(form_token /tmp/smart-delete-page.html "/library/smart-collectio
 DELETE_STATUS="$(curl --silent --show-error     --cookie "$OWNER_JAR"     --cookie-jar "$OWNER_JAR"     --output /tmp/smart-delete.html     --write-out '%{http_code}'     --data-urlencode "_csrf_token=$DELETE_TOKEN"     "$BASE_URL/library/smart-collections/$COLLECTION_ID/delete")"
 expect_status 302 "$DELETE_STATUS" "owner can soft-delete Smart Collection"
 
-php <<PHP
+SMART_COLLECTION_ID="$COLLECTION_ID" php <<'PHP'
 <?php
 require 'vendor/autoload.php';
 $dsn = new Doctrine\DBAL\Tools\DsnParser(['postgresql' => 'pdo_pgsql', 'postgres' => 'pdo_pgsql']);
 $db = Doctrine\DBAL\DriverManager::getConnection($dsn->parse((string) getenv('DATABASE_URL')));
 $deleted = $db->fetchOne(
     'SELECT deleted_at FROM collections WHERE id = :id',
-    ['id' => '$COLLECTION_ID'],
+    ['id' => (string) getenv('SMART_COLLECTION_ID')],
 );
 if ($deleted === false || $deleted === null) {
     throw new RuntimeException('Smart Collection was not soft-deleted.');
