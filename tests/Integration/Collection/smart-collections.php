@@ -60,6 +60,7 @@ function insertSmartCollection(
     Uuid $id,
     Uuid $owner,
     string $title,
+    string $visibility = 'private',
 ): void {
     $now = '2026-09-28T09:00:00+00:00';
 
@@ -71,7 +72,7 @@ function insertSmartCollection(
         'slug' => null,
         'title' => $title,
         'description' => null,
-        'visibility' => 'private',
+        'visibility' => $visibility,
         'position' => 0,
         'created_at' => $now,
         'updated_at' => $now,
@@ -147,6 +148,7 @@ $otherOwner = Uuid::v7();
 
 $smartCollection = Uuid::v7();
 $manualCollection = Uuid::v7();
+$publicCandidate = Uuid::v7();
 
 $newest = Uuid::v7();
 $middle = Uuid::v7();
@@ -162,6 +164,7 @@ try {
 
     insertSmartCollection($db, $smartCollection, $owner, 'Smart test');
     insertSmartCollection($db, $manualCollection, $owner, 'Manual test');
+    insertSmartCollection($db, $publicCandidate, $owner, 'Public candidate', 'public');
 
     insertSmartMedia(
         $db,
@@ -244,6 +247,13 @@ try {
         'value' => 'Nikon',
     ]]);
 
+    try {
+        $configurator->configureSmart($owner, $publicCandidate, $cameraRule);
+        throw new RuntimeException('Expected public Smart configuration to fail.');
+    } catch (SmartCollectionUnavailableException) {
+        echo "OK public Collection cannot enter internal-only Smart v1 mode".PHP_EOL;
+    }
+
     $configurator->configureSmart($owner, $smartCollection, $cameraRule);
 
     $configuration = $db->fetchAssociative(
@@ -275,6 +285,17 @@ try {
         throw new RuntimeException('Expected Smart Collection membership insert to fail.');
     } catch (Doctrine\DBAL\Exception) {
         echo "OK database rejects persisted membership for Smart Collections".PHP_EOL;
+    }
+
+    try {
+        $db->update(
+            'collections',
+            ['visibility' => 'public'],
+            ['id' => $smartCollection->toRfc4122()],
+        );
+        throw new RuntimeException('Expected Smart Collection public visibility update to fail.');
+    } catch (Doctrine\DBAL\Exception) {
+        echo "OK database rejects public visibility for Smart v1".PHP_EOL;
     }
 
     requireSmart(
@@ -509,6 +530,7 @@ try {
         ],
     );
     $db->delete('tags', ['id' => $tag->toRfc4122()]);
+    $db->delete('collections', ['id' => $publicCandidate->toRfc4122()]);
     $db->delete('collections', ['id' => $manualCollection->toRfc4122()]);
     $db->delete('collections', ['id' => $smartCollection->toRfc4122()]);
     foreach ([$newest, $middle, $oldest, $otherOwnedMatch] as $mediaId) {
