@@ -29,6 +29,38 @@ Public collection pages only return media that are:
 - moderation state `published`;
 - members of an effectively public collection.
 
+## Public MediaAsset identity
+
+Public MediaAssets have one stable membership-independent HTML identity:
+
+`GET /media/{media-id}`
+
+The UUID is the initial public identity. A MediaAsset can belong to many
+Collections, so its canonical page is never derived from one Collection path.
+
+The page is available only when the same effective public boundary used by
+derivative delivery succeeds:
+
+- site-level public publishing is enabled;
+- the MediaAsset is not deleted;
+- processing state is `ready`;
+- moderation state is `published`;
+- at least one membership reaches an `effective_public_collections` row.
+
+A second private or restricted membership does not make that membership public
+and is not exposed by the detail read model. Conversely, an inaccessible
+ancestor on the only otherwise-public membership makes the MediaAsset page
+unavailable.
+
+The detail controller receives a dedicated public DTO. It contains public
+title/description, media presentation type, dimensions/duration where useful,
+current public image derivative identities and the resolved MediaAsset
+search-index state. It does not expose source filenames, storage identities,
+raw EXIF/IPTC/XMP, GPS, provenance bags or Collection membership data.
+
+Collection pages may link to this stable MediaAsset identity while image clicks
+can continue to use lightbox derivatives.
+
 ## Derivatives
 
 Public delivery exposes generated image derivatives only.
@@ -61,12 +93,11 @@ The separate public-search read model applies an even smaller output contract; r
 
 ## Verification
 
-CI exercises public root and collection rendering, derivative delivery, ancestor/password visibility and moderation-state blocking. HTTP smoke failures print the application server log before failing.
+CI exercises public root and collection rendering, the stable MediaAsset detail route, derivative delivery, multi-membership privacy, ancestor/password visibility, processing/moderation safety gates and search-index behavior. HTTP smoke failures print the application server log before failing.
 
 ## Next
 
 - cursor pagination for large public collections;
-- public media detail route with an explicit metadata publication policy;
 - video poster/rendition delivery;
 - configurable collection covers;
 - password access flow with modern password hashing.

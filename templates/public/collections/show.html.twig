@@ -97,7 +97,13 @@
                     {% endif %}
 
                     {% if item.title %}
-                        <h3 class="uk-h5 uk-margin-small-top uk-margin-remove-bottom">{{ item.title }}</h3>
+                        <h3 class="uk-h5 uk-margin-small-top uk-margin-remove-bottom">
+                            <a href="{{ path('public_media_show', {id: item.id.toRfc4122()}) }}">{{ item.title }}</a>
+                        </h3>
+                    {% else %}
+                        <p class="uk-text-meta uk-margin-small-top uk-margin-remove-bottom">
+                            <a href="{{ path('public_media_show', {id: item.id.toRfc4122()}) }}">View details</a>
+                        </p>
                     {% endif %}
                 </div>
             {% endfor %}

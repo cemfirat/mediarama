@@ -483,6 +483,9 @@ jobs:
       - name: Verify public Collection canonical/social/structured metadata
         run: bash tests/Integration/Seo/http-public-page-metadata.sh
 
+      - name: Verify public MediaAsset identity and SEO boundary
+        run: bash tests/Integration/Seo/http-public-media-detail.sh
+
       - name: Verify publication and search-index HTTP policy
         run: bash tests/Integration/Platform/http-publication-index-policy.sh
 
