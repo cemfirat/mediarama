@@ -9,6 +9,7 @@ use Mediarama\Collection\Domain\Collection;
 use Mediarama\Collection\Domain\CollectionMode;
 use Mediarama\Collection\Domain\SmartCollectionRule;
 use Mediarama\Collection\Domain\Visibility;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Uid\Uuid;
 
@@ -64,10 +65,8 @@ final class SmartCollectionRuleTest extends TestCase
         self::assertContains('Nikon Z 8', array_values($compiled->parameters));
     }
 
-    /**
-     * @dataProvider v1PredicateProvider
-     * @param array{field:string,operator:string,value:mixed} $predicate
-     */
+    /** @param array{field:string,operator:string,value:mixed} $predicate */
+    #[DataProvider('v1PredicateProvider')]
     public function testEveryV1FieldFamilyCompiles(array $predicate): void
     {
         $rule = SmartCollectionRule::fromArray([
@@ -180,9 +179,7 @@ final class SmartCollectionRuleTest extends TestCase
         self::assertSame(['Wedding', 'Wedding'], array_values($compiled->parameters));
     }
 
-    /**
-     * @dataProvider rejectedFieldProvider
-     */
+    #[DataProvider('rejectedFieldProvider')]
     public function testSensitiveOrArbitraryFieldsAreRejected(string $field): void
     {
         $this->expectException(\InvalidArgumentException::class);
