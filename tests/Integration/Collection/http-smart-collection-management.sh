@@ -225,7 +225,7 @@ expect_status 302 "$ANON_STATUS" "anonymous library request redirects to authent
 OWNER_JAR=/tmp/smart-owner.cookies
 expect_status 302 "$(login smart-http-owner "$OWNER_JAR")" "Smart Collection owner can authenticate"
 
-LIBRARY_STATUS="$(curl --silent --show-error     --cookie "$OWNER_JAR"     --cookie-jar "$OWNER_JAR"     --dump-header /tmp/smart-library.headers     --output /tmp/smart-library.html     --write-out '%{http_code}'     "$BASE_URL/library?media_type=image&location_name=Vienna&tag=Wedding&rating_min=4&orientation=landscape")"
+LIBRARY_STATUS="$(curl --silent --show-error     --cookie "$OWNER_JAR"     --cookie-jar "$OWNER_JAR"     --dump-header /tmp/smart-library.headers     --output /tmp/smart-library.html     --write-out '%{http_code}'     "$BASE_URL/library?media_type=image&location_name=Vienna&tag=Wedding&rating_min=4.5&orientation=landscape")"
 expect_status 200 "$LIBRARY_STATUS" "authenticated owner can browse filtered library"
 grep -i -F 'x-robots-tag: noindex, nofollow' /tmp/smart-library.headers >/dev/null
 grep -i -E '^cache-control:.*no-store' /tmp/smart-library.headers >/dev/null
@@ -234,10 +234,10 @@ grep -F 'Save as Smart Collection' /tmp/smart-library.html >/dev/null
 
 FILTER_TOKEN="$(form_token /tmp/smart-library.html '/library/smart-collections/from-filter')"
 
-NO_CSRF_STATUS="$(curl --silent --show-error     --cookie "$OWNER_JAR"     --cookie-jar "$OWNER_JAR"     --output /tmp/smart-no-csrf.html     --write-out '%{http_code}'     --data-urlencode 'title=Facet Smart'     --data-urlencode 'media_type=image'     --data-urlencode 'location_name=Vienna'     --data-urlencode 'tag=Wedding'     --data-urlencode 'rating_min=4'     --data-urlencode 'orientation=landscape'     "$BASE_URL/library/smart-collections/from-filter")"
+NO_CSRF_STATUS="$(curl --silent --show-error     --cookie "$OWNER_JAR"     --cookie-jar "$OWNER_JAR"     --output /tmp/smart-no-csrf.html     --write-out '%{http_code}'     --data-urlencode 'title=Facet Smart'     --data-urlencode 'media_type=image'     --data-urlencode 'location_name=Vienna'     --data-urlencode 'tag=Wedding'     --data-urlencode 'rating_min=4.5'     --data-urlencode 'orientation=landscape'     "$BASE_URL/library/smart-collections/from-filter")"
 expect_status 403 "$NO_CSRF_STATUS" "Smart Collection mutation rejects missing CSRF"
 
-CREATE_STATUS="$(curl --silent --show-error     --cookie "$OWNER_JAR"     --cookie-jar "$OWNER_JAR"     --output /tmp/smart-create.html     --write-out '%{http_code}'     --data-urlencode "_csrf_token=$FILTER_TOKEN"     --data-urlencode 'title=Facet Smart'     --data-urlencode 'media_type=image'     --data-urlencode 'location_name=Vienna'     --data-urlencode 'tag=Wedding'     --data-urlencode 'rating_min=4'     --data-urlencode 'orientation=landscape'     "$BASE_URL/library/smart-collections/from-filter")"
+CREATE_STATUS="$(curl --silent --show-error     --cookie "$OWNER_JAR"     --cookie-jar "$OWNER_JAR"     --output /tmp/smart-create.html     --write-out '%{http_code}'     --data-urlencode "_csrf_token=$FILTER_TOKEN"     --data-urlencode 'title=Facet Smart'     --data-urlencode 'media_type=image'     --data-urlencode 'location_name=Vienna'     --data-urlencode 'tag=Wedding'     --data-urlencode 'rating_min=4.5'     --data-urlencode 'orientation=landscape'     "$BASE_URL/library/smart-collections/from-filter")"
 expect_status 302 "$CREATE_STATUS" "compatible library filter can be saved as Smart Collection"
 
 COLLECTION_ID="$(php <<'PHP'
@@ -281,7 +281,7 @@ $expected = [
     ['field' => 'media_type', 'operator' => 'eq', 'value' => 'image'],
     ['field' => 'location_name', 'operator' => 'contains', 'value' => 'Vienna'],
     ['field' => 'tag', 'operator' => 'has_tag', 'value' => 'Wedding'],
-    ['field' => 'rating_average', 'operator' => 'gte', 'value' => 4.0],
+    ['field' => 'rating_average', 'operator' => 'gte', 'value' => 4.5],
     ['field' => 'orientation', 'operator' => 'eq', 'value' => 'landscape'],
 ];
 if (($rule['op'] ?? null) !== 'and' || ($rule['rules'] ?? null) !== $expected) {
