@@ -12,6 +12,7 @@ use Doctrine\DBAL\Tools\DsnParser;
 use Mediarama\Collection\Application\SmartCollectionRuleCompiler;
 use Mediarama\Collection\Application\SmartCollectionUnavailableException;
 use Mediarama\Collection\Domain\SmartCollectionRule;
+use Mediarama\Collection\Infrastructure\Persistence\DbalCollectionAccessPolicy;
 use Mediarama\Collection\Infrastructure\Persistence\DbalSmartCollectionConfigurator;
 use Mediarama\Collection\Infrastructure\Persistence\DbalSmartCollectionResolver;
 use Symfony\Component\Uid\Uuid;
@@ -258,6 +259,13 @@ try {
 
     $configurator->configureSmart($owner, $smartCollection, $cameraRule);
     $configurator->configureSmart($owner, $secondSmartCollection, $cameraRule);
+
+    $access = new DbalCollectionAccessPolicy($db);
+    requireSmart(
+        !$access->canAddMedia($owner, $smartCollection)
+        && $access->canAddMedia($owner, $manualCollection),
+        'Smart Collection is not an upload/manual-add destination',
+    );
 
     requireSmart(
         smartIds($resolver->resolve($owner, $secondSmartCollection))
