@@ -170,6 +170,38 @@ expect_absent() {
     echo "OK $label"
 }
 
+expect_tag_url() {
+    local file="$1"
+    local marker="$2"
+    local url="$3"
+    local label="$4"
+
+    if ! grep -F "$marker" "$file" | grep -F "$url" >/dev/null; then
+        echo "FAIL $label"
+        echo "Expected marker: $marker"
+        echo "Expected URL: $url"
+        cat "$file"
+        exit 1
+    fi
+
+    echo "OK $label"
+}
+
+expect_header_contains() {
+    local file="$1"
+    local value="$2"
+    local label="$3"
+
+    if ! grep -i -F "$value" "$file" >/dev/null; then
+        echo "FAIL $label"
+        echo "Expected header: $value"
+        cat "$file"
+        exit 1
+    fi
+
+    echo "OK $label"
+}
+
 cat >/tmp/assert-public-seo-json.php <<'PHP'
 <?php
 
@@ -277,8 +309,8 @@ PHP
 fetch_page "/collections" /tmp/seo-index.html /tmp/seo-index.headers
 expect_contains /tmp/seo-index.html '<title>Collections · Mediarama</title>' "Collection index title"
 expect_contains /tmp/seo-index.html '<meta name="description" content="Browse public photo and video collections on Mediarama.">' "Collection index description"
-expect_contains /tmp/seo-index.html "<link rel="canonical" href="$CANONICAL_ORIGIN/collections">" "Collection index canonical"
-expect_contains /tmp/seo-index.html "<meta property="og:url" content="$CANONICAL_ORIGIN/collections">" "Collection index Open Graph URL"
+expect_tag_url /tmp/seo-index.html 'rel="canonical"' "$CANONICAL_ORIGIN/collections" "Collection index canonical"
+expect_tag_url /tmp/seo-index.html 'property="og:url"' "$CANONICAL_ORIGIN/collections" "Collection index Open Graph URL"
 expect_contains /tmp/seo-index.html '<meta property="og:type" content="website">' "Collection index Open Graph type"
 expect_contains /tmp/seo-index.html '<meta property="og:site_name" content="Mediarama">' "Collection index Open Graph site name"
 expect_absent /tmp/seo-index.html "$HOSTILE_HOST" "Host header cannot influence Collection index metadata"
@@ -287,9 +319,9 @@ php /tmp/assert-public-seo-json.php     /tmp/seo-index.html     index     "$CANO
 fetch_page "/collections/$COLLECTION_ID" /tmp/seo-detail.html /tmp/seo-detail.headers
 expect_contains /tmp/seo-detail.html '<title>Fixture Album · Mediarama</title>' "Collection detail title"
 expect_contains /tmp/seo-detail.html '<meta name="description" content="Album imported by CI">' "Collection detail public description"
-expect_contains /tmp/seo-detail.html "<link rel="canonical" href="$COLLECTION_CANONICAL">" "Collection detail canonical"
-expect_contains /tmp/seo-detail.html "<meta property="og:url" content="$COLLECTION_CANONICAL">" "Collection detail Open Graph URL"
-expect_contains /tmp/seo-detail.html "<meta property="og:image" content="$IMAGE_URL">" "Collection detail Open Graph cover"
+expect_tag_url /tmp/seo-detail.html 'rel="canonical"' "$COLLECTION_CANONICAL" "Collection detail canonical"
+expect_tag_url /tmp/seo-detail.html 'property="og:url"' "$COLLECTION_CANONICAL" "Collection detail Open Graph URL"
+expect_tag_url /tmp/seo-detail.html 'property="og:image"' "$IMAGE_URL" "Collection detail Open Graph cover"
 expect_contains /tmp/seo-detail.html '<meta property="og:image:alt" content="Cover image for Fixture Album">' "Collection detail Open Graph cover alt"
 expect_absent /tmp/seo-detail.html "$HOSTILE_HOST" "Host header cannot influence Collection detail metadata"
 php /tmp/assert-public-seo-json.php     /tmp/seo-detail.html     detail     "$COLLECTION_CANONICAL"     "Fixture Album"     "Album imported by CI"     "$IMAGE_URL"
@@ -327,9 +359,9 @@ $db->close();
 PHP
 
 fetch_page "/collections/$COLLECTION_ID" /tmp/seo-noindex.html /tmp/seo-noindex.headers
-expect_contains /tmp/seo-noindex.headers 'X-Robots-Tag: noindex' "Noindex Collection keeps robots boundary"
-expect_contains /tmp/seo-noindex.html "<link rel="canonical" href="$COLLECTION_CANONICAL">" "Noindex Collection keeps canonical"
-expect_contains /tmp/seo-noindex.html "<meta property="og:image" content="$IMAGE_URL">" "Noindex Collection keeps social cover"
+expect_header_contains /tmp/seo-noindex.headers 'X-Robots-Tag: noindex' "Noindex Collection keeps robots boundary"
+expect_tag_url /tmp/seo-noindex.html 'rel="canonical"' "$COLLECTION_CANONICAL" "Noindex Collection keeps canonical"
+expect_tag_url /tmp/seo-noindex.html 'property="og:image"' "$IMAGE_URL" "Noindex Collection keeps social cover"
 expect_absent /tmp/seo-noindex.html 'application/ld+json' "Noindex Collection omits index-oriented JSON-LD"
 
 php <<'PHP'
@@ -350,7 +382,7 @@ $db->close();
 PHP
 
 fetch_page "/collections/$COLLECTION_ID" /tmp/seo-media-noindex.html /tmp/seo-media-noindex.headers
-expect_contains /tmp/seo-media-noindex.html "<meta property="og:image" content="$IMAGE_URL">" "Public noindex cover remains available for social preview"
+expect_tag_url /tmp/seo-media-noindex.html 'property="og:image"' "$IMAGE_URL" "Public noindex cover remains available for social preview"
 php /tmp/assert-public-seo-json.php     /tmp/seo-media-noindex.html     detail     "$COLLECTION_CANONICAL"     "Fixture Album"     "Album imported by CI"     "-"
 
 php <<'PHP'
@@ -396,8 +428,8 @@ PHP
 php bin/console mediarama:platform:publication-settings     --search-index-default=noindex >/tmp/seo-root-noindex-setting.txt
 
 fetch_page "/collections" /tmp/seo-root-noindex.html /tmp/seo-root-noindex.headers
-expect_contains /tmp/seo-root-noindex.headers 'X-Robots-Tag: noindex' "Noindex Collection index keeps robots boundary"
-expect_contains /tmp/seo-root-noindex.html "<link rel="canonical" href="$CANONICAL_ORIGIN/collections">" "Noindex Collection index keeps canonical"
+expect_header_contains /tmp/seo-root-noindex.headers 'X-Robots-Tag: noindex' "Noindex Collection index keeps robots boundary"
+expect_tag_url /tmp/seo-root-noindex.html 'rel="canonical"' "$CANONICAL_ORIGIN/collections" "Noindex Collection index keeps canonical"
 expect_absent /tmp/seo-root-noindex.html 'application/ld+json' "Noindex Collection index omits index-oriented JSON-LD"
 
 echo "Public Collection canonical/social/structured metadata checks passed."
