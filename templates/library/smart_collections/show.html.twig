@@ -1,0 +1,92 @@
+{% extends 'base.html.twig' %}
+{% import '@Mediarama/library/smart_collections/_rule.html.twig' as rules %}
+
+{% block title %}{{ collection.title }} · Smart Collections · Mediarama{% endblock %}
+
+{% block body %}
+<div class="uk-flex uk-flex-between uk-flex-middle uk-flex-wrap">
+    <div>
+        <p class="uk-text-meta uk-margin-remove-bottom">Smart Collection · private</p>
+        <h1 class="uk-heading-small uk-margin-small-top">{{ collection.title }}</h1>
+    </div>
+    <a class="uk-button uk-button-text" href="{{ path('library_smart_collections') }}">All Smart Collections</a>
+</div>
+
+{% if created %}<div class="uk-alert-success" uk-alert><p>Smart Collection created.</p></div>{% endif %}
+{% if saved %}<div class="uk-alert-success" uk-alert><p>Smart Collection saved.</p></div>{% endif %}
+{% if error %}<div class="uk-alert-danger" uk-alert><p>{{ error }}</p></div>{% endif %}
+
+<section class="uk-card uk-card-default uk-card-body uk-margin" aria-labelledby="smart-rule-summary">
+    <h2 id="smart-rule-summary" class="uk-card-title">Rule</h2>
+    {{ rules.node(collection.rule.payload()) }}
+</section>
+
+<section class="uk-margin-large-top" aria-labelledby="smart-edit-heading">
+    <h2 id="smart-edit-heading" class="uk-h3">Edit</h2>
+    {% if rows is null %}
+        <div class="uk-alert-warning" uk-alert>
+            <p>This rule contains nested groups. It remains fully active, but the simple browser editor only edits one top-level AND/OR group.</p>
+        </div>
+    {% else %}
+        <form method="post" class="uk-form-stacked uk-card uk-card-default uk-card-body">
+            <input type="hidden" name="_csrf_token" value="{{ edit_csrf_token }}">
+            {% include '@Mediarama/library/smart_collections/_form.html.twig' %}
+            <button class="uk-button uk-button-primary" type="submit">Save changes</button>
+        </form>
+    {% endif %}
+</section>
+
+<section class="uk-margin-large-top" aria-labelledby="smart-results-heading">
+    <div class="uk-flex uk-flex-between uk-flex-middle">
+        <h2 id="smart-results-heading" class="uk-h3 uk-margin-remove">{{ count }} matching media</h2>
+        <span class="uk-text-meta">Dynamic · not materialized</span>
+    </div>
+
+    {% if items is empty %}
+        <div class="uk-placeholder uk-text-center">No matching media on this page.</div>
+    {% else %}
+        <div class="uk-overflow-auto">
+            <table class="uk-table uk-table-divider uk-table-small">
+                <thead><tr><th>Title</th><th>Type</th><th>Captured</th><th>Creator</th><th>Camera</th><th>Location</th></tr></thead>
+                <tbody>
+                {% for item in items %}
+                    <tr>
+                        <td>{{ item.title ?: 'Untitled' }}</td>
+                        <td>{{ item.mediaType }}</td>
+                        <td>{{ item.capturedAt ? item.capturedAt|date('Y-m-d H:i') : '—' }}</td>
+                        <td>{{ item.creator ?: '—' }}</td>
+                        <td>{{ item.cameraModel ?: item.cameraMake ?: '—' }}</td>
+                        <td>{{ item.locationName ?: '—' }}</td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <ul class="uk-pagination uk-flex-center">
+            {% if page > 1 %}
+                <li><a href="{{ path('library_smart_collection_show', {id: collection.id.toRfc4122(), page: page - 1}) }}">Previous</a></li>
+            {% endif %}
+            <li class="uk-disabled"><span>Page {{ page }}</span></li>
+            {% if page * page_size < count %}
+                <li><a href="{{ path('library_smart_collection_show', {id: collection.id.toRfc4122(), page: page + 1}) }}">Next</a></li>
+            {% endif %}
+        </ul>
+    {% endif %}
+</section>
+
+<section class="uk-margin-large-top uk-card uk-card-default uk-card-body" aria-labelledby="smart-mode-heading">
+    <h2 id="smart-mode-heading" class="uk-card-title">Mode</h2>
+    <p>Converting to Manual clears the Smart rule. Deleting uses the normal soft-delete lifecycle.</p>
+    <div class="uk-flex uk-flex-wrap uk-flex-middle">
+        <form method="post" action="{{ path('library_smart_collection_manual', {id: collection.id.toRfc4122()}) }}" class="uk-margin-right">
+            <input type="hidden" name="_csrf_token" value="{{ manual_csrf_token }}">
+            <button class="uk-button uk-button-default" type="submit">Convert to Manual</button>
+        </form>
+        <form method="post" action="{{ path('library_smart_collection_delete', {id: collection.id.toRfc4122()}) }}">
+            <input type="hidden" name="_csrf_token" value="{{ delete_csrf_token }}">
+            <button class="uk-button uk-button-danger" type="submit">Delete Smart Collection</button>
+        </form>
+    </div>
+</section>
+{% endblock %}

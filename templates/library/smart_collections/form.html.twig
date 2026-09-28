@@ -1,0 +1,21 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}New Smart Collection · Mediarama{% endblock %}
+
+{% block body %}
+<div class="uk-flex uk-flex-between uk-flex-middle">
+    <div>
+        <h1 class="uk-heading-small uk-margin-remove-bottom">New Smart Collection</h1>
+        <p class="uk-text-lead uk-margin-small-top">Save a private dynamic rule without duplicating media.</p>
+    </div>
+    <a class="uk-button uk-button-text" href="{{ path('library_smart_collections') }}">Back</a>
+</div>
+
+{% if error %}<div class="uk-alert-danger" uk-alert><p>{{ error }}</p></div>{% endif %}
+
+<form method="post" class="uk-form-stacked uk-card uk-card-default uk-card-body">
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+    {% include '@Mediarama/library/smart_collections/_form.html.twig' %}
+    <button class="uk-button uk-button-primary" type="submit">Create Smart Collection</button>
+</form>
+{% endblock %}

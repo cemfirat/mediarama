@@ -4,9 +4,8 @@ declare(strict_types=1);
 
 namespace Mediarama\Http\Controller\Media;
 
-use DateTimeImmutable;
+use Mediarama\Http\Support\LibraryMediaSearchCriteriaFactory;
 use Mediarama\Media\Application\LibraryMediaSearch;
-use Mediarama\Media\Application\LibraryMediaSearchCriteria;
 use Mediarama\Security\Application\CurrentUser;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -17,6 +16,7 @@ final readonly class LibrarySearchMediaController
 {
     public function __construct(
         private LibraryMediaSearch $search,
+        private LibraryMediaSearchCriteriaFactory $criteriaFactory,
         private CurrentUser $currentUser,
     ) {
     }
@@ -25,7 +25,7 @@ final readonly class LibrarySearchMediaController
     public function __invoke(Request $request): JsonResponse
     {
         try {
-            $criteria = $this->criteria($request);
+            $criteria = $this->criteriaFactory->fromInput($request->query);
         } catch (\Throwable) {
             return new JsonResponse(
                 ['error' => 'invalid_search_query'],
@@ -55,81 +55,6 @@ final readonly class LibrarySearchMediaController
                 'location_name' => $item->locationName,
             ], $results),
         ], Response::HTTP_OK, $this->responseHeaders());
-    }
-
-    private function criteria(Request $request): LibraryMediaSearchCriteria
-    {
-        $q = $request->query;
-
-        return new LibraryMediaSearchCriteria(
-            text: $q->getString('q') ?: null,
-            creator: $q->getString('creator') ?: null,
-            cameraMake: $q->getString('camera_make') ?: null,
-            cameraModel: $q->getString('camera_model') ?: null,
-            lens: $q->getString('lens') ?: null,
-            minimumIso: $this->positiveInteger($request, 'iso_min'),
-            maximumIso: $this->positiveInteger($request, 'iso_max'),
-            capturedFrom: $this->date($request, 'captured_from'),
-            capturedUntil: $this->date($request, 'captured_until'),
-            hasLocation: $this->boolean($request, 'has_location'),
-            limit: min(max($q->getInt('limit', 50), 1), 200),
-            offset: max($q->getInt('offset', 0), 0),
-        );
-    }
-
-    private function positiveInteger(Request $request, string $key): ?int
-    {
-        if (!$request->query->has($key)) {
-            return null;
-        }
-
-        $value = trim($request->query->getString($key));
-        if ($value === '' || !ctype_digit($value) || (int) $value <= 0) {
-            throw new \InvalidArgumentException('Invalid positive integer.');
-        }
-
-        return (int) $value;
-    }
-
-    private function boolean(Request $request, string $key): ?bool
-    {
-        if (!$request->query->has($key)) {
-            return null;
-        }
-
-        return match (strtolower(trim($request->query->getString($key)))) {
-            '1', 'true', 'yes', 'on' => true,
-            '0', 'false', 'no', 'off' => false,
-            default => throw new \InvalidArgumentException('Invalid boolean.'),
-        };
-    }
-
-    private function date(Request $request, string $key): ?DateTimeImmutable
-    {
-        if (!$request->query->has($key)) {
-            return null;
-        }
-
-        $value = trim($request->query->getString($key));
-        if ($value === '') {
-            throw new \InvalidArgumentException('Invalid date.');
-        }
-
-        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $value) === 1) {
-            $date = DateTimeImmutable::createFromFormat('!Y-m-d', $value);
-        } else {
-            $date = DateTimeImmutable::createFromFormat(DATE_ATOM, $value);
-        }
-
-        $errors = DateTimeImmutable::getLastErrors();
-        if (
-            $date === false
-            || ($errors !== false && ($errors['warning_count'] > 0 || $errors['error_count'] > 0))
-        ) {
-            throw new \InvalidArgumentException('Invalid date.');
-        }
-
-        return $date;
     }
 
     /** @return array<string, string> */

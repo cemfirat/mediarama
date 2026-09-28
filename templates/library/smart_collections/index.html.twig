@@ -1,0 +1,45 @@
+{% extends 'base.html.twig' %}
+{% import '@Mediarama/library/smart_collections/_rule.html.twig' as rules %}
+
+{% block title %}Smart Collections · Mediarama{% endblock %}
+
+{% block body %}
+<div class="uk-flex uk-flex-between uk-flex-middle uk-flex-wrap">
+    <div>
+        <h1 class="uk-heading-small uk-margin-remove-bottom">Smart Collections</h1>
+        <p class="uk-text-lead uk-margin-small-top">Private saved rules whose membership updates automatically.</p>
+    </div>
+    <div>
+        <a class="uk-button uk-button-default" href="{{ path('library_home') }}">Library</a>
+        <a class="uk-button uk-button-primary" href="{{ path('library_smart_collection_new') }}">New Smart Collection</a>
+    </div>
+</div>
+
+{% if deleted %}<div class="uk-alert-success" uk-alert><p>Smart Collection deleted.</p></div>{% endif %}
+
+<div class="uk-alert-primary" uk-alert>
+    <p>Smart Collections are private in this version. A rule changes membership dynamically but never publishes media or creates persisted collection_media rows.</p>
+</div>
+
+{% if collections is empty %}
+    <div class="uk-placeholder uk-text-center">
+        No Smart Collections yet. Create one directly or save a compatible Library filter.
+    </div>
+{% else %}
+    <div class="uk-child-width-1-2@m uk-grid-match" uk-grid>
+        {% for collection in collections %}
+            <div>
+                <a class="uk-card uk-card-default uk-card-hover uk-card-body uk-display-block uk-link-reset"
+                   href="{{ path('library_smart_collection_show', {id: collection.id.toRfc4122()}) }}">
+                    <div class="uk-flex uk-flex-between uk-flex-middle">
+                        <h2 class="uk-card-title uk-margin-remove">{{ collection.title }}</h2>
+                        <span class="uk-label">Smart</span>
+                    </div>
+                    <div class="uk-margin-small-top">{{ rules.node(collection.rule.payload()) }}</div>
+                    <p class="uk-text-meta uk-margin-small-bottom">Updated {{ collection.updatedAt|date('Y-m-d H:i') }}</p>
+                </a>
+            </div>
+        {% endfor %}
+    </div>
+{% endif %}
+{% endblock %}

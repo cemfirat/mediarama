@@ -1,0 +1,101 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Library · Mediarama{% endblock %}
+
+{% block body %}
+<div class="uk-flex uk-flex-between uk-flex-middle uk-flex-wrap">
+    <div>
+        <h1 class="uk-heading-small uk-margin-remove-bottom">Library</h1>
+        <p class="uk-text-lead uk-margin-small-top">Search your accessible media and save useful filters as Smart Collections.</p>
+    </div>
+    <a class="uk-button uk-button-default" href="{{ path('library_smart_collections') }}">Smart Collections</a>
+</div>
+
+{% if error %}
+    <div class="uk-alert-danger" uk-alert><p>{{ error }}</p></div>
+{% endif %}
+{% if smart_error == 'unsupported_filter' %}
+    <div class="uk-alert-warning" uk-alert>
+        <p>This filter cannot be saved losslessly as a Smart Collection V1 rule. Remove free-text, ISO or exact-location-presence filters first.</p>
+    </div>
+{% elseif smart_error == 'converted_manual' %}
+    <div class="uk-alert-success" uk-alert><p>The Smart Collection was converted back to Manual mode.</p></div>
+{% endif %}
+
+<section class="uk-card uk-card-default uk-card-body uk-margin-large-top" aria-labelledby="library-filter-heading">
+    <h2 id="library-filter-heading" class="uk-card-title">Filter media</h2>
+    <form method="get" class="uk-form-stacked">
+        <div class="uk-grid-small uk-child-width-1-2@m uk-child-width-1-3@l" uk-grid>
+            <div><label class="uk-form-label">Text<input class="uk-input" type="search" name="q" value="{{ filters.q }}"></label></div>
+            <div><label class="uk-form-label">Creator<input class="uk-input" name="creator" value="{{ filters.creator }}"></label></div>
+            <div><label class="uk-form-label">Camera make<input class="uk-input" name="camera_make" value="{{ filters.camera_make }}"></label></div>
+            <div><label class="uk-form-label">Camera model<input class="uk-input" name="camera_model" value="{{ filters.camera_model }}"></label></div>
+            <div><label class="uk-form-label">Lens<input class="uk-input" name="lens" value="{{ filters.lens }}"></label></div>
+            <div><label class="uk-form-label">ISO minimum<input class="uk-input" type="number" min="1" name="iso_min" value="{{ filters.iso_min }}"></label></div>
+            <div><label class="uk-form-label">ISO maximum<input class="uk-input" type="number" min="1" name="iso_max" value="{{ filters.iso_max }}"></label></div>
+            <div><label class="uk-form-label">Captured from<input class="uk-input" type="date" name="captured_from" value="{{ filters.captured_from }}"></label></div>
+            <div><label class="uk-form-label">Captured until<input class="uk-input" type="date" name="captured_until" value="{{ filters.captured_until }}"></label></div>
+            <div>
+                <label class="uk-form-label">Location coordinates</label>
+                <select class="uk-select" name="has_location">
+                    <option value="" {% if filters.has_location == '' %}selected{% endif %}>Any</option>
+                    <option value="1" {% if filters.has_location == '1' %}selected{% endif %}>Present</option>
+                    <option value="0" {% if filters.has_location == '0' %}selected{% endif %}>Missing</option>
+                </select>
+            </div>
+        </div>
+        <div class="uk-margin">
+            <button class="uk-button uk-button-primary" type="submit">Apply filter</button>
+            <a class="uk-button uk-button-text uk-margin-left" href="{{ path('library_home') }}">Reset</a>
+        </div>
+    </form>
+</section>
+
+{% if filter_has_compatible_rule %}
+<section class="uk-card uk-card-default uk-card-body uk-margin" aria-labelledby="save-filter-heading">
+    <h2 id="save-filter-heading" class="uk-card-title">Save as Smart Collection</h2>
+    {% if filter_save_supported %}
+        <form method="post" action="{{ path('library_smart_collection_from_filter') }}" class="uk-form-stacked">
+            <input type="hidden" name="_csrf_token" value="{{ filter_csrf_token }}">
+            {% for key, value in filters %}
+                {% if value != '' %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endif %}
+            {% endfor %}
+            <div class="uk-grid-small uk-flex-middle" uk-grid>
+                <div class="uk-width-expand"><input class="uk-input" name="title" maxlength="200" required placeholder="Smart Collection title"></div>
+                <div class="uk-width-auto"><button class="uk-button uk-button-secondary" type="submit">Save filter</button></div>
+            </div>
+            <p class="uk-text-meta uk-margin-small-top">The saved rule stays private and dynamic. It does not copy matching media into manual Collection membership.</p>
+        </form>
+    {% else %}
+        <div class="uk-alert-warning" uk-alert>
+            <p>This view contains filters that Smart Collection rule V1 cannot represent safely yet. Free-text, ISO and exact coordinate-presence filters are intentionally not serialized.</p>
+        </div>
+    {% endif %}
+</section>
+{% endif %}
+
+<section class="uk-margin-large-top" aria-labelledby="library-results-heading">
+    <h2 id="library-results-heading" class="uk-h3">Results</h2>
+    {% if items is empty %}
+        <div class="uk-placeholder uk-text-center">No matching media.</div>
+    {% else %}
+        <div class="uk-overflow-auto">
+            <table class="uk-table uk-table-divider uk-table-small uk-table-middle">
+                <thead><tr><th>Title</th><th>File</th><th>Captured</th><th>Creator</th><th>Camera</th><th>Location</th></tr></thead>
+                <tbody>
+                {% for item in items %}
+                    <tr>
+                        <td>{{ item.title ?: 'Untitled' }}</td>
+                        <td class="uk-text-meta">{{ item.originalFilename }}</td>
+                        <td>{{ item.capturedAt ? item.capturedAt|date('Y-m-d H:i') : '—' }}</td>
+                        <td>{{ item.creator ?: '—' }}</td>
+                        <td>{{ item.cameraModel ?: item.cameraMake ?: '—' }}</td>
+                        <td>{{ item.locationName ?: '—' }}</td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% endif %}
+</section>
+{% endblock %}
