@@ -112,6 +112,9 @@ services:
     Mediarama\Collection\Application\SmartCollectionManagement:
         alias: Mediarama\Collection\Infrastructure\Persistence\DbalSmartCollectionManagement
 
+    Mediarama\Collection\Application\SmartCollectionPublication:
+        alias: Mediarama\Collection\Infrastructure\Persistence\DbalSmartCollectionPublication
+
     Mediarama\Upload\Application\UploadDestinationAuthorizer:
         alias: Mediarama\Upload\Infrastructure\Authorization\CollectionUploadDestinationAuthorizer
 

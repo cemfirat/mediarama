@@ -20,6 +20,7 @@ interface SmartCollectionManagement
     public function create(
         Uuid $ownerId,
         string $title,
+        ?string $description,
         SmartCollectionRule $rule,
     ): Uuid;
 
@@ -27,6 +28,7 @@ interface SmartCollectionManagement
         Uuid $ownerId,
         Uuid $collectionId,
         string $title,
+        ?string $description,
         SmartCollectionRule $rule,
     ): void;
 
