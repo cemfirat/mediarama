@@ -231,6 +231,46 @@ SQL,
         });
     }
 
+    public function markNoSuggestions(
+        Uuid $requesterId,
+        Uuid $runId,
+    ): void {
+        $this->connection->transactional(function (Connection $connection) use (
+            $requesterId,
+            $runId,
+        ): void {
+            $this->lockDraftRun(
+                $connection,
+                $requesterId,
+                $runId,
+            );
+
+            $count = (int) $connection->fetchOne(
+                'SELECT COUNT(*)
+                 FROM organization_proposals
+                 WHERE run_id = :run',
+                ['run' => $runId->toRfc4122()],
+            );
+
+            if ($count !== 0) {
+                throw new \DomainException(
+                    'Organization run with proposals cannot be marked as no-suggestions.',
+                );
+            }
+
+            $connection->executeStatement(
+                'UPDATE organization_runs
+                 SET status = :status,
+                     updated_at = CURRENT_TIMESTAMP
+                 WHERE id = :run',
+                [
+                    'status' => OrganizationRunStatus::NoSuggestions->value,
+                    'run' => $runId->toRfc4122(),
+                ],
+            );
+        });
+    }
+
     public function run(
         Uuid $requesterId,
         Uuid $runId,
