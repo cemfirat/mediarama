@@ -91,13 +91,6 @@ services:
     Mediarama\Media\Application\InspectVideoProperties:
         alias: Mediarama\Media\Infrastructure\Probe\FfprobeVideoInspector
 
-    Mediarama\Media\Infrastructure\Probe\FfprobeProcess:
-        arguments:
-            $binary: '%env(FFPROBE_BINARY)%'
-            $timeoutSeconds: '%env(float:FFPROBE_PROCESS_TIMEOUT_SECONDS)%'
-            $probeSizeBytes: '%env(int:FFPROBE_PROBE_SIZE_BYTES)%'
-            $analyzeDurationMicroseconds: '%env(int:FFPROBE_ANALYZE_DURATION_US)%'
-
     Mediarama\Media\Infrastructure\Video\FfmpegProcess:
         arguments:
             $binary: '%env(FFMPEG_BINARY)%'
