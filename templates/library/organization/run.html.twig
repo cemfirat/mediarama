@@ -124,6 +124,9 @@
                 <div class="uk-card uk-card-muted uk-card-body uk-margin-small">
                     <strong>Smart rule</strong>
                     <div class="uk-margin-small-top">{{ rules.node(data.rule) }}</div>
+                    <p class="uk-text-meta uk-margin-small-bottom">
+                        After acceptance this becomes an ordinary dynamic Smart Collection. It may match additional owned MediaAssets outside this analysis scope as your library metadata changes.
+                    </p>
                 </div>
             {% elseif proposal.payload.type.value == 'title_description' %}
                 <p class="uk-text-meta">Target: {{ data.target_type }} · {{ data.target_id }}</p>

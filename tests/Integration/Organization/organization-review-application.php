@@ -24,6 +24,7 @@ use Mediarama\Organization\Infrastructure\Persistence\DbalOrganizationMetadataSn
 use Mediarama\Organization\Infrastructure\Persistence\DbalOrganizationProposalApplication;
 use Mediarama\Organization\Infrastructure\Persistence\DbalOrganizationProposalStore;
 use Mediarama\Organization\Infrastructure\Persistence\DbalOwnedPresentationManagement;
+use Mediarama\Publishing\Infrastructure\Persistence\DbalPublicPublicationTimelineStore;
 use Symfony\Component\Uid\Uuid;
 
 function requireOrganizationReview(bool $condition, string $message): void
@@ -135,6 +136,7 @@ $other = Uuid::v7();
 $first = Uuid::v7();
 $second = Uuid::v7();
 $foreignCollection = Uuid::v7();
+$publicCollection = Uuid::v7();
 
 try {
     insertReviewUser($db, $owner, 'owner');
@@ -157,6 +159,21 @@ try {
         'updated_at' => $now,
         'deleted_at' => null,
     ]);
+    $db->insert('collections', [
+        'id' => $publicCollection->toRfc4122(),
+        'owner_id' => $owner->toRfc4122(),
+        'parent_id' => null,
+        'cover_media_id' => null,
+        'slug' => null,
+        'title' => 'Public review collection',
+        'description' => 'Before reviewed presentation change.',
+        'visibility' => 'public',
+        'position' => 0,
+        'created_at' => $now,
+        'updated_at' => $now,
+        'public_updated_at' => '2026-09-28T09:00:00+00:00',
+        'deleted_at' => null,
+    ]);
 
     $store = new DbalOrganizationProposalStore($db);
     $metadata = new DbalOrganizationMetadataSnapshotQuery($db);
@@ -171,6 +188,7 @@ try {
         new DbalOwnedPresentationManagement(
             $db,
             new DbalMediaAssetRepository($db),
+            new DbalPublicPublicationTimelineStore($db),
         ),
     );
 
@@ -362,6 +380,90 @@ try {
         'tag proposal acceptance uses normalized tag membership',
     );
 
+    $accentedName = 'Café '.$owner->toRfc4122();
+    $plainName = 'Cafe '.$owner->toRfc4122();
+    $collisionResults = [];
+    foreach ([$accentedName, $plainName] as $collisionName) {
+        $collisionRun = $store->createRun(
+            $owner,
+            OrganizationProducer::metadata(),
+            [$first],
+        );
+        $collisionProposal = $store->addProposal(
+            $owner,
+            $collisionRun,
+            OrganizationProposalPayload::fromArray(
+                OrganizationProposalType::Tag,
+                ['version' => 1, 'name' => $collisionName],
+            ),
+            'Verify semantically distinct names never alias through one ASCII slug.',
+            [$first],
+            evidence(),
+        );
+        $store->markReadyForReview($owner, $collisionRun);
+        $collisionResults[] = $application->apply(
+            $owner,
+            $collisionProposal,
+        );
+    }
+
+    $collisionSlugs = $db->fetchFirstColumn(
+        'SELECT slug
+         FROM tags
+         WHERE id IN (:a, :b)
+         ORDER BY slug ASC',
+        [
+            'a' => $collisionResults[0]->resourceId->toRfc4122(),
+            'b' => $collisionResults[1]->resourceId->toRfc4122(),
+        ],
+    );
+    requireOrganizationReview(
+        !$collisionResults[0]->resourceId->equals(
+            $collisionResults[1]->resourceId,
+        )
+        && count(array_unique($collisionSlugs)) === 2,
+        'distinct tag names with the same transliterated base slug remain distinct',
+    );
+
+    $publicUpdateRun = $store->createRun(
+        $owner,
+        OrganizationProducer::metadata(),
+        [$first],
+    );
+    $publicUpdateProposal = $store->addProposal(
+        $owner,
+        $publicUpdateRun,
+        OrganizationProposalPayload::fromArray(
+            OrganizationProposalType::TitleDescription,
+            [
+                'version' => 1,
+                'target_type' => 'collection',
+                'target_id' => $publicCollection->toRfc4122(),
+                'title' => 'Public review collection updated',
+                'description' => null,
+            ],
+        ),
+        'A reviewed public presentation edit must advance the truthful public-update timeline.',
+        [$first],
+        evidence(),
+    );
+    $store->markReadyForReview($owner, $publicUpdateRun);
+    $application->apply($owner, $publicUpdateProposal);
+    $publicUpdate = $db->fetchAssociative(
+        'SELECT title, public_updated_at
+         FROM collections
+         WHERE id = :collection',
+        ['collection' => $publicCollection->toRfc4122()],
+    );
+    requireOrganizationReview(
+        $publicUpdate !== false
+        && (string) $publicUpdate['title'] === 'Public review collection updated'
+        && $publicUpdate['public_updated_at'] !== null
+        && new DateTimeImmutable((string) $publicUpdate['public_updated_at'])
+            > new DateTimeImmutable('2026-09-28T09:00:00+00:00'),
+        'accepted public presentation edit advances public_updated_at',
+    );
+
     $failureRun = $store->createRun(
         $owner,
         OrganizationProducer::metadata(),
@@ -404,6 +506,33 @@ try {
         'failed mutation rolls back without marking proposal applied or changing target',
     );
 
+    $draftRun = $store->createRun(
+        $owner,
+        OrganizationProducer::metadata(),
+        [$second],
+    );
+    $draftProposal = $store->addProposal(
+        $owner,
+        $draftRun,
+        smartPayload('Not reviewable yet'),
+        'A draft run must not accept review actions.',
+        [$second],
+        evidence(),
+    );
+    try {
+        $store->reject($owner, $draftProposal);
+        throw new RuntimeException(
+            'Expected draft-run proposal rejection to fail.',
+        );
+    } catch (DomainException) {
+        echo "OK draft run rejects premature review action".PHP_EOL;
+    }
+    requireOrganizationReview(
+        $store->proposal($owner, $draftProposal)->status
+            === OrganizationProposalStatus::PendingReview,
+        'premature review action leaves proposal pending and non-mutating',
+    );
+
     $rejectRun = $store->createRun(
         $owner,
         OrganizationProducer::metadata(),
@@ -444,7 +573,10 @@ try {
         ],
     );
     $db->executeStatement(
-        "DELETE FROM tags WHERE name LIKE 'Review tag %'"
+        "DELETE FROM tags
+         WHERE name LIKE 'Review tag %'
+            OR name LIKE 'Café %'
+            OR name LIKE 'Cafe %'"
     );
     $db->delete('media_assets', ['id' => $first->toRfc4122()]);
     $db->delete('media_assets', ['id' => $second->toRfc4122()]);
