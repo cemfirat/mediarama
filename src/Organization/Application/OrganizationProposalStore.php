@@ -43,6 +43,11 @@ interface OrganizationProposalStore
         Uuid $runId,
     ): void;
 
+    public function markFailed(
+        Uuid $requesterId,
+        Uuid $runId,
+    ): void;
+
     public function run(
         Uuid $requesterId,
         Uuid $runId,
