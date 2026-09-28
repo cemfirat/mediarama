@@ -26,13 +26,18 @@ Important implementation consequences:
 
 `/sitemap.xml` is the stable sitemap index.
 
-It references bounded Collection sitemap chunks:
+It references two bounded sitemap families:
 
-`/sitemaps/collections-{page}.xml`
+- `/sitemaps/collections-{page}.xml`
+- `/sitemaps/media-{page}.xml`
 
-Each chunk contains at most 250 indexable Collection pages. This conservative bound leaves substantial room below generic sitemap size limits even when a Collection page contributes many image entries.
+Collection chunks contain at most 250 indexable Collection pages. This conservative bound leaves substantial room below generic sitemap size limits even when a Collection page contributes many image entries.
 
-The first chunk may also include the public `/collections` root page when the site-level search-index default is `index`.
+Media chunks contain at most 1000 stable public MediaAsset detail URLs. A MediaAsset appears at most once per sitemap family even when it belongs to multiple public Collections.
+
+The first Collection chunk may also include the public `/collections` root page when the site-level search-index default is `index`.
+
+The sitemap index omits the MediaAsset family entirely when no MediaAsset currently satisfies the effective public/indexable boundary.
 
 ## Canonical public origin
 
@@ -62,6 +67,29 @@ A child cannot re-enter the sitemap through an inaccessible parent.
 
 The Collection policy controls the Collection page only. It does not silently change the MediaAsset's SEO preference.
 
+## MediaAsset detail-page discovery
+
+Mediarama now has a stable public MediaAsset HTML identity:
+
+`GET /media/{id}`
+
+The normal XML sitemap therefore lists an effectively public/indexable MediaAsset by that canonical detail URL, not by a versioned derivative URL and not by one of its Collection memberships.
+
+A MediaAsset detail URL requires:
+
+1. site public publishing is enabled;
+2. the MediaAsset is not deleted;
+3. processing state is `ready`;
+4. moderation state is `published`;
+5. at least one membership resolves through `effective_public_collections`;
+6. the MediaAsset's own effective `inherit | index | noindex` policy resolves to `index`.
+
+The query uses an `EXISTS` visibility test rather than joining result rows to every membership. Multiple public Collection memberships therefore still produce one MediaAsset sitemap URL.
+
+Collection index policy is deliberately independent. A `noindex` Collection does not remove an otherwise indexable MediaAsset detail page as long as the asset remains reachable through an effectively public membership.
+
+The MediaAsset sitemap query selects only the public route identity. It does not select titles, descriptions, filenames, storage keys, raw metadata, GPS values or private Collection names.
+
 ## Image discovery
 
 The current Collection page renders up to 120 public media items.
@@ -83,12 +111,6 @@ A MediaAsset may appear on more than one indexable Collection page. Repeating it
 
 ## What is intentionally absent
 
-### No MediaAsset canonical page yet
-
-Mediarama currently has public Collection pages and versioned derivative URLs, but no stable public MediaAsset detail route.
-
-The normal sitemap therefore does not invent a pseudo-canonical MediaAsset page or treat a versioned derivative URL as the MediaAsset's permanent identity.
-
 ### No video sitemap yet
 
 The public gallery does not yet expose a stable public video player/content URL. Google video sitemap metadata requires a real host page plus accessible thumbnail/player or content targets.
@@ -103,14 +125,16 @@ Until Mediarama tracks a truthful Collection-page modification time across Colle
 
 ## Privacy verification
 
-Integration coverage proves that the sitemap excludes:
+Integration coverage proves that the sitemap:
 
-- Collection pages with `noindex`;
-- MediaAssets with `noindex`;
-- private/inaccessible Collection ancestry;
-- unpublished media;
-- the entire discovery surface when public publishing is off;
-- ad-hoc public search URLs;
-- a deliberately inserted private metadata sentinel.
+- excludes Collection pages with `noindex`;
+- excludes MediaAsset detail pages with `noindex`;
+- keeps MediaAsset detail indexing independent from Collection page indexing;
+- deduplicates one MediaAsset across multiple public memberships;
+- excludes private-only/inaccessible media and Collection ancestry;
+- excludes unpublished media;
+- removes the entire discovery surface when public publishing is off;
+- never emits ad-hoc public search URLs;
+- never emits a deliberately inserted private metadata sentinel or private Collection title.
 
-The tests also send a forged `Host` header and verify that generated URLs remain anchored to `PUBLIC_BASE_URL`.
+The tests also send forged `Host` headers to both sitemap families and verify that every generated URL remains anchored to `PUBLIC_BASE_URL`.
