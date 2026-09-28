@@ -332,6 +332,18 @@ services:
     Mediarama\Organization\Application\OrganizationProposalStore:
         alias: Mediarama\Organization\Infrastructure\Persistence\DbalOrganizationProposalStore
 
+    Mediarama\Organization\Application\OrganizationProposalApplication:
+        alias: Mediarama\Organization\Infrastructure\Persistence\DbalOrganizationProposalApplication
+
+    Mediarama\Organization\Application\OwnedPresentationManagement:
+        alias: Mediarama\Organization\Infrastructure\Persistence\DbalOwnedPresentationManagement
+
+    Mediarama\Collection\Application\ManualCollectionManagement:
+        alias: Mediarama\Collection\Infrastructure\Persistence\DbalManualCollectionManagement
+
+    Mediarama\Media\Application\MediaTagManagement:
+        alias: Mediarama\Media\Infrastructure\Persistence\DbalMediaTagManagement
+
     Mediarama\Organization\Application\OrganizationMetadataSnapshotQuery:
         alias: Mediarama\Organization\Infrastructure\Persistence\DbalOrganizationMetadataSnapshotQuery
 

@@ -8,7 +8,6 @@ use DateTimeImmutable;
 use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\DBAL\Connection;
 use Mediarama\Collection\Application\ManualCollectionManagement;
-use Mediarama\Media\Infrastructure\Persistence\AuthenticatedMediaAccessSql;
 use Symfony\Component\Uid\Uuid;
 
 final readonly class DbalManualCollectionManagement implements ManualCollectionManagement
@@ -118,13 +117,14 @@ SQL,
         array $mediaIds,
     ): void {
         $count = (int) $connection->fetchOne(
-            CollectionAccessSql::authenticatedVisibleCollectionsCte().'
-SELECT COUNT(*)
-FROM media_assets m
-WHERE m.id IN (:media_ids)
-  AND '.AuthenticatedMediaAccessSql::predicate('m'),
+            'SELECT COUNT(*)
+             FROM media_assets m
+             WHERE m.id IN (:media_ids)
+               AND m.owner_id = :owner
+               AND m.deleted_at IS NULL
+               AND m.processing_state = \'ready\'',
             [
-                'user' => $ownerId->toRfc4122(),
+                'owner' => $ownerId->toRfc4122(),
                 'media_ids' => array_map(
                     static fn (Uuid $id): string => $id->toRfc4122(),
                     $mediaIds,
@@ -135,7 +135,7 @@ WHERE m.id IN (:media_ids)
 
         if ($count !== count($mediaIds)) {
             throw new \DomainException(
-                'Manual Collection proposal contains unavailable MediaAssets.',
+                'Manual Collection proposals may include only requester-owned ready MediaAssets.',
             );
         }
     }
