@@ -322,3 +322,6 @@ services:
 
     Mediarama\Collection\Application\PublicGalleryQuery:
         alias: Mediarama\Collection\Infrastructure\Persistence\DbalPublicGalleryQuery
+
+    Mediarama\Organization\Application\OrganizationProposalStore:
+        alias: Mediarama\Organization\Infrastructure\Persistence\DbalOrganizationProposalStore
