@@ -19,6 +19,7 @@
                         <li><a href="{{ path('public_collections') }}">Collections</a></li>
                         {% if app.user %}
                             <li><a href="{{ path('library_home') }}">Library</a></li>
+                            <li><a href="{{ path('library_organization') }}">Organization</a></li>
                             <li><a href="{{ path('library_smart_collections') }}">Smart Collections</a></li>
                             <li><a href="{{ logout_path('main') }}">Sign out</a></li>
                         {% else %}
@@ -40,6 +41,7 @@
                 <li><a href="{{ path('public_collections') }}">Collections</a></li>
                 {% if app.user %}
                     <li><a href="{{ path('library_home') }}">Library</a></li>
+                    <li><a href="{{ path('library_organization') }}">Organization</a></li>
                     <li><a href="{{ path('library_smart_collections') }}">Smart Collections</a></li>
                     <li><a href="{{ logout_path('main') }}">Sign out</a></li>
                 {% else %}

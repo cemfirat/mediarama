@@ -53,8 +53,12 @@ final class LibraryBrowserController extends AbstractController
                 'filter_csrf_token' => $this->csrf
                     ->getToken('smart_collection_from_filter')
                     ->getValue(),
+                'organization_csrf_token' => $this->csrf
+                    ->getToken('organization_analyze')
+                    ->getValue(),
                 'error' => $error,
                 'smart_error' => $request->query->getString('smart_error') ?: null,
+                'organization_error' => $request->query->getString('organization_error') ?: null,
             ],
             new Response(status: $error === null ? Response::HTTP_OK : Response::HTTP_BAD_REQUEST),
         );
