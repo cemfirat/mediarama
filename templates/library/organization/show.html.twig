@@ -63,6 +63,12 @@
         This run contains no reviewable proposals.
     </div>
 {% else %}
+    {% if run.status.value != 'ready_for_review' %}
+        <div class="uk-alert-warning" uk-alert>
+            <p>This run is not ready for review. Proposal actions stay disabled until generation is complete.</p>
+        </div>
+    {% endif %}
+    {% if run.status.value == 'ready_for_review' %}
     <form id="organization-bulk-form" method="post" action="{{ path('library_organization_run_bulk', {id: run.id.toRfc4122()}) }}" class="uk-card uk-card-default uk-card-body uk-margin">
         <input type="hidden" name="_csrf_token" value="{{ bulk_csrf_token }}">
         <div class="uk-flex uk-flex-between uk-flex-middle uk-flex-wrap">
@@ -76,6 +82,7 @@
             </div>
         </div>
     </form>
+    {% endif %}
 
     <div class="uk-grid-medium" uk-grid>
         {% for proposal in proposals %}
@@ -86,7 +93,7 @@
                 <article class="uk-card uk-card-default uk-card-body">
                     <div class="uk-flex uk-flex-between uk-flex-top uk-flex-wrap">
                         <div class="uk-flex uk-flex-middle">
-                            {% if proposal.status.value == 'pending_review' %}
+                            {% if proposal.status.value == 'pending_review' and run.status.value == 'ready_for_review' %}
                                 <label class="uk-margin-small-right">
                                     <input class="uk-checkbox" type="checkbox" name="proposal_ids[]" value="{{ proposal_id }}" form="organization-bulk-form" aria-label="Select proposal">
                                 </label>
@@ -174,7 +181,7 @@
                         {% endif %}
                     </div>
 
-                    {% if proposal.status.value == 'pending_review' %}
+                    {% if proposal.status.value == 'pending_review' and run.status.value == 'ready_for_review' %}
                         <details class="uk-margin">
                             <summary class="uk-button uk-button-text">Edit before review decision</summary>
                             <form method="post" action="{{ path('library_organization_proposal_edit', {id: proposal_id}) }}" class="uk-form-stacked uk-margin">

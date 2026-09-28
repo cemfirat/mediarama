@@ -348,7 +348,7 @@ final class OrganizationReviewController extends AbstractController
                 break;
 
             case OrganizationProposalType::Cover:
-                $payload['media_id'] = $this->id(
+                $payload['media_id'] = $this->payloadUuid(
                     $request->request->getString('media_id'),
                 )->toRfc4122();
                 break;
@@ -385,6 +385,17 @@ final class OrganizationReviewController extends AbstractController
         $value = trim((string) $value);
 
         return $value === '' ? null : $value;
+    }
+
+    private function payloadUuid(string $value): Uuid
+    {
+        try {
+            return Uuid::fromString(trim($value));
+        } catch (\InvalidArgumentException) {
+            throw new \InvalidArgumentException(
+                'Proposal MediaAsset must be a valid UUID.',
+            );
+        }
     }
 
     private function requireCsrf(string $id, string $value): void

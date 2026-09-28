@@ -168,7 +168,6 @@ SQL,
                     $this->assertSmartRuleStillMatchesReviewScope(
                         $connection,
                         $requesterId,
-                        Uuid::fromString((string) $row['run_id']),
                         $payload,
                         $mediaIds,
                     );
@@ -232,6 +231,15 @@ SQL,
 
                 if ($status === OrganizationProposalStatus::Rejected) {
                     continue;
+                }
+
+                if (
+                    (string) $row['run_status']
+                    !== OrganizationRunStatus::ReadyForReview->value
+                ) {
+                    throw new \DomainException(
+                        'Organization run is not ready for proposal review.',
+                    );
                 }
 
                 if ($status !== OrganizationProposalStatus::PendingReview) {
@@ -856,7 +864,6 @@ SQL,
     private function assertSmartRuleStillMatchesReviewScope(
         Connection $connection,
         Uuid $requesterId,
-        Uuid $runId,
         OrganizationProposalPayload $proposal,
         array $affectedMediaIds,
     ): void {

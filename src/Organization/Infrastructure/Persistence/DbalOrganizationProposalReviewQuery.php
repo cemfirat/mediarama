@@ -110,39 +110,26 @@ SQL,
             );
         }
 
+        $previewSql = CollectionAccessSql::authenticatedVisibleCollectionsCte()
+            ."\n, ranked_preview AS (\n"
+            .'    SELECT '
+            .'pm.proposal_id, m.id, m.title, m.media_type, '
+            .'ROW_NUMBER() OVER (PARTITION BY pm.proposal_id ORDER BY pm.position ASC, m.id ASC) AS preview_position '
+            .'FROM organization_proposal_media pm '
+            .'JOIN organization_proposals p ON p.id = pm.proposal_id '
+            .'JOIN organization_runs r ON r.id = p.run_id '
+            .'JOIN media_assets m ON m.id = pm.media_id '
+            .'WHERE p.run_id = :run '
+            .'AND r.requester_id = :requester '
+            .'AND '.AuthenticatedMediaAccessSql::predicate('m')
+            ."\n)\n"
+            .'SELECT proposal_id, id, title, media_type '
+            .'FROM ranked_preview '
+            .'WHERE preview_position <= :preview_limit '
+            .'ORDER BY proposal_id ASC, preview_position ASC';
+
         $previewRows = $this->connection->fetchAllAssociative(
-            CollectionAccessSql::authenticatedVisibleCollectionsCte().<<<'SQL'
-
-, ranked_preview AS (
-    SELECT
-        pm.proposal_id,
-        m.id,
-        m.title,
-        m.media_type,
-        ROW_NUMBER() OVER (
-            PARTITION BY pm.proposal_id
-            ORDER BY pm.position ASC, m.id ASC
-        ) AS preview_position
-    FROM organization_proposal_media pm
-    JOIN organization_proposals p ON p.id = pm.proposal_id
-    JOIN organization_runs r ON r.id = p.run_id
-    JOIN media_assets m ON m.id = pm.media_id
-    WHERE p.run_id = :run
-      AND r.requester_id = :requester
-      AND 
-SQL
-            .AuthenticatedMediaAccessSql::predicate('m').<<<'SQL'
-
-)
-SELECT
-    proposal_id,
-    id,
-    title,
-    media_type
-FROM ranked_preview
-WHERE preview_position <= :preview_limit
-ORDER BY proposal_id ASC, preview_position ASC
-SQL,
+            $previewSql,
             [
                 'run' => $runId->toRfc4122(),
                 'requester' => $requesterId->toRfc4122(),
