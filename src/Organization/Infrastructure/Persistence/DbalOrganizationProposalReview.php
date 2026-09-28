@@ -868,16 +868,13 @@ SQL,
 
         $current = $connection->fetchFirstColumn(
             'SELECT m.id
-             FROM organization_run_media scope
-             JOIN media_assets m ON m.id = scope.media_id
-             WHERE scope.run_id = :run
-               AND m.owner_id = :owner
+             FROM media_assets m
+             WHERE m.owner_id = :owner
                AND m.deleted_at IS NULL
                AND m.processing_state = \'ready\'
                AND '.$predicate->sql.'
              ORDER BY m.id ASC',
             [
-                'run' => $runId->toRfc4122(),
                 'owner' => $requesterId->toRfc4122(),
                 ...$predicate->parameters,
             ],
@@ -896,7 +893,7 @@ SQL,
 
         if ($current !== $expected) {
             throw new \DomainException(
-                'Smart Collection proposal is stale because its reviewed match set changed; rerun analysis before accepting it.',
+                'Smart Collection proposal is stale or its rule now matches media outside the reviewed scope; rerun analysis before accepting it.',
             );
         }
     }

@@ -335,6 +335,9 @@ services:
     Mediarama\Organization\Application\OrganizationProposalReview:
         alias: Mediarama\Organization\Infrastructure\Persistence\DbalOrganizationProposalReview
 
+    Mediarama\Organization\Application\OrganizationProposalReviewQuery:
+        alias: Mediarama\Organization\Infrastructure\Persistence\DbalOrganizationProposalReviewQuery
+
     Mediarama\Organization\Application\OrganizationMetadataSnapshotQuery:
         alias: Mediarama\Organization\Infrastructure\Persistence\DbalOrganizationMetadataSnapshotQuery
 

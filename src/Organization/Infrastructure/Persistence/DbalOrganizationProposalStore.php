@@ -7,6 +7,7 @@ namespace Mediarama\Organization\Infrastructure\Persistence;
 use DateTimeImmutable;
 use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\DBAL\Connection;
+use Doctrine\DBAL\ParameterType;
 use Mediarama\Collection\Infrastructure\Persistence\CollectionAccessSql;
 use Mediarama\Media\Infrastructure\Persistence\AuthenticatedMediaAccessSql;
 use Mediarama\Organization\Application\OrganizationProposalResult;

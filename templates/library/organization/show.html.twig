@@ -1,0 +1,242 @@
+{% extends 'base.html.twig' %}
+{% import '@Mediarama/library/smart_collections/_rule.html.twig' as rules %}
+
+{% block title %}Organization review · Mediarama{% endblock %}
+
+{% block body %}
+<div class="uk-flex uk-flex-between uk-flex-middle uk-flex-wrap">
+    <div>
+        <p class="uk-text-meta uk-margin-remove-bottom">Organization review · {{ run.status.value|replace({'_':' '}) }}</p>
+        <h1 class="uk-heading-small uk-margin-small-top">Review proposals</h1>
+        <p class="uk-text-lead uk-margin-small-top">{{ run.mediaCount }} MediaAssets in the analyzed scope.</p>
+    </div>
+    <a class="uk-button uk-button-text" href="{{ path('library_organization_runs') }}">All runs</a>
+</div>
+
+{% for message in app.flashes('success') %}
+    <div class="uk-alert-success" uk-alert><p>{{ message }}</p></div>
+{% endfor %}
+{% for message in app.flashes('warning') %}
+    <div class="uk-alert-warning" uk-alert><p>{{ message }}</p></div>
+{% endfor %}
+{% for message in app.flashes('danger') %}
+    <div class="uk-alert-danger" uk-alert><p>{{ message }}</p></div>
+{% endfor %}
+
+<section class="uk-card uk-card-default uk-card-body uk-margin" aria-labelledby="organization-source-heading">
+    <h2 id="organization-source-heading" class="uk-card-title">Source & audit</h2>
+    {% if run.producer.kind.value == 'metadata' %}
+        <p class="uk-margin-remove">Deterministic Mediarama metadata analysis. No AI provider was used.</p>
+    {% else %}
+        <dl class="uk-description-list uk-margin-remove">
+            <dt>Provider</dt><dd>{{ run.producer.providerName }}</dd>
+            <dt>Model</dt><dd>{{ run.producer.modelName }}{% if run.producer.modelVersion %} · {{ run.producer.modelVersion }}{% endif %}</dd>
+            <dt>Producer</dt><dd>{{ run.producer.kind.value|replace({'_':' '}) }}</dd>
+        </dl>
+    {% endif %}
+
+    {% if preflight %}
+        <hr>
+        <div class="uk-grid-small uk-child-width-1-2@m" uk-grid>
+            <div>
+                <dl class="uk-description-list">
+                    <dt>Approved input mode</dt><dd>{{ preflight.inputMode.value|replace({'_':' '}) }}</dd>
+                    <dt>Media sent as bounded presentations</dt><dd>{{ preflight.presentationMediaCount }} / {{ preflight.mediaCount }}</dd>
+                    <dt>Cost estimate</dt><dd>{{ preflight.costEstimate ?: 'Not provided' }}</dd>
+                </dl>
+            </div>
+            <div>
+                <dl class="uk-description-list">
+                    <dt>Creator included</dt><dd>{{ preflight.includeCreator ? 'yes' : 'no' }}</dd>
+                    <dt>Coarse location included</dt><dd>{{ preflight.includeLocationName ? 'yes' : 'no' }}</dd>
+                    <dt>Excluded fields</dt><dd>{{ preflight.excludedFields is empty ? '—' : preflight.excludedFields|join(', ') }}</dd>
+                </dl>
+            </div>
+        </div>
+        {% if preflight.privacyNote %}<p><strong>Privacy:</strong> {{ preflight.privacyNote }}</p>{% endif %}
+        {% if preflight.retentionNote %}<p><strong>Retention:</strong> {{ preflight.retentionNote }}</p>{% endif %}
+    {% endif %}
+</section>
+
+{% if proposals is empty %}
+    <div class="uk-placeholder uk-text-center">
+        This run contains no reviewable proposals.
+    </div>
+{% else %}
+    <form id="organization-bulk-form" method="post" action="{{ path('library_organization_run_bulk', {id: run.id.toRfc4122()}) }}" class="uk-card uk-card-default uk-card-body uk-margin">
+        <input type="hidden" name="_csrf_token" value="{{ bulk_csrf_token }}">
+        <div class="uk-flex uk-flex-between uk-flex-middle uk-flex-wrap">
+            <div>
+                <h2 class="uk-card-title uk-margin-remove">Bulk review</h2>
+                <p class="uk-text-meta uk-margin-small-top">Selected accepts run in one transaction. If one proposal is stale or invalid, none of the selected proposals are applied.</p>
+            </div>
+            <div>
+                <button class="uk-button uk-button-primary" type="submit" name="action" value="accept">Accept selected</button>
+                <button class="uk-button uk-button-danger uk-margin-small-left" type="submit" name="action" value="reject">Reject selected</button>
+            </div>
+        </div>
+    </form>
+
+    <div class="uk-grid-medium" uk-grid>
+        {% for proposal in proposals %}
+            {% set proposal_id = proposal.id.toRfc4122() %}
+            {% set payload = proposal.payload.payload() %}
+            {% set type = proposal.payload.type.value %}
+            <div class="uk-width-1-1">
+                <article class="uk-card uk-card-default uk-card-body">
+                    <div class="uk-flex uk-flex-between uk-flex-top uk-flex-wrap">
+                        <div class="uk-flex uk-flex-middle">
+                            {% if proposal.status.value == 'pending_review' %}
+                                <label class="uk-margin-small-right">
+                                    <input class="uk-checkbox" type="checkbox" name="proposal_ids[]" value="{{ proposal_id }}" form="organization-bulk-form" aria-label="Select proposal">
+                                </label>
+                            {% endif %}
+                            <div>
+                                <p class="uk-text-meta uk-margin-remove">{{ type|replace({'_':' '}) }}</p>
+                                <h2 class="uk-card-title uk-margin-small-top uk-margin-remove-bottom">
+                                    {% if type in ['smart_collection', 'manual_collection', 'review_bucket'] %}
+                                        {{ payload.title }}
+                                    {% elseif type == 'tag' %}
+                                        Tag · {{ payload.name }}
+                                    {% elseif type == 'title_description' %}
+                                        Title / description update
+                                    {% else %}
+                                        Cover proposal
+                                    {% endif %}
+                                </h2>
+                            </div>
+                        </div>
+                        <span class="uk-label {% if proposal.status.value == 'applied' %}uk-label-success{% elseif proposal.status.value == 'rejected' %}uk-label-danger{% endif %}">
+                            {{ proposal.status.value|replace({'_':' '}) }}
+                        </span>
+                    </div>
+
+                    <p>{{ proposal.rationale }}</p>
+
+                    {% if type == 'smart_collection' %}
+                        {% if payload.description %}<p class="uk-text-meta">{{ payload.description }}</p>{% endif %}
+                        <div class="uk-card uk-card-muted uk-card-body uk-padding-small">
+                            <strong>Smart rule</strong>
+                            <div class="uk-margin-small-top">{{ rules.node(payload.rule) }}</div>
+                        </div>
+                    {% elseif type in ['manual_collection', 'review_bucket'] %}
+                        {% if payload.description %}<p>{{ payload.description }}</p>{% endif %}
+                        <p class="uk-text-meta">Accepted result: private Manual Collection with the reviewed MediaAssets.</p>
+                    {% elseif type == 'tag' %}
+                        <p class="uk-text-meta">Accepted result: normalized tag applied to the reviewed MediaAssets.</p>
+                    {% elseif type == 'title_description' %}
+                        <dl class="uk-description-list">
+                            <dt>Target</dt><dd>{{ payload.target_type }} · {{ payload.target_id }}</dd>
+                            {% if payload.title %}<dt>Title</dt><dd>{{ payload.title }}</dd>{% endif %}
+                            {% if payload.description %}<dt>Description</dt><dd>{{ payload.description }}</dd>{% endif %}
+                        </dl>
+                    {% elseif type == 'cover' %}
+                        <dl class="uk-description-list">
+                            <dt>Collection</dt><dd>{{ payload.collection_id }}</dd>
+                            <dt>Proposed cover MediaAsset</dt><dd>{{ payload.media_id }}</dd>
+                        </dl>
+                    {% endif %}
+
+                    <div class="uk-margin">
+                        <h3 class="uk-h4">Evidence</h3>
+                        <ul class="uk-list uk-list-divider">
+                            {% for evidence in proposal.evidence %}
+                                <li>
+                                    <span class="uk-label">{{ evidence.source.value }}</span>
+                                    <span class="uk-margin-small-left">{{ evidence.summary }}</span>
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+
+                    <div class="uk-margin">
+                        <h3 class="uk-h4">{{ proposal.affectedMediaCount }} affected MediaAssets</h3>
+                        {% if proposal.mediaPreview is empty %}
+                            <p class="uk-text-meta">No currently accessible preview rows.</p>
+                        {% else %}
+                            <div class="uk-overflow-auto">
+                                <table class="uk-table uk-table-small uk-table-divider">
+                                    <thead><tr><th>Title</th><th>Type</th><th>Media ID</th></tr></thead>
+                                    <tbody>
+                                    {% for media in proposal.mediaPreview %}
+                                        <tr>
+                                            <td>{{ media.title ?: 'Untitled' }}</td>
+                                            <td>{{ media.mediaType }}</td>
+                                            <td class="uk-text-meta">{{ media.id.toRfc4122() }}</td>
+                                        </tr>
+                                    {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                            {% if proposal.affectedMediaCount > proposal.mediaPreview|length %}
+                                <p class="uk-text-meta">Showing {{ proposal.mediaPreview|length }} of {{ proposal.affectedMediaCount }}.</p>
+                            {% endif %}
+                        {% endif %}
+                    </div>
+
+                    {% if proposal.status.value == 'pending_review' %}
+                        <details class="uk-margin">
+                            <summary class="uk-button uk-button-text">Edit before review decision</summary>
+                            <form method="post" action="{{ path('library_organization_proposal_edit', {id: proposal_id}) }}" class="uk-form-stacked uk-margin">
+                                <input type="hidden" name="_csrf_token" value="{{ tokens[proposal_id].edit }}">
+                                {% if type in ['smart_collection', 'manual_collection', 'review_bucket'] %}
+                                    <div class="uk-margin">
+                                        <label class="uk-form-label">Title</label>
+                                        <input class="uk-input" name="title" maxlength="200" required value="{{ payload.title }}">
+                                    </div>
+                                    <div class="uk-margin">
+                                        <label class="uk-form-label">Description</label>
+                                        <textarea class="uk-textarea" name="description" maxlength="5000" rows="3">{{ payload.description ?: '' }}</textarea>
+                                    </div>
+                                    {% if type == 'smart_collection' %}
+                                        <p class="uk-text-meta">The reviewed Smart rule is intentionally read-only here. Structural rule changes require a new analysis so affected media can be reviewed again.</p>
+                                    {% endif %}
+                                {% elseif type == 'tag' %}
+                                    <div class="uk-margin">
+                                        <label class="uk-form-label">Tag name</label>
+                                        <input class="uk-input" name="name" maxlength="160" required value="{{ payload.name }}">
+                                    </div>
+                                {% elseif type == 'title_description' %}
+                                    <div class="uk-margin">
+                                        <label class="uk-form-label">Title</label>
+                                        <input class="uk-input" name="title" maxlength="200" value="{{ payload.title ?: '' }}">
+                                    </div>
+                                    <div class="uk-margin">
+                                        <label class="uk-form-label">Description</label>
+                                        <textarea class="uk-textarea" name="description" maxlength="5000" rows="3">{{ payload.description ?: '' }}</textarea>
+                                    </div>
+                                {% elseif type == 'cover' %}
+                                    <div class="uk-margin">
+                                        <label class="uk-form-label">Cover MediaAsset UUID</label>
+                                        <input class="uk-input" name="media_id" required value="{{ payload.media_id }}">
+                                        <p class="uk-text-meta">The MediaAsset must remain inside this proposal's reviewed affected-media set.</p>
+                                    </div>
+                                {% endif %}
+                                <button class="uk-button uk-button-default" type="submit">Save edit</button>
+                            </form>
+                        </details>
+
+                        <div class="uk-flex uk-flex-wrap uk-flex-middle">
+                            <form method="post" action="{{ path('library_organization_proposal_accept', {id: proposal_id}) }}" class="uk-margin-small-right">
+                                <input type="hidden" name="_csrf_token" value="{{ tokens[proposal_id].accept }}">
+                                <button class="uk-button uk-button-primary" type="submit">Accept</button>
+                            </form>
+                            <form method="post" action="{{ path('library_organization_proposal_reject', {id: proposal_id}) }}">
+                                <input type="hidden" name="_csrf_token" value="{{ tokens[proposal_id].reject }}">
+                                <button class="uk-button uk-button-danger" type="submit">Reject</button>
+                            </form>
+                        </div>
+                    {% elseif proposal.status.value == 'applied' %}
+                        <div class="uk-alert-success" uk-alert>
+                            <p>
+                                Applied to {{ proposal.appliedEntityType.value }} {{ proposal.appliedEntityId.toRfc4122() }}.
+                                Collections created from proposals remain private until separately published.
+                            </p>
+                        </div>
+                    {% endif %}
+                </article>
+            </div>
+        {% endfor %}
+    </div>
+{% endif %}
+{% endblock %}

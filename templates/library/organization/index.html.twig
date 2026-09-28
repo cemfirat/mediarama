@@ -1,0 +1,47 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Organization · Mediarama{% endblock %}
+
+{% block body %}
+<div class="uk-flex uk-flex-between uk-flex-middle uk-flex-wrap">
+    <div>
+        <h1 class="uk-heading-small uk-margin-remove-bottom">Organization</h1>
+        <p class="uk-text-lead uk-margin-small-top">Review metadata and AI organization runs before anything changes in your library.</p>
+    </div>
+    <a class="uk-button uk-button-default" href="{{ path('library_home') }}">Library</a>
+</div>
+
+<div class="uk-alert-primary uk-margin" uk-alert>
+    <p>Suggestions are review-only until you accept them. Acceptance never publishes a Collection or changes its ACL automatically.</p>
+</div>
+
+{% if runs is empty %}
+    <div class="uk-placeholder uk-text-center">
+        No organization runs yet.
+    </div>
+{% else %}
+    <div class="uk-child-width-1-2@m uk-grid-match" uk-grid>
+        {% for run in runs %}
+            <div>
+                <a class="uk-card uk-card-default uk-card-hover uk-card-body uk-display-block uk-link-reset"
+                   href="{{ path('library_organization_run_show', {id: run.id.toRfc4122()}) }}">
+                    <div class="uk-flex uk-flex-between uk-flex-middle">
+                        <h2 class="uk-card-title uk-margin-remove">Organization run</h2>
+                        <span class="uk-label">{{ run.status.value|replace({'_':' '}) }}</span>
+                    </div>
+                    <p class="uk-margin-small">
+                        {{ run.mediaCount }} MediaAssets ·
+                        {% if run.producer.kind.value == 'metadata' %}
+                            deterministic metadata
+                        {% else %}
+                            {{ run.producer.providerName }} · {{ run.producer.modelName }}
+                            {% if run.producer.modelVersion %} · {{ run.producer.modelVersion }}{% endif %}
+                        {% endif %}
+                    </p>
+                    <p class="uk-text-meta uk-margin-remove">Updated {{ run.updatedAt|date('Y-m-d H:i') }}</p>
+                </a>
+            </div>
+        {% endfor %}
+    </div>
+{% endif %}
+{% endblock %}
