@@ -138,16 +138,6 @@ final readonly class OrganizationAiProviderDescriptor
             return;
         }
 
-        if (trim($value) === '') {
-            if ($value !== '') {
-                throw new \InvalidArgumentException(
-                    'Organization AI '.$label.' must not contain only whitespace.',
-                );
-            }
-
-            return;
-        }
-
         self::text($value, $label, $maximumLength);
     }
 }
