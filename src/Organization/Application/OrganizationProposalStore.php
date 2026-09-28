@@ -48,10 +48,21 @@ interface OrganizationProposalStore
         Uuid $runId,
     ): void;
 
+    /** @return list<OrganizationRunResult> */
+    public function runs(
+        Uuid $requesterId,
+        int $limit = 50,
+    ): array;
+
     public function run(
         Uuid $requesterId,
         Uuid $runId,
     ): OrganizationRunResult;
+
+    public function proposal(
+        Uuid $requesterId,
+        Uuid $proposalId,
+    ): OrganizationProposalResult;
 
     /** @return list<OrganizationProposalResult> */
     public function proposals(

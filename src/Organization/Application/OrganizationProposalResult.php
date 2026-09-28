@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Mediarama\Organization\Application;
 
 use DateTimeImmutable;
+use Mediarama\Organization\Domain\OrganizationAppliedEntityType;
 use Mediarama\Organization\Domain\OrganizationEvidence;
 use Mediarama\Organization\Domain\OrganizationProposalPayload;
 use Mediarama\Organization\Domain\OrganizationProposalStatus;
@@ -25,6 +26,8 @@ final readonly class OrganizationProposalResult
         public array $affectedMediaIds,
         public array $evidence,
         public ?DateTimeImmutable $reviewedAt,
+        public ?OrganizationAppliedEntityType $appliedEntityType,
+        public ?Uuid $appliedEntityId,
         public DateTimeImmutable $createdAt,
         public DateTimeImmutable $updatedAt,
     ) {

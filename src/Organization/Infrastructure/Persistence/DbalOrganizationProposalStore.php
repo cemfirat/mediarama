@@ -14,6 +14,7 @@ use Mediarama\Organization\Application\OrganizationProposalStore;
 use Mediarama\Organization\Application\OrganizationProposalUnavailableException;
 use Mediarama\Organization\Application\OrganizationRunResult;
 use Mediarama\Organization\Application\OrganizationRunUnavailableException;
+use Mediarama\Organization\Domain\OrganizationAppliedEntityType;
 use Mediarama\Organization\Domain\OrganizationEvidence;
 use Mediarama\Organization\Domain\OrganizationEvidenceSource;
 use Mediarama\Organization\Domain\OrganizationProducer;
@@ -322,6 +323,51 @@ SQL,
         });
     }
 
+    public function runs(
+        Uuid $requesterId,
+        int $limit = 50,
+    ): array {
+        if ($limit < 1 || $limit > 100) {
+            throw new \InvalidArgumentException(
+                'Organization run list limit must be between 1 and 100.',
+            );
+        }
+
+        $rows = $this->connection->fetchAllAssociative(
+            <<<'SQL'
+SELECT
+    r.id,
+    r.requester_id,
+    r.producer_kind,
+    r.provider_name,
+    r.model_name,
+    r.model_version,
+    r.status,
+    r.created_at,
+    r.updated_at,
+    (
+        SELECT COUNT(*)
+        FROM organization_run_media rm
+        WHERE rm.run_id = r.id
+    ) AS media_count
+FROM organization_runs r
+WHERE r.requester_id = :requester
+ORDER BY r.updated_at DESC, r.id DESC
+LIMIT :limit
+SQL,
+            [
+                'requester' => $requesterId->toRfc4122(),
+                'limit' => $limit,
+            ],
+            ['limit' => ParameterType::INTEGER],
+        );
+
+        return array_map(
+            fn (array $row): OrganizationRunResult => $this->mapRun($row),
+            $rows,
+        );
+    }
+
     public function run(
         Uuid $requesterId,
         Uuid $runId,
@@ -362,6 +408,29 @@ SQL,
         return $this->mapRun($row);
     }
 
+    public function proposal(
+        Uuid $requesterId,
+        Uuid $proposalId,
+    ): OrganizationProposalResult {
+        $row = $this->connection->fetchAssociative(
+            $this->proposalSelect().'
+WHERE p.id = :proposal
+  AND r.requester_id = :requester',
+            [
+                'proposal' => $proposalId->toRfc4122(),
+                'requester' => $requesterId->toRfc4122(),
+            ],
+        );
+
+        if ($row === false) {
+            throw new OrganizationProposalUnavailableException(
+                'Organization proposal is unavailable.',
+            );
+        }
+
+        return $this->mapProposal($row);
+    }
+
     public function proposals(
         Uuid $requesterId,
         Uuid $runId,
@@ -370,21 +439,9 @@ SQL,
         $this->run($requesterId, $runId);
 
         $rows = $this->connection->fetchAllAssociative(
-            <<<'SQL'
-SELECT
-    p.id,
-    p.run_id,
-    p.proposal_type,
-    p.status,
-    p.payload,
-    p.rationale,
-    p.reviewed_at,
-    p.created_at,
-    p.updated_at
-FROM organization_proposals p
+            $this->proposalSelect().'
 WHERE p.run_id = :run
-ORDER BY p.created_at ASC, p.id ASC
-SQL,
+ORDER BY p.created_at ASC, p.id ASC',
             ['run' => $runId->toRfc4122()],
         );
 
@@ -657,6 +714,26 @@ SQL,
         );
     }
 
+    private function proposalSelect(): string
+    {
+        return <<<'SQL'
+SELECT
+    p.id,
+    p.run_id,
+    p.proposal_type,
+    p.status,
+    p.payload,
+    p.rationale,
+    p.reviewed_at,
+    p.applied_entity_type,
+    p.applied_entity_id,
+    p.created_at,
+    p.updated_at
+FROM organization_proposals p
+JOIN organization_runs r ON r.id = p.run_id
+SQL;
+    }
+
     /** @param array<string,mixed> $row */
     private function mapProposal(array $row): OrganizationProposalResult
     {
@@ -717,6 +794,12 @@ SQL,
             $evidence,
             $row['reviewed_at'] !== null
                 ? new DateTimeImmutable((string) $row['reviewed_at'])
+                : null,
+            $row['applied_entity_type'] !== null
+                ? OrganizationAppliedEntityType::from((string) $row['applied_entity_type'])
+                : null,
+            $row['applied_entity_id'] !== null
+                ? Uuid::fromString((string) $row['applied_entity_id'])
                 : null,
             new DateTimeImmutable((string) $row['created_at']),
             new DateTimeImmutable((string) $row['updated_at']),

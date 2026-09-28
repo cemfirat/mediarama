@@ -35,6 +35,11 @@ interface OrganizationAiPreflightStore
         Uuid $preflightId,
     ): OrganizationAiPreflightResult;
 
+    public function forRun(
+        Uuid $requesterId,
+        Uuid $runId,
+    ): ?OrganizationAiPreflightResult;
+
     /** @return list<OrganizationAiPreflightMedia> */
     public function media(
         Uuid $requesterId,
