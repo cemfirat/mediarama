@@ -177,18 +177,16 @@ SQL,
         Uuid $ownerId,
         Uuid $collectionId,
     ): void {
-        $exists = (bool) $connection->fetchOne(
+        $lockedId = $connection->fetchOne(
             <<<'SQL'
-SELECT EXISTS (
-    SELECT 1
-    FROM collections
-    WHERE id = :collection
-      AND owner_id = :owner
-      AND mode = 'smart'
-      AND visibility = 'private'
-      AND deleted_at IS NULL
-    FOR UPDATE
-)
+SELECT id
+FROM collections
+WHERE id = :collection
+  AND owner_id = :owner
+  AND mode = 'smart'
+  AND visibility = 'private'
+  AND deleted_at IS NULL
+FOR UPDATE
 SQL,
             [
                 'collection' => $collectionId->toRfc4122(),
@@ -196,7 +194,7 @@ SQL,
             ],
         );
 
-        if (!$exists) {
+        if ($lockedId === false) {
             throw new SmartCollectionUnavailableException(
                 'Smart Collection is unavailable.',
             );
