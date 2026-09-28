@@ -1,0 +1,62 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}{{ seo.pageTitle }}{% endblock %}
+
+{% block head %}
+    {% include '@Mediarama/public/_seo.html.twig' with {seo: seo} only %}
+{% endblock %}
+
+{% block body %}
+<nav aria-label="Breadcrumb">
+    <ul class="uk-breadcrumb">
+        <li><a href="{{ path('public_collections') }}">Collections</a></li>
+        <li><span>{{ seo.socialTitle }}</span></li>
+    </ul>
+</nav>
+
+<article>
+    <header class="uk-margin-large-bottom">
+        <p class="uk-text-meta uk-margin-remove-bottom">{{ media.mediaType|capitalize }}</p>
+        <h1 class="uk-heading-small uk-margin-small-top">{{ seo.socialTitle }}</h1>
+        {% if media.description %}
+            <p class="uk-text-lead uk-width-2xlarge">{{ media.description }}</p>
+        {% endif %}
+    </header>
+
+    {% set displayProfile = media.preferredImageProfile() %}
+    {% set displayVersion = media.preferredImageVersion() %}
+
+    {% if displayProfile and displayVersion %}
+        <figure class="uk-margin-large-bottom">
+            <img
+                src="{{ path('public_media_derivative', {
+                    id: media.id.toRfc4122(),
+                    version: displayVersion,
+                    profile: displayProfile
+                }) }}"
+                alt="{{ seo.socialTitle }}"
+                class="uk-width-1-1"
+            >
+        </figure>
+    {% else %}
+        <div class="uk-placeholder uk-text-center uk-margin-large-bottom">
+            <span class="uk-text-meta">
+                A public {{ media.mediaType }} detail page is available, but no browser presentation is defined for this media type yet.
+            </span>
+        </div>
+    {% endif %}
+
+    {% if media.width or media.height or media.durationMs %}
+        <dl class="uk-description-list">
+            {% if media.width and media.height %}
+                <dt>Dimensions</dt>
+                <dd>{{ media.width }} × {{ media.height }}</dd>
+            {% endif %}
+            {% if media.durationMs %}
+                <dt>Duration</dt>
+                <dd>{{ (media.durationMs / 1000)|number_format(2) }} s</dd>
+            {% endif %}
+        </dl>
+    {% endif %}
+</article>
+{% endblock %}
