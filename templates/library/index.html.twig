@@ -140,14 +140,20 @@
                             <legend class="uk-legend uk-h4">Provider and capabilities</legend>
                             <div class="uk-child-width-1-2@m uk-grid-match" uk-grid>
                                 {% for provider in organization_ai_providers %}
+                                {% set provider_slot = loop.index0 %}
                                 <div>
-                                    <label class="uk-card uk-card-default uk-card-body uk-display-block">
-                                        <input class="uk-radio"
-                                               type="radio"
-                                               name="provider_key"
-                                               value="{{ provider.key }}"
-                                               {% if loop.first %}checked{% endif %}>
-                                        <strong>{{ provider.providerName }}</strong>
+                                    <div class="uk-card uk-card-default uk-card-body">
+                                        <input type="hidden"
+                                               name="provider_keys[{{ provider_slot }}]"
+                                               value="{{ provider.key }}">
+                                        <label class="uk-display-block">
+                                            <input class="uk-radio"
+                                                   type="radio"
+                                                   name="provider_slot"
+                                                   value="{{ provider_slot }}"
+                                                   {% if loop.first %}checked{% endif %}>
+                                            <strong>{{ provider.providerName }}</strong>
+                                        </label>
                                         <div class="uk-text-meta">
                                             {{ provider.producerKind.value|replace({'_':' '}) }} · {{ provider.modelName }}
                                             {% if provider.modelVersion %} · {{ provider.modelVersion }}{% endif %}
@@ -158,7 +164,7 @@
                                                 <label class="uk-display-block uk-margin-small-top">
                                                     <input class="uk-checkbox"
                                                            type="checkbox"
-                                                           name="capabilities[{{ provider.key }}][]"
+                                                           name="capabilities[{{ provider_slot }}][]"
                                                            value="{{ capability.value }}"
                                                            {% if capability.value == 'text_reasoning' %}checked{% endif %}>
                                                     {{ capability.value|replace({'_':' '}) }}
@@ -168,7 +174,7 @@
                                                 {% endif %}
                                             {% endfor %}
                                         </div>
-                                    </label>
+                                    </div>
                                 </div>
                                 {% endfor %}
                             </div>

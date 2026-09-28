@@ -103,15 +103,26 @@ final class OrganizationReviewController extends AbstractController
                 $request->request->all('media_ids'),
                 self::MAX_BROWSER_ANALYSIS_MEDIA,
             );
-            $providerKey = trim($request->request->getString('provider_key'));
-            if ($providerKey === '') {
+            $providerSlot = trim(
+                $request->request->getString('provider_slot'),
+            );
+            if ($providerSlot === '' || !ctype_digit($providerSlot)) {
                 throw new \InvalidArgumentException(
                     'Choose an Organization AI provider.',
                 );
             }
 
+            $providerKeys = $request->request->all('provider_keys');
+            $providerKey = $providerKeys[$providerSlot] ?? null;
+            if (!is_string($providerKey) || trim($providerKey) === '') {
+                throw new \InvalidArgumentException(
+                    'Choose an Organization AI provider.',
+                );
+            }
+            $providerKey = trim($providerKey);
+
             $capabilitiesByProvider = $request->request->all('capabilities');
-            $rawCapabilities = $capabilitiesByProvider[$providerKey] ?? null;
+            $rawCapabilities = $capabilitiesByProvider[$providerSlot] ?? null;
             if (!is_array($rawCapabilities)) {
                 throw new \InvalidArgumentException(
                     'Choose at least one supported Organization AI capability.',

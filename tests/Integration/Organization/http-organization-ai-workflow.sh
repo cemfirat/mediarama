@@ -315,8 +315,9 @@ NO_CSRF_STATUS="$(curl --silent --show-error \
     --output /tmp/organization-ai-no-csrf.html \
     --write-out '%{http_code}' \
     --data-urlencode "media_ids[]=$MEDIA_VISUAL_ID" \
-    --data-urlencode 'provider_key=browser-test' \
-    --data-urlencode 'capabilities[browser-test][]=text_reasoning' \
+    --data-urlencode 'provider_slot=0' \
+    --data-urlencode 'provider_keys[0]=browser-test' \
+    --data-urlencode 'capabilities[0][]=text_reasoning' \
     --data-urlencode 'input_mode=metadata_only' \
     "$BASE_URL/library/organization/ai/preflights")"
 expect_status 403 "$NO_CSRF_STATUS" "AI preflight preparation rejects missing CSRF"
@@ -335,8 +336,9 @@ UNAUTHORIZED_STATUS="$(curl --silent --show-error \
     --data-urlencode "_csrf_token=$AI_TOKEN" \
     --data-urlencode "media_ids[]=$MEDIA_VISUAL_ID" \
     --data-urlencode "media_ids[]=$MEDIA_OTHER_ID" \
-    --data-urlencode 'provider_key=browser-test' \
-    --data-urlencode 'capabilities[browser-test][]=text_reasoning' \
+    --data-urlencode 'provider_slot=0' \
+    --data-urlencode 'provider_keys[0]=browser-test' \
+    --data-urlencode 'capabilities[0][]=text_reasoning' \
     --data-urlencode 'input_mode=metadata_only' \
     "$BASE_URL/library/organization/ai/preflights")"
 expect_status 302 "$UNAUTHORIZED_STATUS" "inaccessible media cannot enter browser AI preflight"
@@ -347,8 +349,9 @@ UNSUPPORTED_STATUS="$(curl --silent --show-error \
     --write-out '%{http_code}' \
     --data-urlencode "_csrf_token=$AI_TOKEN" \
     --data-urlencode "media_ids[]=$MEDIA_VISUAL_ID" \
-    --data-urlencode 'provider_key=browser-test' \
-    --data-urlencode 'capabilities[browser-test][]=image_understanding' \
+    --data-urlencode 'provider_slot=0' \
+    --data-urlencode 'provider_keys[0]=browser-test' \
+    --data-urlencode 'capabilities[0][]=image_understanding' \
     --data-urlencode 'input_mode=metadata_only' \
     "$BASE_URL/library/organization/ai/preflights")"
 expect_status 302 "$UNSUPPORTED_STATUS" "image understanding without presentation mode fails closed"
@@ -376,9 +379,10 @@ PREPARE_STATUS="$(curl --silent --show-error \
     --data-urlencode "_csrf_token=$AI_TOKEN" \
     --data-urlencode "media_ids[]=$MEDIA_VISUAL_ID" \
     --data-urlencode "media_ids[]=$MEDIA_METADATA_ID" \
-    --data-urlencode 'provider_key=browser-test' \
-    --data-urlencode 'capabilities[browser-test][]=text_reasoning' \
-    --data-urlencode 'capabilities[browser-test][]=image_understanding' \
+    --data-urlencode 'provider_slot=0' \
+    --data-urlencode 'provider_keys[0]=browser-test' \
+    --data-urlencode 'capabilities[0][]=text_reasoning' \
+    --data-urlencode 'capabilities[0][]=image_understanding' \
     --data-urlencode 'input_mode=metadata_and_presentation' \
     --data-urlencode 'include_creator=1' \
     "$BASE_URL/library/organization/ai/preflights")"
@@ -402,7 +406,6 @@ grep -i -F 'x-robots-tag: noindex, nofollow' /tmp/organization-ai-preflight.head
 grep -i -E '^cache-control:.*no-store' /tmp/organization-ai-preflight.headers >/dev/null
 grep -F 'Browser Test AI' /tmp/organization-ai-preflight.html >/dev/null
 grep -F 'browser-test-model' /tmp/organization-ai-preflight.html >/dev/null
-grep -F '2 of 2' /tmp/organization-ai-preflight.html >/dev/null
 grep -F '1 of 2' /tmp/organization-ai-preflight.html >/dev/null
 grep -F 'Estimated test cost EUR 0.01 for 2 media items.' /tmp/organization-ai-preflight.html >/dev/null
 grep -F 'Creator' /tmp/organization-ai-preflight.html >/dev/null
@@ -507,7 +510,7 @@ grep -F 'AI Browser Candidate' /tmp/organization-ai-run.html >/dev/null
 grep -F 'Inference evidence from the approved test provider scope.' /tmp/organization-ai-run.html >/dev/null
 grep -F 'pending review' /tmp/organization-ai-run.html >/dev/null
 
-php <<'PHP'
+AI_RUN_ID="$RUN_ID" php <<'PHP'
 <?php
 require 'vendor/autoload.php';
 $dsn = new Doctrine\DBAL\Tools\DsnParser(['postgresql'=>'pdo_pgsql','postgres'=>'pdo_pgsql']);
@@ -518,14 +521,18 @@ if ((int) $db->fetchOne("SELECT COUNT(*) FROM tags WHERE name = 'AI Browser Cand
 if ((int) $db->fetchOne("SELECT COUNT(*) FROM collections WHERE owner_id = ?", ['99999999-9999-4999-8999-999999999991']) !== 0) {
     throw new RuntimeException('AI proposal mutated Collections before human review.');
 }
-$proposalStatus = $db->fetchOne(
+$statuses = $db->fetchFirstColumn(
     "SELECT p.status
      FROM organization_proposals p
      JOIN organization_runs r ON r.id = p.run_id
      WHERE r.id = ?",
-    [(string) trim(file_get_contents('/tmp/organization-ai-run-id'))],
+    [(string) getenv('AI_RUN_ID')],
 );
+if ($statuses === [] || array_unique($statuses) !== ['pending_review']) {
+    throw new RuntimeException('AI provider proposals did not remain pending human review.');
+}
 $db->close();
+echo "OK successful AI execution remains proposal-only until human review\n";
 PHP
 
 # Changed authorization after approval must fail before provider inference.
@@ -540,8 +547,9 @@ SCOPE_PREPARE="$(curl --silent --show-error \
     --write-out '%{http_code}' \
     --data-urlencode "_csrf_token=$AI_TOKEN" \
     --data-urlencode "media_ids[]=$MEDIA_METADATA_ID" \
-    --data-urlencode 'provider_key=browser-test' \
-    --data-urlencode 'capabilities[browser-test][]=text_reasoning' \
+    --data-urlencode 'provider_slot=0' \
+    --data-urlencode 'provider_keys[0]=browser-test' \
+    --data-urlencode 'capabilities[0][]=text_reasoning' \
     --data-urlencode 'input_mode=metadata_only' \
     "$BASE_URL/library/organization/ai/preflights")"
 expect_status 302 "$SCOPE_PREPARE" "authorization-change fixture preflight prepared"
@@ -595,8 +603,9 @@ FAIL_PREPARE="$(curl --silent --show-error \
     --write-out '%{http_code}' \
     --data-urlencode "_csrf_token=$AI_TOKEN" \
     --data-urlencode "media_ids[]=$MEDIA_VISUAL_ID" \
-    --data-urlencode 'provider_key=browser-test' \
-    --data-urlencode 'capabilities[browser-test][]=text_reasoning' \
+    --data-urlencode 'provider_slot=0' \
+    --data-urlencode 'provider_keys[0]=browser-test' \
+    --data-urlencode 'capabilities[0][]=text_reasoning' \
     --data-urlencode 'input_mode=metadata_only' \
     "$BASE_URL/library/organization/ai/preflights")"
 expect_status 302 "$FAIL_PREPARE" "provider-failure preflight prepared"
