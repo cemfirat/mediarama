@@ -207,6 +207,27 @@ try {
         ],
     );
 
+    try {
+        $store->addProposal(
+            $requester,
+            $runId,
+            $payload,
+            'This invalid proposal tries to escape the run scope.',
+            [$inaccessibleMedia],
+            [
+                new OrganizationEvidence(
+                    OrganizationEvidenceSource::Metadata,
+                    'This evidence must never make the proposal valid.',
+                ),
+            ],
+        );
+        throw new RuntimeException(
+            'Expected affected media outside the run scope to fail.',
+        );
+    } catch (InvalidArgumentException) {
+        echo "OK proposal affected media cannot escape run scope".PHP_EOL;
+    }
+
     $proposalId = $store->addProposal(
         $requester,
         $runId,
