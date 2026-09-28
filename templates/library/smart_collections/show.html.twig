@@ -102,6 +102,15 @@
 
         <form method="post" action="{{ path('library_smart_collection_publish', {id: collection.id.toRfc4122()}) }}" class="uk-form-stacked uk-margin">
             <input type="hidden" name="_csrf_token" value="{{ publish_csrf_token }}">
+            <div class="uk-margin">
+                <label class="uk-form-label" for="smart-public-cover">Public cover MediaAsset UUID <span class="uk-text-muted">(optional)</span></label>
+                <input class="uk-input" id="smart-public-cover" name="cover_media_id"
+                       value="{{ collection.coverMediaId ? collection.coverMediaId.toRfc4122() : '' }}"
+                       placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">
+                <div class="uk-text-meta uk-margin-small-top">
+                    The cover is curated independently from the Smart rule, but it must already be a public image owned by you.
+                </div>
+            </div>
             <label class="uk-form-label" for="smart-public-index-policy">Search-engine policy</label>
             <div class="uk-grid-small uk-flex-middle" uk-grid>
                 <div class="uk-width-medium">
@@ -128,6 +137,15 @@
         </div>
         <form method="post" action="{{ path('library_smart_collection_publish', {id: collection.id.toRfc4122()}) }}" class="uk-form-stacked">
             <input type="hidden" name="_csrf_token" value="{{ publish_csrf_token }}">
+            <div class="uk-margin">
+                <label class="uk-form-label" for="smart-publish-cover">Public cover MediaAsset UUID <span class="uk-text-muted">(optional)</span></label>
+                <input class="uk-input" id="smart-publish-cover" name="cover_media_id"
+                       value="{{ collection.coverMediaId ? collection.coverMediaId.toRfc4122() : '' }}"
+                       placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">
+                <div class="uk-text-meta uk-margin-small-top">
+                    Optional. Only an already-public image owned by you can be selected; otherwise Mediarama derives a safe fallback cover.
+                </div>
+            </div>
             <div class="uk-margin">
                 <label class="uk-form-label" for="smart-publish-index-policy">Search-engine policy</label>
                 <select class="uk-select uk-width-medium" id="smart-publish-index-policy" name="search_index_policy">

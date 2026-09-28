@@ -223,13 +223,25 @@ final class SmartCollectionController extends AbstractController
         }
 
         try {
+            $coverMediaId = $this->nullableId(
+                $request->request->getString('cover_media_id', ''),
+            );
             $this->publication->publish(
                 $user->id,
                 $collectionId,
                 $policy,
+                $coverMediaId,
             );
         } catch (SmartCollectionUnavailableException) {
             throw $this->createNotFoundException();
+        } catch (\InvalidArgumentException $exception) {
+            return $this->renderDetail(
+                $this->owned($user->id, $collectionId),
+                $user->id,
+                $request,
+                error: $exception->getMessage(),
+                status: Response::HTTP_BAD_REQUEST,
+            );
         }
 
         return $this->redirectToRoute(
@@ -488,6 +500,22 @@ final class SmartCollectionController extends AbstractController
         $value = trim((string) $value);
 
         return $value === '' ? null : $value;
+    }
+
+    private function nullableId(string $value): ?Uuid
+    {
+        $value = trim($value);
+        if ($value === '') {
+            return null;
+        }
+
+        try {
+            return Uuid::fromString($value);
+        } catch (\InvalidArgumentException) {
+            throw new \InvalidArgumentException(
+                'Cover MediaAsset must be a valid UUID.',
+            );
+        }
     }
 
     private function privateResponse(Response $response): Response

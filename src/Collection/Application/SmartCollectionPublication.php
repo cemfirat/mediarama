@@ -13,6 +13,7 @@ interface SmartCollectionPublication
         Uuid $ownerId,
         Uuid $collectionId,
         SearchIndexPolicy $indexPolicy,
+        ?Uuid $coverMediaId = null,
     ): void;
 
     public function unpublish(

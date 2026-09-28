@@ -131,6 +131,41 @@ final readonly class DbalPublicSmartCollectionResolver implements PublicSmartCol
     public function cover(Uuid $collectionId): ?PublicSmartCollectionCoverResult
     {
         [$ownerId, $rule, $preferredCover] = $this->configuration($collectionId);
+
+        if ($preferredCover !== null) {
+            $preferred = $this->connection->fetchAssociative(
+                'SELECT
+                    m.id,
+                    thumbnail.processing_version
+                 FROM media_assets m
+                 JOIN LATERAL (
+                     SELECT d.processing_version
+                     FROM media_derivatives d
+                     WHERE d.media_id = m.id
+                       AND d.kind = \'image\'
+                       AND d.profile = \'thumbnail\'
+                     ORDER BY d.processing_version DESC
+                     LIMIT 1
+                 ) thumbnail ON TRUE
+                 WHERE m.id = :preferred_cover
+                   AND m.owner_id = :collection_owner
+                   AND m.media_type = \'image\'
+                   AND '.$this->publicMediaPredicate('m').'
+                 LIMIT 1',
+                [
+                    'preferred_cover' => $preferredCover->toRfc4122(),
+                    'collection_owner' => $ownerId->toRfc4122(),
+                ],
+            );
+
+            if ($preferred !== false) {
+                return new PublicSmartCollectionCoverResult(
+                    Uuid::fromString((string) $preferred['id']),
+                    (int) $preferred['processing_version'],
+                );
+            }
+        }
+
         $predicate = $this->compiler->compile($rule);
 
         $row = $this->connection->fetchAssociative(
@@ -152,15 +187,12 @@ final readonly class DbalPublicSmartCollectionResolver implements PublicSmartCol
                AND '.$this->publicMediaPredicate('m').'
                AND '.$predicate->sql.'
              ORDER BY
-                 (m.id = :preferred_cover) DESC,
                  m.captured_at DESC NULLS LAST,
                  m.created_at DESC,
                  m.id DESC
              LIMIT 1',
             [
                 'collection_owner' => $ownerId->toRfc4122(),
-                'preferred_cover' => $preferredCover?->toRfc4122()
-                    ?? '00000000-0000-0000-0000-000000000000',
                 ...$predicate->parameters,
             ],
         );

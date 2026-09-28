@@ -7,6 +7,8 @@ namespace Mediarama\Seo\Infrastructure\Persistence;
 use DateTimeImmutable;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\ParameterType;
+use Mediarama\Collection\Application\SmartCollectionRuleCompiler;
+use Mediarama\Collection\Domain\SmartCollectionRule;
 use Mediarama\Platform\Application\PlatformSettingsRepository;
 use Mediarama\Platform\Domain\SearchIndexPolicy;
 use Mediarama\Seo\Application\PublicSitemapQuery;
@@ -21,6 +23,7 @@ final readonly class DbalPublicSitemapQuery implements PublicSitemapQuery
     public function __construct(
         private Connection $connection,
         private PlatformSettingsRepository $settings,
+        private SmartCollectionRuleCompiler $smartRules,
     ) {
     }
 
@@ -64,6 +67,9 @@ SQL,
 WITH selected_collections AS (
     SELECT
         c.id,
+        c.mode,
+        c.owner_id,
+        c.smart_rule,
         ROW_NUMBER() OVER (
             ORDER BY c.position ASC, c.title ASC, c.id ASC
         ) AS sitemap_position
@@ -80,6 +86,9 @@ WITH selected_collections AS (
 )
 SELECT
     selected.id AS collection_id,
+    selected.mode,
+    selected.owner_id,
+    selected.smart_rule,
     selected.sitemap_position,
     image.media_id,
     image.processing_version,
@@ -103,7 +112,8 @@ LEFT JOIN LATERAL (
             m.created_at
         FROM collection_media cm
         JOIN media_assets m ON m.id = cm.media_id
-        WHERE cm.collection_id = selected.id
+        WHERE selected.mode = 'manual'
+          AND cm.collection_id = selected.id
           AND m.deleted_at IS NULL
           AND m.processing_state = 'ready'
           AND m.moderation_state = 'published'
@@ -155,15 +165,40 @@ SQL,
             ],
         );
 
-        /** @var array<string,array{id:Uuid,images:list<PublicSitemapImage>}> $collections */
+        /**
+         * @var array<string,array{
+         *     id:Uuid,
+         *     mode:string,
+         *     owner:?Uuid,
+         *     rule:?SmartCollectionRule,
+         *     images:list<PublicSitemapImage>
+         * }> $collections
+         */
         $collections = [];
 
         foreach ($rows as $row) {
             $collectionId = (string) $row['collection_id'];
 
             if (!isset($collections[$collectionId])) {
+                $rawRule = $row['smart_rule'];
+                if (is_string($rawRule)) {
+                    $rawRule = json_decode(
+                        $rawRule,
+                        true,
+                        flags: JSON_THROW_ON_ERROR,
+                    );
+                }
+
+                $mode = (string) $row['mode'];
                 $collections[$collectionId] = [
                     'id' => Uuid::fromString($collectionId),
+                    'mode' => $mode,
+                    'owner' => $row['owner_id'] !== null
+                        ? Uuid::fromString((string) $row['owner_id'])
+                        : null,
+                    'rule' => $mode === 'smart' && is_array($rawRule)
+                        ? SmartCollectionRule::fromArray($rawRule)
+                        : null,
                     'images' => [],
                 ];
             }
@@ -178,6 +213,25 @@ SQL,
                 (string) $row['profile'],
             );
         }
+
+        foreach ($collections as &$collection) {
+            if ($collection['mode'] !== 'smart') {
+                continue;
+            }
+
+            if ($collection['owner'] === null || $collection['rule'] === null) {
+                throw new \RuntimeException(
+                    'Public Smart Collection sitemap configuration is invalid.',
+                );
+            }
+
+            $collection['images'] = $this->smartCollectionImages(
+                $collection['owner'],
+                $collection['rule'],
+                $siteIndexDefault,
+            );
+        }
+        unset($collection);
 
         return array_map(
             static fn (array $collection): PublicSitemapCollection => new PublicSitemapCollection(
@@ -314,6 +368,104 @@ SQL,
                     $video,
                 );
             },
+            $rows,
+        );
+    }
+
+    /**
+     * @return list<PublicSitemapImage>
+     */
+    private function smartCollectionImages(
+        Uuid $ownerId,
+        SmartCollectionRule $rule,
+        bool $siteIndexDefault,
+    ): array {
+        $predicate = $this->smartRules->compile($rule);
+
+        $sql = sprintf(
+            <<<'SQL'
+WITH page_media AS (
+    SELECT
+        m.id,
+        m.media_type,
+        m.search_index_policy,
+        m.captured_at,
+        m.created_at
+    FROM media_assets m
+    WHERE m.owner_id = :collection_owner
+      AND m.deleted_at IS NULL
+      AND m.processing_state = 'ready'
+      AND m.moderation_state = 'published'
+      AND EXISTS (
+          SELECT 1
+          FROM collection_media public_membership
+          JOIN effective_public_collections public_collection
+            ON public_collection.collection_id = public_membership.collection_id
+          WHERE public_membership.media_id = m.id
+      )
+      AND %s
+    ORDER BY
+        m.captured_at DESC NULLS LAST,
+        m.created_at DESC,
+        m.id DESC
+    LIMIT 120
+)
+SELECT
+    page_media.id AS media_id,
+    derivative.processing_version,
+    derivative.profile,
+    page_media.captured_at,
+    page_media.created_at
+FROM page_media
+JOIN LATERAL (
+    SELECT
+        d.processing_version,
+        d.profile
+    FROM media_derivatives d
+    WHERE d.media_id = page_media.id
+      AND d.kind = 'image'
+      AND d.profile IN ('preview', 'thumbnail')
+    ORDER BY
+        CASE d.profile
+            WHEN 'preview' THEN 1
+            WHEN 'thumbnail' THEN 2
+            ELSE 3
+        END ASC,
+        d.processing_version DESC
+    LIMIT 1
+) derivative ON TRUE
+WHERE page_media.media_type = 'image'
+  AND (
+      page_media.search_index_policy = 'index'
+      OR (
+          page_media.search_index_policy = 'inherit'
+          AND :site_index_default = TRUE
+      )
+  )
+ORDER BY
+    page_media.captured_at DESC NULLS LAST,
+    page_media.created_at DESC,
+    page_media.id DESC
+SQL,
+            $predicate->sql,
+        );
+
+        $rows = $this->connection->fetchAllAssociative(
+            $sql,
+            [
+                'collection_owner' => $ownerId->toRfc4122(),
+                'site_index_default' => $siteIndexDefault,
+                ...$predicate->parameters,
+            ],
+            ['site_index_default' => ParameterType::BOOLEAN],
+        );
+
+        return array_map(
+            static fn (array $row): PublicSitemapImage => new PublicSitemapImage(
+                Uuid::fromString((string) $row['media_id']),
+                (int) $row['processing_version'],
+                (string) $row['profile'],
+            ),
             $rows,
         );
     }

@@ -24,6 +24,7 @@ final readonly class DbalSmartCollectionPublication implements SmartCollectionPu
         Uuid $ownerId,
         Uuid $collectionId,
         SearchIndexPolicy $indexPolicy,
+        ?Uuid $coverMediaId = null,
     ): void {
         if ($indexPolicy === SearchIndexPolicy::Inherit) {
             throw new \InvalidArgumentException(
@@ -35,11 +36,17 @@ final readonly class DbalSmartCollectionPublication implements SmartCollectionPu
             $ownerId,
             $collectionId,
             $indexPolicy,
+            $coverMediaId,
         ): void {
             $row = $this->lockOwnedSmart(
                 $connection,
                 $ownerId,
                 $collectionId,
+            );
+            $this->assertPublicCover(
+                $connection,
+                $ownerId,
+                $coverMediaId,
             );
 
             $wasPublic = (string) $row['visibility'] === 'public';
@@ -54,11 +61,13 @@ SET visibility = 'public',
     password_hint = NULL,
     password_reset_required = FALSE,
     search_index_policy = :index_policy,
+    cover_media_id = :cover_media_id,
     updated_at = :updated
 WHERE id = :collection
 SQL,
                 [
                     'index_policy' => $indexPolicy->value,
+                    'cover_media_id' => $coverMediaId?->toRfc4122(),
                     'updated' => $now->format(DATE_ATOM),
                     'collection' => $collectionId->toRfc4122(),
                 ],
@@ -102,6 +111,55 @@ SQL,
                 ['collection' => $collectionId->toRfc4122()],
             );
         });
+    }
+
+    private function assertPublicCover(
+        Connection $connection,
+        Uuid $ownerId,
+        ?Uuid $coverMediaId,
+    ): void {
+        if ($coverMediaId === null) {
+            return;
+        }
+
+        $eligible = (bool) $connection->fetchOne(
+            <<<'SQL'
+SELECT EXISTS (
+    SELECT 1
+    FROM media_assets m
+    WHERE m.id = :media
+      AND m.owner_id = :owner
+      AND m.deleted_at IS NULL
+      AND m.processing_state = 'ready'
+      AND m.moderation_state = 'published'
+      AND m.media_type = 'image'
+      AND EXISTS (
+          SELECT 1
+          FROM collection_media membership
+          JOIN effective_public_collections public_collection
+            ON public_collection.collection_id = membership.collection_id
+          WHERE membership.media_id = m.id
+      )
+      AND EXISTS (
+          SELECT 1
+          FROM media_derivatives derivative
+          WHERE derivative.media_id = m.id
+            AND derivative.kind = 'image'
+            AND derivative.profile = 'thumbnail'
+      )
+)
+SQL,
+            [
+                'media' => $coverMediaId->toRfc4122(),
+                'owner' => $ownerId->toRfc4122(),
+            ],
+        );
+
+        if (!$eligible) {
+            throw new \InvalidArgumentException(
+                'The Smart Collection cover must be an already-public owned image with a thumbnail derivative.',
+            );
+        }
     }
 
     /** @return array{visibility:string} */
