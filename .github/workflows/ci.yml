@@ -250,6 +250,9 @@ jobs:
       - name: Verify authenticated Smart Collection management HTTP workflow
         run: bash tests/Integration/Collection/http-smart-collection-management.sh
 
+      - name: Verify deliberate public Smart Collection publication and SEO boundary
+        run: bash tests/Integration/Collection/http-public-smart-collection.sh
+
       - name: Verify upload failure lifecycle
         run: tests/Integration/Upload/http-failure-lifecycle.sh
 

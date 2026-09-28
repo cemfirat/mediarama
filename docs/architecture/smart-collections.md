@@ -1,6 +1,6 @@
 # Smart Collections
 
-Status: private deterministic foundation + authenticated management
+Status: deterministic foundation + authenticated management + deliberate public publication
 Date: 2026-09-28
 
 Smart Collections are saved Mediarama-owned rules whose media membership is
@@ -88,8 +88,9 @@ Owners can:
 
 Browser mutations use Symfony CSRF protection.
 
-Management reads/writes fail closed for non-owners. V1 management remains
-private-only.
+Management reads/writes fail closed for non-owners. Newly created Smart
+Collections remain private by default; public visibility is a separate,
+deliberate publication action.
 
 Nested rules remain valid and resolvable. The simple browser rule editor does
 not flatten or rewrite nested groups; it leaves them read-only until a richer
@@ -122,14 +123,31 @@ cannot yet be saved as a Smart Collection rule.
 
 ## Publication
 
-Smart Collections are deliberately private in this phase.
+Smart Collections are private by default. An owner may deliberately publish a
+Smart Collection through the authenticated management boundary.
 
-Rule matching is not publication and not authorization. Public/indexable Smart
-Collections are tracked separately in #127. That work must apply the existing
-public Collection + MediaAsset visibility/index boundaries after dynamic rule
-resolution.
+Publication keeps the Collection UUID and canonical route stable. Curated
+public title, description, cover and explicit `index | noindex` policy remain
+Collection presentation state; they are not encoded into the Smart rule.
 
-Temporary/ad-hoc Library filter URLs are not public SEO pages.
+Rule matching is never publication or authorization. Public Smart membership is
+resolved dynamically, then each matched MediaAsset must independently satisfy
+the ordinary public MediaAsset boundary: ready, published and already reachable
+through an effectively public Manual Collection membership. A private or
+restricted matching MediaAsset therefore remains private.
+
+The persisted Smart rule, raw metadata, exact GPS, private tags and query SQL
+are not public presentation fields.
+
+A curated Smart Collection cover is independent from rule membership, but it
+must itself already satisfy the ordinary public image boundary. If no curated
+cover is selected, Mediarama derives a safe fallback from the currently
+matching public images.
+
+Collection sitemap inclusion follows the normal Collection index policy. Image
+sitemap entries are computed from the same first 120 dynamically rendered
+public Smart results and still apply the MediaAsset index policy. Temporary or
+ad-hoc Library filter URLs are never public SEO pages.
 
 ## AI and Hybrid behavior
 

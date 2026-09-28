@@ -29,6 +29,16 @@ Public collection pages only return media that are:
 - moderation state `published`;
 - members of an effectively public collection.
 
+For a deliberately published Smart Collection, rule membership remains dynamic.
+A matched MediaAsset is rendered only when it also independently satisfies the
+ordinary public MediaAsset boundary through an existing effectively public
+Manual Collection membership. The Smart rule itself never grants anonymous
+access. Public Smart pages do not expose the persisted rule or private metadata.
+
+Curated Smart title, description, cover and search-index policy remain
+Collection-level presentation state. The stable public route stays
+`/collections/{collection-id}` while rule membership changes.
+
 ## Public MediaAsset identity
 
 Public MediaAssets have one stable membership-independent HTML identity:
