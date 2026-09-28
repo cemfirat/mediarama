@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Mediarama\Collection\Domain;
 
 use DateTimeImmutable;
+use Mediarama\Platform\Domain\SearchIndexPolicy;
 use Symfony\Component\Uid\Uuid;
 
 final class Collection
@@ -21,13 +22,14 @@ final class Collection
         public ?Uuid $coverMediaId = null,
         public ?string $slug = null,
         public int $position = 0,
+        public SearchIndexPolicy $searchIndexPolicy = SearchIndexPolicy::Inherit,
     ) {
         if (trim($title) === '') {
             throw new \InvalidArgumentException('Collection title must not be empty.');
         }
     }
 
-    public static function create(?Uuid $ownerId, string $title, Visibility $visibility = Visibility::Public): self
+    public static function create(?Uuid $ownerId, string $title, Visibility $visibility = Visibility::Private): self
     {
         $now = new DateTimeImmutable();
 

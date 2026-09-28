@@ -119,6 +119,7 @@ Permissions use stable string keys such as `media.upload`.
 - `captured_at timestamptz nullable`
 - `processing_state varchar`
 - `moderation_state varchar`
+- `search_index_policy varchar` (`inherit | index | noindex`)
 - `view_count bigint not null default 0`
 - `metadata jsonb not null default '{}'`
 - `created_at timestamptz`
@@ -156,6 +157,34 @@ Unique logical derivative:
 
 `(media_id, kind, profile, processing_version)`
 
+## derivative_cleanup_jobs
+
+Durable queue for physical derivative-object deletion after relational
+retirement or a failed-generation cleanup attempt.
+
+- `id bigint identity primary key`
+- `storage_disk varchar`
+- `storage_key text`
+- `reason varchar`
+- `media_id uuid nullable`
+- `kind varchar nullable`
+- `profile varchar nullable`
+- `processing_version integer nullable`
+- timestamps
+
+Unique storage identity:
+
+`(storage_disk, storage_key)`
+
+This table intentionally does not foreign-key `media_id` or a
+`media_derivatives` row. Cleanup work must survive deletion of the relational
+entity that made the storage object obsolete.
+
+Retention staging deletes an eligible complete processing generation from
+`media_derivatives` and inserts the corresponding cleanup jobs in the **same
+PostgreSQL transaction**. Physical storage deletion happens only afterward and
+is retryable/idempotent.
+
 ## collections
 
 - `id uuid primary key`
@@ -165,6 +194,7 @@ Unique logical derivative:
 - `title text`
 - `description text nullable`
 - `visibility varchar`
+- `search_index_policy varchar` (`inherit | index | noindex`)
 - `cover_media_id uuid fk media_assets nullable`
 - `position integer default 0`
 - `view_count bigint not null default 0`
@@ -200,6 +230,37 @@ Explicit resource-level policy.
 - timestamps
 
 Check constraint: exactly one principal column is non-null.
+
+## platform_settings
+
+Singleton site-level publication/discovery settings.
+
+- `id smallint primary key`, constrained to `1`
+- `deployment_profile varchar`
+- `public_publishing_enabled boolean`
+- `search_index_default varchar` (`index | noindex`)
+- `setup_status varchar` (`pending | completed`)
+- `setup_completed_at timestamptz nullable`
+- `setup_completed_by uuid nullable fk users on delete set null`
+- `setup_completed_via varchar nullable` (`migration | browser | cli | existing_admin`)
+- timestamps
+
+`deployment_profile` records the last applied setup/operator preset. It is not an ACL and does not prove actual network isolation.
+
+The singleton setup row is also the concurrency boundary for first-run administrator creation. Bootstrap takes a PostgreSQL row lock before creating/recovering an administrator and completing setup, preventing concurrent requests from creating two initial administrators.
+
+For new empty installations the migration initializes **Private workspace** semantics:
+
+- public publishing off;
+- site search-index default `noindex`.
+
+When upgrading an existing database that already has effectively public Collections, the migration preserves that established behavior by initializing **Public publishing** with `index`.
+
+Resource policies stay separate:
+
+- Collection policy controls the Collection page;
+- MediaAsset policy controls the MediaAsset/public media identity;
+- neither policy can bypass access/publication gates.
 
 ## tags
 

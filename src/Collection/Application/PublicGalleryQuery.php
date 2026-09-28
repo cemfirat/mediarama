@@ -20,4 +20,6 @@ interface PublicGalleryQuery
     public function media(Uuid $collectionId, int $limit = 120, int $offset = 0): array;
 
     public function canViewMedia(Uuid $mediaId): bool;
+
+    public function isMediaIndexable(Uuid $mediaId): bool;
 }

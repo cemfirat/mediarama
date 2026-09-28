@@ -48,6 +48,11 @@ foreach ($users as [$id, $username, $status]) {
 }
 PHP
 
+# This security test deliberately exercises anonymously readable public routes.
+# New installations default to Private workspace, so make that public-route
+# assumption explicit instead of depending on implicit installation state.
+php bin/console mediarama:platform:deployment-profile public_publishing >/tmp/auth-publication-profile.txt
+
 APP_ENV=prod APP_DEBUG=0 php -S 127.0.0.1:8081 -t public public/index.php >/tmp/mediarama-auth-http.log 2>&1 &
 SERVER_PID=$!
 trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
@@ -479,5 +484,9 @@ $dsn = new Doctrine\DBAL\Tools\DsnParser([
 $db = Doctrine\DBAL\DriverManager::getConnection($dsn->parse((string) getenv('DATABASE_URL')));
 $db->executeStatement("DELETE FROM users WHERE username LIKE 'auth-ci-%'");
 PHP
+
+# Restore the recommended installation default so this security test does not
+# leak public-publishing state into unrelated integration tests.
+php bin/console mediarama:platform:deployment-profile private_workspace >/tmp/auth-private-profile.txt
 
 echo "Production authentication integration checks passed."

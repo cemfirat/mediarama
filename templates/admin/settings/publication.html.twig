@@ -1,0 +1,133 @@
+{% extends 'admin/base.html.twig' %}
+
+{% block title %}Publication & discovery · Mediarama{% endblock %}
+
+{% block admin_body %}
+<div class="uk-flex uk-flex-between uk-flex-middle uk-flex-wrap">
+    <div>
+        <h1 class="uk-heading-small uk-margin-remove-bottom">Publication & discovery</h1>
+        <p class="uk-text-lead uk-margin-small-top">
+            Configure public publishing and search-engine discovery without changing access permissions.
+        </p>
+    </div>
+</div>
+
+{% if saved %}
+    <div class="uk-alert-success" uk-alert>
+        <p>Publication settings were saved.</p>
+    </div>
+{% endif %}
+
+{% if error %}
+    <div class="uk-alert-danger" uk-alert>
+        <p>{{ error }}</p>
+    </div>
+{% endif %}
+
+<div class="uk-alert-primary" uk-alert>
+    <p>
+        Search indexing is not access control. Private, authenticated or restricted content
+        stays protected regardless of the indexing preference.
+    </p>
+</div>
+
+<section class="uk-margin-large-top" aria-labelledby="deployment-profile-heading">
+    <h2 id="deployment-profile-heading" class="uk-h3">Deployment profile</h2>
+    <p class="uk-text-meta">
+        Profiles are safe presets. You can adjust the underlying publication settings independently afterward.
+        The selected profile does not prove that a server is actually isolated by a firewall or VPN.
+    </p>
+
+    <div class="uk-child-width-1-1 uk-child-width-1-3@m uk-grid-match" uk-grid>
+        <div>
+            <div class="uk-card uk-card-default uk-card-body">
+                <h3 class="uk-card-title">Private workspace</h3>
+                <p>Recommended for a working library. Public publishing is off and search indexing defaults to noindex.</p>
+                <form method="post">
+                    <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+                    <input type="hidden" name="action" value="apply_profile">
+                    <input type="hidden" name="profile" value="private_workspace">
+                    <button class="uk-button uk-button-default" type="submit">
+                        Apply profile
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <div>
+            <div class="uk-card uk-card-default uk-card-body">
+                <h3 class="uk-card-title">Public publishing</h3>
+                <p>For intentionally public galleries. Publishing is enabled and the site indexing default is index.</p>
+                <form method="post">
+                    <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+                    <input type="hidden" name="action" value="apply_profile">
+                    <input type="hidden" name="profile" value="public_publishing">
+                    <button class="uk-button uk-button-default" type="submit">
+                        Apply profile
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <div>
+            <div class="uk-card uk-card-default uk-card-body">
+                <h3 class="uk-card-title">Internal / isolated</h3>
+                <p>For LAN, VPN or offline-style deployments. Public publishing and search indexing are disabled by default.</p>
+                <form method="post">
+                    <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+                    <input type="hidden" name="action" value="apply_profile">
+                    <input type="hidden" name="profile" value="internal_isolated">
+                    <button class="uk-button uk-button-default" type="submit">
+                        Apply profile
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="uk-margin-large-top uk-width-2xlarge" aria-labelledby="publication-settings-heading">
+    <h2 id="publication-settings-heading" class="uk-h3">Current settings</h2>
+
+    <form method="post" class="uk-form-stacked">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="action" value="save_settings">
+
+        <div class="uk-margin">
+            <label>
+                <input
+                    class="uk-checkbox"
+                    type="checkbox"
+                    name="public_publishing_enabled"
+                    value="1"
+                    {% if settings.publicPublishingEnabled %}checked{% endif %}
+                >
+                Enable public publishing
+            </label>
+            <div class="uk-text-meta uk-margin-small-top">
+                Turning this off closes Mediarama's anonymous public gallery/search/media delivery boundary.
+                It does not change the saved Collection visibility values.
+            </div>
+        </div>
+
+        <div class="uk-margin">
+            <label class="uk-form-label" for="search-index-default">Site search-index default</label>
+            <div class="uk-form-controls">
+                <select class="uk-select" id="search-index-default" name="search_index_default">
+                    <option value="noindex" {% if settings.searchIndexDefault.value == 'noindex' %}selected{% endif %}>
+                        Exclude from search engines by default
+                    </option>
+                    <option value="index" {% if settings.searchIndexDefault.value == 'index' %}selected{% endif %}>
+                        Allow indexing by default
+                    </option>
+                </select>
+            </div>
+            <div class="uk-text-meta uk-margin-small-top">
+                Collection and MediaAsset overrides remain independent. Access and publication rules always win.
+            </div>
+        </div>
+
+        <button class="uk-button uk-button-primary" type="submit">Save settings</button>
+    </form>
+</section>
+{% endblock %}

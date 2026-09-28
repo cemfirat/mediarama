@@ -72,6 +72,10 @@ final class PublicMediaDerivativeController extends AbstractController
         $response->headers->set('Cache-Control', 'public, max-age=31536000, immutable');
         $response->headers->set('X-Content-Type-Options', 'nosniff');
 
+        if (!$this->gallery->isMediaIndexable($mediaId)) {
+            $response->headers->set('X-Robots-Tag', 'noindex');
+        }
+
         return $response;
     }
 }

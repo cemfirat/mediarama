@@ -36,7 +36,9 @@ when@prod:
                     cache_pool: 'cache.rate_limiter'
 
         access_control:
+            - { path: ^/setup$, roles: PUBLIC_ACCESS }
             - { path: ^/login$, roles: PUBLIC_ACCESS }
+            - { path: ^/admin, roles: ROLE_USER }
             - { path: ^/api/auth/csrf$, roles: ROLE_USER }
             - { path: ^/api/library/media$, roles: ROLE_USER }
             - { path: ^/api/uploads, roles: ROLE_USER }

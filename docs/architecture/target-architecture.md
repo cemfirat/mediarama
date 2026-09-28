@@ -134,10 +134,15 @@ Owns:
 Owns:
 
 - settings
+- deployment-profile/setup defaults;
+- site-level public-publishing capability;
+- site-level search-index default;
 - extension registry
 - audit events
 - diagnostics
 - job monitoring
+
+Deployment-profile labels are operator/setup intent only. They do not replace authentication, Collection authorization or network controls. ADR-0015 defines the separation between deployment exposure, access, publication and search indexing.
 
 ## Database
 
@@ -293,10 +298,12 @@ collection.manage
 comment.create
 comment.moderate
 moderation.approve
-system.manage
+system.admin
 ```
 
 A Collection can apply resource-level policy to users/groups.
+
+`ROLE_USER` is only a coarse authenticated HTTP boundary. Privileged system administration uses the Mediarama `system.admin` permission derived from group membership; browser settings mutations also require CSRF.
 
 Authorization is evaluated before producing a view model or executing a command. Themes cannot override it.
 

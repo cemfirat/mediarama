@@ -16,6 +16,7 @@ services:
             - '../src/Media/Application/ImageDerivativeProfile.php'
             - '../src/Media/Application/StoredObject.php'
             - '../src/Media/Application/InspectedMetadata.php'
+            - '../src/Media/Application/DerivativeCleanupJob.php'
             - '../src/Upload/Application/InspectedContent.php'
             - '../src/Export/Application/MetadataExportPolicy.php'
             - '../src/Security/Application/AuthenticatedUser.php'
@@ -43,6 +44,26 @@ services:
 
     Mediarama\Media\Application\MediaAssetRepository:
         alias: Mediarama\Media\Infrastructure\Persistence\DbalMediaAssetRepository
+
+    Mediarama\Platform\Application\PlatformSettingsRepository:
+        alias: Mediarama\Platform\Infrastructure\Persistence\DbalPlatformSettingsRepository
+
+    Mediarama\Platform\Application\FirstRunSetup:
+        alias: Mediarama\Platform\Infrastructure\Persistence\DbalFirstRunSetup
+
+    Mediarama\Platform\Infrastructure\Security\BrowserSetupToken:
+        arguments:
+            $expectedToken: '%env(MEDIARAMA_SETUP_TOKEN)%'
+
+    Mediarama\Platform\Application\SearchIndexPolicyRepository:
+        alias: Mediarama\Platform\Infrastructure\Persistence\DbalSearchIndexPolicyRepository
+
+    Mediarama\Seo\Application\PublicSitemapQuery:
+        alias: Mediarama\Seo\Infrastructure\Persistence\DbalPublicSitemapQuery
+
+    Mediarama\Seo\Infrastructure\Http\PublicUrlGenerator:
+        arguments:
+            $baseUrl: '%env(PUBLIC_BASE_URL)%'
 
     Mediarama\Media\Infrastructure\Storage\LocalMediaStorage:
         arguments:
@@ -120,6 +141,14 @@ services:
     Mediarama\Media\Application\MediaDerivativeRepository:
         alias: Mediarama\Media\Infrastructure\Persistence\DbalMediaDerivativeRepository
 
+    Mediarama\Media\Application\DerivativeCleanupRepository:
+        alias: Mediarama\Media\Infrastructure\Persistence\DbalDerivativeCleanupRepository
+
+    Mediarama\Media\Application\CleanupSupersededDerivatives:
+        arguments:
+            $graceDays: '%env(int:DERIVATIVE_RETENTION_GRACE_DAYS)%'
+            $keepNewestVersions: '%env(int:DERIVATIVE_RETENTION_KEEP_GENERATIONS)%'
+
     Mediarama\Media\Application\MediaDerivativeRegenerationLock:
         alias: Mediarama\Media\Infrastructure\Persistence\PostgresMediaDerivativeRegenerationLock
 
@@ -194,6 +223,9 @@ services:
 
     Mediarama\Security\Application\CurrentUser:
         alias: Mediarama\Security\Infrastructure\Http\RequestCurrentUser
+
+    Mediarama\Security\Application\SystemAdministrationPolicy:
+        alias: Mediarama\Security\Infrastructure\Authorization\DbalSystemAdministrationPolicy
 
     Mediarama\Security\Infrastructure\Http\RequestCurrentUser:
         arguments:

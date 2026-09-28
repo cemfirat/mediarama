@@ -6,6 +6,7 @@ namespace Mediarama\Export\Infrastructure;
 
 use Mediarama\Export\Application\MetadataExportPolicy;
 use Mediarama\Export\Application\MetadataWriter;
+use Mediarama\Export\Domain\MetadataExportProfile;
 use Mediarama\Media\Domain\MediaAsset;
 use Mediarama\Media\Infrastructure\Metadata\ExifToolProcess;
 
@@ -24,6 +25,7 @@ final readonly class ExifToolMetadataWriter implements MetadataWriter
     public function __construct(
         private ExifToolProcess $process,
         private ExifToolMetadataArguments $arguments,
+        private ExifToolSanitizedCopyArguments $sanitizedCopyArguments,
     ) {
     }
 
@@ -64,6 +66,13 @@ final readonly class ExifToolMetadataWriter implements MetadataWriter
 
             $arguments = [
                 '-overwrite_original',
+                ...(in_array(
+                    $policy->profile,
+                    [MetadataExportProfile::PrivacySafe, MetadataExportProfile::Custom],
+                    true,
+                )
+                    ? $this->sanitizedCopyArguments->build()
+                    : []),
                 ...$this->arguments->build($media, $policy),
                 '--',
                 $outputWithExtension,

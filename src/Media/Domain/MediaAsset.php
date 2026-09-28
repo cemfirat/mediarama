@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Mediarama\Media\Domain;
 
 use DateTimeImmutable;
+use Mediarama\Platform\Domain\SearchIndexPolicy;
 use Symfony\Component\Uid\Uuid;
 
 final class MediaAsset
@@ -43,6 +44,7 @@ final class MediaAsset
         public ?float $latitude = null,
         public ?float $longitude = null,
         public ?string $locationName = null,
+        public SearchIndexPolicy $searchIndexPolicy = SearchIndexPolicy::Inherit,
     ) {
         if ($byteSize < 0) {
             throw new \InvalidArgumentException('Media byte size must not be negative.');
@@ -91,6 +93,7 @@ final class MediaAsset
         ?float $latitude = null,
         ?float $longitude = null,
         ?string $locationName = null,
+        SearchIndexPolicy $searchIndexPolicy = SearchIndexPolicy::Inherit,
     ): self {
         return new self(
             $id,
@@ -125,6 +128,7 @@ final class MediaAsset
             $latitude,
             $longitude,
             $locationName,
+            $searchIndexPolicy,
         );
     }
 

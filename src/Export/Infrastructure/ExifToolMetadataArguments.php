@@ -22,6 +22,11 @@ final readonly class ExifToolMetadataArguments
                 '-GPS:all=',
                 '-XMP-exif:GPSLatitude=',
                 '-XMP-exif:GPSLongitude=',
+                // A human-readable location can be as precise as a home, school,
+                // venue or street address. Privacy-safe therefore removes it rather
+                // than guessing a coarse location from the same source data.
+                '-XMP-iptcCore:Location=',
+                '-IPTC:Sub-location=',
                 '-SerialNumber=',
                 '-InternalSerialNumber=',
             ];
@@ -35,6 +40,8 @@ final readonly class ExifToolMetadataArguments
             'creator' => ['-XMP-dc:Creator=', $media->creator],
             'copyright' => ['-XMP-dc:Rights=', $media->copyright],
             'location_name' => ['-XMP-iptcCore:Location=', $media->locationName],
+            'latitude' => ['-XMP-exif:GPSLatitude=', $media->latitude],
+            'longitude' => ['-XMP-exif:GPSLongitude=', $media->longitude],
         ];
 
         $allowed = $policy->profile === MetadataExportProfile::Custom
@@ -42,21 +49,18 @@ final readonly class ExifToolMetadataArguments
             : null;
 
         foreach ($fields as $name => [$prefix, $value]) {
-            if ($value === null || ($allowed !== null && !isset($allowed[$name]))) {
+            if (
+                $value === null
+                || ($allowed !== null && !isset($allowed[$name]))
+                || (
+                    $policy->profile === MetadataExportProfile::PrivacySafe
+                    && in_array($name, ['location_name', 'latitude', 'longitude'], true)
+                )
+            ) {
                 continue;
             }
 
             $arguments[] = $prefix.$value;
-        }
-
-        if ($policy->profile !== MetadataExportProfile::PrivacySafe
-            && $policy->profile !== MetadataExportProfile::Custom) {
-            if ($media->latitude !== null) {
-                $arguments[] = '-XMP-exif:GPSLatitude='.$media->latitude;
-            }
-            if ($media->longitude !== null) {
-                $arguments[] = '-XMP-exif:GPSLongitude='.$media->longitude;
-            }
         }
 
         return $arguments;

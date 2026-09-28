@@ -46,6 +46,8 @@ jobs:
       APP_ENV: test
       APP_DEBUG: 0
       APP_SECRET: mediarama-ci-only
+      MEDIARAMA_SETUP_TOKEN: mediarama-ci-first-run-token-2026-09-27-abcdef
+      PUBLIC_BASE_URL: http://127.0.0.1:8080
       DATABASE_URL: postgresql://mediarama:mediarama@127.0.0.1:5432/mediarama?serverVersion=18&charset=utf8
       MESSENGER_TRANSPORT_DSN: doctrine://default?queue_name=async&auto_setup=false
       MEDIA_STORAGE_PATH: /tmp/mediarama-media
@@ -78,6 +80,8 @@ jobs:
       IMAGE_WATERMARK_THUMBNAIL: false
       IMAGE_WATERMARK_PREVIEW: false
       IMAGE_WATERMARK_LARGE: false
+      DERIVATIVE_RETENTION_GRACE_DAYS: 400
+      DERIVATIVE_RETENTION_KEEP_GENERATIONS: 2
       UPLOAD_MAX_ASSET_BYTES: 2147483648
       UPLOAD_MAX_CHUNK_BYTES: 16777216
       UPLOAD_DEFAULT_QUOTA_BYTES: 0
@@ -109,7 +113,7 @@ jobs:
       - name: Install runtime tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y exiftool ffmpeg imagemagick webp mariadb-client libheif-examples libheif-plugin-aomdec libheif-plugin-aomenc libheif-plugin-libde265 libheif-plugin-x265
+          sudo apt-get install -y exiftool ffmpeg imagemagick webp icc-profiles-free mariadb-client libheif-examples libheif-plugin-aomdec libheif-plugin-aomenc libheif-plugin-libde265 libheif-plugin-x265
 
       - name: Validate Composer metadata
         run: composer validate --strict
@@ -213,11 +217,23 @@ jobs:
       - name: Show migration status
         run: php bin/console doctrine:migrations:status
 
+      - name: Verify safe new-installation publication defaults
+        run: php tests/Integration/Platform/publication-settings.php
+
+      - name: Verify secure first-run administrator bootstrap
+        run: bash tests/Integration/Security/http-first-run-setup.sh
+
       - name: Verify derivative regeneration persistence and locking
         run: php tests/Integration/Media/derivative-regeneration.php
 
+      - name: Verify derivative retention and cleanup
+        run: php tests/Integration/Media/derivative-cleanup.php
+
       - name: Verify collection access policy
         run: php tests/Integration/Collection/access-policy.php
+
+      - name: Verify system administration permission policy
+        run: php tests/Integration/Security/system-administration-policy.php
 
       - name: Verify authenticated library media search
         run: php tests/Integration/Media/library-search.php
@@ -227,6 +243,9 @@ jobs:
 
       - name: Verify production authentication boundary
         run: tests/Integration/Security/http-authentication.sh
+
+      - name: Verify admin authorization and publication settings
+        run: bash tests/Integration/Security/http-admin-authorization.sh
 
       - name: Verify upload failure lifecycle
         run: tests/Integration/Upload/http-failure-lifecycle.sh
@@ -406,6 +425,8 @@ jobs:
 
       - name: Verify public gallery visibility and derivative delivery
         run: |
+          php bin/console mediarama:platform:deployment-profile public_publishing
+
           php <<'PHP'
           <?php
           require 'vendor/autoload.php';
@@ -880,6 +901,12 @@ jobs:
               }
           }
           PHP
+
+      - name: Verify publication and search-index HTTP policy
+        run: bash tests/Integration/Platform/http-publication-index-policy.sh
+
+      - name: Verify sitemap discovery and privacy boundary
+        run: bash tests/Integration/Seo/http-sitemap-discovery.sh
 
       - name: Verify meaningful Coppermine 1.7 migration sample
         run: |

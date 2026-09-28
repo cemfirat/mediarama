@@ -1,0 +1,170 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Set up Mediarama{% endblock %}
+
+{% block body %}
+<section class="uk-section uk-section-small">
+    <div class="uk-width-xlarge">
+        <div class="uk-margin-large-bottom">
+            <h1 class="uk-heading-small uk-margin-remove-bottom">Set up Mediarama</h1>
+            <p class="uk-text-lead uk-margin-small-top">
+                Create the first administrator and choose how this installation publishes content.
+            </p>
+        </div>
+
+        {% if error %}
+            <div class="uk-alert-danger" uk-alert>
+                <p>{{ error }}</p>
+            </div>
+        {% endif %}
+
+        {% if not browser_setup_configured %}
+            <div class="uk-alert-warning" uk-alert>
+                <p>
+                    Browser setup is locked because no strong MEDIARAMA_SETUP_TOKEN is configured.
+                    Configure a token of at least 32 characters on the server, or use
+                    <code>mediarama:setup:bootstrap-admin</code> from the server console.
+                </p>
+            </div>
+        {% endif %}
+
+        {% if setup_available and browser_setup_configured %}
+            <form method="post" action="{{ path('app_setup') }}" class="uk-form-stacked">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token }}">
+
+                <div class="uk-card uk-card-default uk-card-body uk-margin">
+                    <h2 class="uk-card-title">Administrator</h2>
+
+                    <div class="uk-margin">
+                        <label class="uk-form-label" for="setup-token">Setup token</label>
+                        <div class="uk-form-controls">
+                            <input
+                                class="uk-input"
+                                id="setup-token"
+                                name="setup_token"
+                                type="password"
+                                autocomplete="off"
+                                required
+                            >
+                        </div>
+                        <div class="uk-text-meta uk-margin-small-top">
+                            Use the server-configured one-time setup token. It is never stored in the Mediarama database.
+                        </div>
+                    </div>
+
+                    <div class="uk-margin">
+                        <label class="uk-form-label" for="username">Username</label>
+                        <div class="uk-form-controls">
+                            <input
+                                class="uk-input"
+                                id="username"
+                                name="username"
+                                type="text"
+                                value="{{ username }}"
+                                autocomplete="username"
+                                minlength="3"
+                                maxlength="120"
+                                required
+                            >
+                        </div>
+                    </div>
+
+                    <div class="uk-margin">
+                        <label class="uk-form-label" for="email">Email <span class="uk-text-muted">(optional)</span></label>
+                        <div class="uk-form-controls">
+                            <input
+                                class="uk-input"
+                                id="email"
+                                name="email"
+                                type="email"
+                                value="{{ email }}"
+                                autocomplete="email"
+                                maxlength="254"
+                            >
+                        </div>
+                    </div>
+
+                    <div class="uk-grid-small uk-child-width-1-2@m" uk-grid>
+                        <div>
+                            <label class="uk-form-label" for="password">Password</label>
+                            <div class="uk-form-controls">
+                                <input
+                                    class="uk-input"
+                                    id="password"
+                                    name="password"
+                                    type="password"
+                                    autocomplete="new-password"
+                                    minlength="12"
+                                    required
+                                >
+                            </div>
+                        </div>
+                        <div>
+                            <label class="uk-form-label" for="password-confirmation">Confirm password</label>
+                            <div class="uk-form-controls">
+                                <input
+                                    class="uk-input"
+                                    id="password-confirmation"
+                                    name="password_confirmation"
+                                    type="password"
+                                    autocomplete="new-password"
+                                    minlength="12"
+                                    required
+                                >
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="uk-card uk-card-default uk-card-body uk-margin">
+                    <h2 class="uk-card-title">Deployment profile</h2>
+                    <p>
+                        This is a setup preset for publication and search discovery. It is not a firewall or a replacement for access control.
+                    </p>
+
+                    <div class="uk-margin">
+                        <label>
+                            <input
+                                class="uk-radio"
+                                type="radio"
+                                name="deployment_profile"
+                                value="private_workspace"
+                                {% if deployment_profile == 'private_workspace' %}checked{% endif %}
+                            >
+                            <strong>Private workspace</strong> — recommended. Public publishing is off and search indexing defaults to noindex.
+                        </label>
+                    </div>
+
+                    <div class="uk-margin">
+                        <label>
+                            <input
+                                class="uk-radio"
+                                type="radio"
+                                name="deployment_profile"
+                                value="public_publishing"
+                                {% if deployment_profile == 'public_publishing' %}checked{% endif %}
+                            >
+                            <strong>Public publishing</strong> — deliberately published public resources may be discoverable by search engines.
+                        </label>
+                    </div>
+
+                    <div class="uk-margin">
+                        <label>
+                            <input
+                                class="uk-radio"
+                                type="radio"
+                                name="deployment_profile"
+                                value="internal_isolated"
+                                {% if deployment_profile == 'internal_isolated' %}checked{% endif %}
+                            >
+                            <strong>Internal / isolated</strong> — public publishing and indexing are off. Network isolation still has to be enforced by the deployment environment.
+                        </label>
+                    </div>
+                </div>
+
+                <button class="uk-button uk-button-primary" type="submit">Complete setup</button>
+            </form>
+        {% endif %}
+    </div>
+</section>
+{% endblock %}

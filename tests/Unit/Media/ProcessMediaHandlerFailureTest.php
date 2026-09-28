@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Mediarama\Tests\Unit\Media;
 
 use Mediarama\Media\Application\ApplyInspectedMetadata;
+use Mediarama\Media\Application\DerivativeCleanupRepository;
 use Mediarama\Media\Application\GenerateImageDerivatives;
 use Mediarama\Media\Application\ImageDerivativeGenerator;
 use Mediarama\Media\Application\ImageDerivativeProfile;
@@ -158,10 +159,39 @@ final class ProcessMediaHandlerFailureTest extends TestCase
             }
         };
 
+        $cleanup = new class implements DerivativeCleanupRepository {
+            public function stageSuperseded(
+                DateTimeImmutable $cutoff,
+                int $keepNewestVersions,
+                int $limitVersions,
+            ): int {
+                return 0;
+            }
+
+            public function pending(int $limit): array
+            {
+                return [];
+            }
+
+            public function complete(int $jobId): void
+            {
+            }
+
+            public function isReferenced(StorageObjectId $storage): bool
+            {
+                return false;
+            }
+
+            public function enqueueOrphan(MediaDerivative $derivative): void
+            {
+            }
+        };
+
         $images = new GenerateImageDerivatives(
             $derivatives,
             $generator,
             $storage,
+            $cleanup,
             $regenerationLock,
             [new ImageDerivativeProfile('test', 64, 64)],
             1,

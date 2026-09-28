@@ -16,6 +16,14 @@ The project is **not intended to be a visual reskin of Coppermine**. The goal is
 
 The initial research phase is complete enough to establish the architecture baseline: Mediarama will be a clean implementation rather than a permanent Coppermine fork, PostgreSQL is the primary database, media storage is abstracted, originals are immutable by default, heavy media processing is asynchronous, and UIkit is the presentation foundation. Detailed decisions are recorded as ADRs.
 
+## First-run setup
+
+A new installation starts in a persisted **pending** setup state and defaults to **Private workspace**. The first administrator is created deliberately through `/setup` or the server-side `mediarama:setup:bootstrap-admin` command.
+
+Browser setup is disabled unless a high-entropy `MEDIARAMA_SETUP_TOKEN` is configured on the server. Setup uses the normal Mediarama user/group/`system.admin` permission model, never a permanent bootstrap superuser. Existing or migrated administrator identities are recovered/reconciled instead of silently creating duplicate administrators.
+
+See [docs/architecture/setup-bootstrap.md](docs/architecture/setup-bootstrap.md) for the security model and recovery procedure.
+
 ## Vision
 
 Mediarama should preserve the strengths that made Coppermine useful while removing technical constraints that accumulated over many years.
