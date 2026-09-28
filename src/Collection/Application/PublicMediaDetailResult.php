@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Mediarama\Collection\Application;
 
+use DateTimeImmutable;
 use Symfony\Component\Uid\Uuid;
 
 final readonly class PublicMediaDetailResult
@@ -21,6 +22,8 @@ final readonly class PublicMediaDetailResult
         public ?int $previewVersion,
         public ?int $largeVersion,
         public ?int $videoPresentationVersion,
+        public ?DateTimeImmutable $publishedAt,
+        public ?DateTimeImmutable $publicUpdatedAt,
         public bool $indexable,
     ) {
     }

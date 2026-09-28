@@ -120,6 +120,10 @@ Permissions use stable string keys such as `media.upload`.
 - `processing_state varchar`
 - `moderation_state varchar`
 - `search_index_policy varchar` (`inherit | index | noindex`)
+- `public_published_at timestamptz nullable`
+- `public_updated_at timestamptz nullable`
+- `public_published_origin varchar nullable` (`editorial | imported`)
+- `public_published_source varchar nullable` (required only for imported publication dates)
 - `metadata jsonb not null default '{}'`
 - `created_at timestamptz`
 - `updated_at timestamptz`
@@ -193,12 +197,18 @@ is retryable/idempotent.
 - `description text nullable`
 - `visibility varchar`
 - `search_index_policy varchar` (`inherit | index | noindex`)
+- `public_published_at timestamptz nullable`
+- `public_updated_at timestamptz nullable`
+- `public_published_origin varchar nullable` (`editorial | imported`)
+- `public_published_source varchar nullable` (required only for imported publication dates)
 - `cover_media_id uuid fk media_assets nullable`
 - `position integer default 0`
 - timestamps
 - `deleted_at nullable`
 
 A collection is not a storage directory.
+
+Public publication timestamps are intentionally separate from ordinary creation/update timestamps. Existing rows are not backfilled from `created_at`; see `docs/architecture/publication-timeline.md`.
 
 ## collection_media
 
