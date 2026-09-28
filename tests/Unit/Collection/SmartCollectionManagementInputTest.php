@@ -79,6 +79,36 @@ final class SmartCollectionManagementInputTest extends TestCase
         self::assertSame('between', $payload['rules'][2]['operator']);
     }
 
+    public function testFullSmartV1LibraryFacetsRoundTripLosslessly(): void
+    {
+        $criteria = new LibraryMediaSearchCriteria(
+            mediaType: 'video',
+            locationName: 'Vienna',
+            tag: 'Wedding',
+            minimumRating: 4.0,
+            orientation: 'landscape',
+        );
+
+        $payload = (new LibraryFilterSmartCollectionRuleFactory())
+            ->create($criteria)
+            ->payload();
+
+        self::assertSame([
+            ['field' => 'media_type', 'operator' => 'eq', 'value' => 'video'],
+            ['field' => 'location_name', 'operator' => 'contains', 'value' => 'Vienna'],
+            ['field' => 'tag', 'operator' => 'has_tag', 'value' => 'Wedding'],
+            ['field' => 'rating_average', 'operator' => 'gte', 'value' => 4.0],
+            ['field' => 'orientation', 'operator' => 'eq', 'value' => 'landscape'],
+        ], $payload['rules']);
+    }
+
+    public function testLibraryFacetValueValidationFailsClosed(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+
+        new LibraryMediaSearchCriteria(mediaType: 'executable');
+    }
+
     public function testUnsupportedLibraryFilterFailsClosed(): void
     {
         $this->expectException(\InvalidArgumentException::class);
