@@ -30,6 +30,8 @@ final class Version20260928093000 extends AbstractMigration
                  (mode = 'manual' AND smart_rule IS NULL)
                  OR (
                      mode = 'smart'
+                     AND owner_id IS NOT NULL
+                     AND visibility = 'private'
                      AND smart_rule IS NOT NULL
                      AND jsonb_typeof(smart_rule) = 'object'
                  )
