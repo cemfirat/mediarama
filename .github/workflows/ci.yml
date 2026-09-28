@@ -503,7 +503,7 @@ jobs:
       - name: Verify public MediaAsset identity and SEO boundary
         run: bash tests/Integration/Seo/http-public-media-detail.sh
 
-      - name: Verify public video playback and byte ranges
+      - name: Verify public video playback, VideoObject and sitemap discovery
         run: bash tests/Integration/Seo/http-public-video-playback.sh
 
       - name: Verify publication and search-index HTTP policy

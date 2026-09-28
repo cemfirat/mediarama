@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Mediarama\Seo\Infrastructure\Persistence;
 
+use DateTimeImmutable;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\ParameterType;
 use Mediarama\Platform\Application\PlatformSettingsRepository;
@@ -12,6 +13,7 @@ use Mediarama\Seo\Application\PublicSitemapQuery;
 use Mediarama\Seo\Domain\PublicSitemapCollection;
 use Mediarama\Seo\Domain\PublicSitemapImage;
 use Mediarama\Seo\Domain\PublicSitemapMedia;
+use Mediarama\Seo\Domain\PublicSitemapVideo;
 use Symfony\Component\Uid\Uuid;
 
 final readonly class DbalPublicSitemapQuery implements PublicSitemapQuery
@@ -229,10 +231,34 @@ SQL,
             return [];
         }
 
-        $rows = $this->connection->fetchFirstColumn(
+        $rows = $this->connection->fetchAllAssociative(
             <<<'SQL'
-SELECT m.id
+SELECT
+    m.id,
+    m.media_type,
+    m.title,
+    m.description,
+    m.duration_ms,
+    m.public_published_at,
+    video_presentation.processing_version AS video_presentation_version
 FROM media_assets m
+LEFT JOIN LATERAL (
+    SELECT poster.processing_version
+    FROM media_derivatives poster
+    WHERE poster.media_id = m.id
+      AND poster.kind = 'video'
+      AND poster.profile = 'poster'
+      AND EXISTS (
+          SELECT 1
+          FROM media_derivatives playback
+          WHERE playback.media_id = poster.media_id
+            AND playback.kind = 'video'
+            AND playback.profile = 'browser_mp4'
+            AND playback.processing_version = poster.processing_version
+      )
+    ORDER BY poster.processing_version DESC
+    LIMIT 1
+) video_presentation ON TRUE
 WHERE m.deleted_at IS NULL
   AND m.processing_state = 'ready'
   AND m.moderation_state = 'published'
@@ -266,9 +292,28 @@ SQL,
         );
 
         return array_map(
-            static fn (mixed $id): PublicSitemapMedia => new PublicSitemapMedia(
-                Uuid::fromString((string) $id),
-            ),
+            static function (array $row): PublicSitemapMedia {
+                $video = null;
+
+                if (
+                    (string) $row['media_type'] === 'video'
+                    && $row['video_presentation_version'] !== null
+                    && $row['public_published_at'] !== null
+                ) {
+                    $video = new PublicSitemapVideo(
+                        $row['title'] !== null ? (string) $row['title'] : null,
+                        $row['description'] !== null ? (string) $row['description'] : null,
+                        (int) $row['video_presentation_version'],
+                        $row['duration_ms'] !== null ? (int) $row['duration_ms'] : null,
+                        new DateTimeImmutable((string) $row['public_published_at']),
+                    );
+                }
+
+                return new PublicSitemapMedia(
+                    Uuid::fromString((string) $row['id']),
+                    $video,
+                );
+            },
             $rows,
         );
     }
