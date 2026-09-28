@@ -6,6 +6,8 @@ namespace Mediarama\Organization\Domain;
 
 final readonly class OrganizationEvidence
 {
+    public string $summary;
+
     public function __construct(
         public OrganizationEvidenceSource $source,
         string $summary,
@@ -22,5 +24,4 @@ final readonly class OrganizationEvidence
         $this->summary = $summary;
     }
 
-    public string $summary;
 }

@@ -139,17 +139,41 @@ final readonly class DbalOrganizationProposalStore implements OrganizationPropos
             $proposalId = Uuid::v7();
             $now = (new DateTimeImmutable())->format(DATE_ATOM);
 
-            $connection->insert('organization_proposals', [
-                'id' => $proposalId->toRfc4122(),
-                'run_id' => $runId->toRfc4122(),
-                'proposal_type' => $payload->type->value,
-                'status' => OrganizationProposalStatus::PendingReview->value,
-                'payload' => $payload->toJson(),
-                'rationale' => $rationale,
-                'reviewed_at' => null,
-                'created_at' => $now,
-                'updated_at' => $now,
-            ]);
+            $connection->executeStatement(
+                <<<'SQL'
+INSERT INTO organization_proposals (
+    id,
+    run_id,
+    proposal_type,
+    status,
+    payload,
+    rationale,
+    reviewed_at,
+    created_at,
+    updated_at
+) VALUES (
+    :id,
+    :run_id,
+    :proposal_type,
+    :status,
+    CAST(:payload AS jsonb),
+    :rationale,
+    NULL,
+    :created_at,
+    :updated_at
+)
+SQL,
+                [
+                    'id' => $proposalId->toRfc4122(),
+                    'run_id' => $runId->toRfc4122(),
+                    'proposal_type' => $payload->type->value,
+                    'status' => OrganizationProposalStatus::PendingReview->value,
+                    'payload' => $payload->toJson(),
+                    'rationale' => $rationale,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ],
+            );
 
             $this->insertProposalMedia(
                 $connection,
