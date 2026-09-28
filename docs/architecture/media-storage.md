@@ -161,9 +161,43 @@ Derivative keys are deterministic from:
 
 This enables retry-safe processing.
 
-Explicit regeneration never overwrites the currently published derivative identity. It allocates the next image processing version under a per-media advisory lock, writes the new deterministic versioned objects, and only then publishes the complete derivative-record batch transactionally. Existing versioned derivative keys remain immutable/cache-safe from the public consumer's perspective.
+Explicit regeneration never overwrites the currently published derivative
+identity. It allocates the next processing version under a per-media/per-kind
+advisory lock, writes the new deterministic versioned objects, and only then
+publishes the complete derivative-record batch transactionally. Existing
+versioned derivative keys remain immutable/cache-safe from the public
+consumer's perspective.
 
-A successful retry may detect the same valid object and avoid duplicate database records.
+Image generations currently contain `thumbnail`, `preview` and `large`.
+Video generations contain `poster` and `browser_mp4` as one atomic
+presentation set. The MP4 is a generated browser rendition; the immutable source
+is not reused as a public playback URL.
+
+A successful retry may detect the same valid object and avoid duplicate database
+records.
+
+### Video presentation generation
+
+Video sources are probed with FFprobe after ingestion. Canonical MediaAsset
+geometry and duration come from the source probe rather than browser/client
+claims.
+
+The first browser presentation profile uses server-configured FFmpeg policy:
+
+- bounded dimensions without intentional upscaling;
+- H.264 video;
+- `yuv420p`;
+- AAC audio when the source has audio;
+- MP4 `faststart` layout;
+- global, per-stream and chapter metadata stripped from the generated presentation;
+- one bounded JPEG poster frame.
+
+Codec, quality, size and timeout values are deployment configuration and are not
+accepted as HTTP/user-supplied FFmpeg arguments.
+
+A failed video generation does not publish a partial derivative generation. Any
+known output written before failure is deleted immediately or recorded in the
+existing durable derivative-cleanup queue.
 
 ### Derivative retention and garbage collection
 

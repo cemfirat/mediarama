@@ -265,6 +265,25 @@ final class MediaAsset
         $this->updatedAt = new DateTimeImmutable();
     }
 
+    public function setVideoProperties(
+        int $width,
+        int $height,
+        ?int $durationMs,
+    ): void {
+        if ($width < 1 || $height < 1) {
+            throw new \InvalidArgumentException('Video dimensions must be positive.');
+        }
+
+        if ($durationMs !== null && $durationMs < 0) {
+            throw new \InvalidArgumentException('Video duration must not be negative.');
+        }
+
+        $this->width = $width;
+        $this->height = $height;
+        $this->durationMs = $durationMs;
+        $this->updatedAt = new DateTimeImmutable();
+    }
+
     public function markReady(): void
     {
         $this->processingState = ProcessingState::Ready;

@@ -38,6 +38,15 @@ final readonly class PublicMediaPageMetadataFactory
             $imageAlt = $media->title !== null && trim($media->title) !== ''
                 ? trim($media->title)
                 : 'Public image';
+        } elseif ($media->hasVideoPresentation()) {
+            $imageUrl = $this->urls->route('public_video_derivative', [
+                'id' => $media->id->toRfc4122(),
+                'version' => $media->videoPresentationVersion,
+                'profile' => 'poster',
+            ]);
+            $imageAlt = $media->title !== null && trim($media->title) !== ''
+                ? trim($media->title)
+                : 'Video poster';
         }
 
         return new PublicPageMetadata(

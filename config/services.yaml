@@ -17,6 +17,9 @@ services:
             - '../src/Media/Application/StoredObject.php'
             - '../src/Media/Application/InspectedMetadata.php'
             - '../src/Media/Application/DerivativeCleanupJob.php'
+            - '../src/Media/Application/VideoProperties.php'
+            - '../src/Media/Application/VideoPosterProfile.php'
+            - '../src/Media/Application/VideoPlaybackProfile.php'
             - '../src/Upload/Application/InspectedContent.php'
             - '../src/Export/Application/MetadataExportPolicy.php'
             - '../src/Security/Application/AuthenticatedUser.php'
@@ -84,6 +87,21 @@ services:
             $timeoutSeconds: '%env(float:FFPROBE_PROCESS_TIMEOUT_SECONDS)%'
             $probeSizeBytes: '%env(int:FFPROBE_PROBE_SIZE_BYTES)%'
             $analyzeDurationMicroseconds: '%env(int:FFPROBE_ANALYZE_DURATION_US)%'
+
+    Mediarama\Media\Application\InspectVideoProperties:
+        alias: Mediarama\Media\Infrastructure\Probe\FfprobeVideoInspector
+
+    Mediarama\Media\Infrastructure\Probe\FfprobeProcess:
+        arguments:
+            $binary: '%env(FFPROBE_BINARY)%'
+            $timeoutSeconds: '%env(float:FFPROBE_PROCESS_TIMEOUT_SECONDS)%'
+            $probeSizeBytes: '%env(int:FFPROBE_PROBE_SIZE_BYTES)%'
+            $analyzeDurationMicroseconds: '%env(int:FFPROBE_ANALYZE_DURATION_US)%'
+
+    Mediarama\Media\Infrastructure\Video\FfmpegProcess:
+        arguments:
+            $binary: '%env(FFMPEG_BINARY)%'
+            $timeoutSeconds: '%env(float:FFMPEG_PROCESS_TIMEOUT_SECONDS)%'
 
     Mediarama\Collection\Application\CollectionAccessPolicy:
         alias: Mediarama\Collection\Infrastructure\Persistence\DbalCollectionAccessPolicy
@@ -155,6 +173,12 @@ services:
     Mediarama\Media\Application\ImageDerivativeGenerator:
         alias: Mediarama\Media\Infrastructure\Image\ImageMagickDerivativeGenerator
 
+    Mediarama\Media\Application\VideoPosterGenerator:
+        alias: Mediarama\Media\Infrastructure\Video\FfmpegVideoDerivativeGenerator
+
+    Mediarama\Media\Application\VideoPlaybackGenerator:
+        alias: Mediarama\Media\Infrastructure\Video\FfmpegVideoDerivativeGenerator
+
     Mediarama\Media\Infrastructure\Image\ImageMagickResourceLimits:
         arguments:
             $memory: '%env(IMAGEMAGICK_LIMIT_MEMORY)%'
@@ -212,6 +236,33 @@ services:
                 - '@mediarama.media.profile.thumbnail'
                 - '@mediarama.media.profile.preview'
                 - '@mediarama.media.profile.large'
+
+
+    mediarama.media.video.poster_profile:
+        class: Mediarama\Media\Application\VideoPosterProfile
+        arguments:
+            - 'poster'
+            - '%env(int:VIDEO_POSTER_MAX_WIDTH)%'
+            - '%env(int:VIDEO_POSTER_MAX_HEIGHT)%'
+            - 3
+
+    mediarama.media.video.playback_profile:
+        class: Mediarama\Media\Application\VideoPlaybackProfile
+        arguments:
+            - 'browser_mp4'
+            - '%env(int:VIDEO_PLAYBACK_MAX_WIDTH)%'
+            - '%env(int:VIDEO_PLAYBACK_MAX_HEIGHT)%'
+            - '%env(VIDEO_PLAYBACK_VIDEO_CODEC)%'
+            - '%env(int:VIDEO_PLAYBACK_CRF)%'
+            - '%env(VIDEO_PLAYBACK_PRESET)%'
+            - '%env(VIDEO_PLAYBACK_AUDIO_CODEC)%'
+            - '%env(VIDEO_PLAYBACK_AUDIO_BITRATE)%'
+
+    Mediarama\Media\Application\GenerateVideoDerivatives:
+        arguments:
+            $posterProfile: '@mediarama.media.video.poster_profile'
+            $playbackProfile: '@mediarama.media.video.playback_profile'
+            $processingVersion: 1
 
 
     Mediarama\Media\Application\LibraryMediaSearch:

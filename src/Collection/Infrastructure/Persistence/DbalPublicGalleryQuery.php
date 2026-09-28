@@ -155,7 +155,8 @@ SELECT
     m.search_index_policy,
     thumbnail.processing_version AS thumbnail_version,
     preview.processing_version AS preview_version,
-    large.processing_version AS large_version
+    large.processing_version AS large_version,
+    video_presentation.processing_version AS video_presentation_version
 FROM media_assets m
 LEFT JOIN LATERAL (
     SELECT d.processing_version
@@ -184,6 +185,23 @@ LEFT JOIN LATERAL (
     ORDER BY d.processing_version DESC
     LIMIT 1
 ) large ON TRUE
+LEFT JOIN LATERAL (
+    SELECT poster.processing_version
+    FROM media_derivatives poster
+    WHERE poster.media_id = m.id
+      AND poster.kind = 'video'
+      AND poster.profile = 'poster'
+      AND EXISTS (
+          SELECT 1
+          FROM media_derivatives playback
+          WHERE playback.media_id = poster.media_id
+            AND playback.kind = 'video'
+            AND playback.profile = 'browser_mp4'
+            AND playback.processing_version = poster.processing_version
+      )
+    ORDER BY poster.processing_version DESC
+    LIMIT 1
+) video_presentation ON TRUE
 WHERE m.id = :media
   AND m.deleted_at IS NULL
   AND m.processing_state = 'ready'
@@ -217,6 +235,7 @@ SQL,
             $row['thumbnail_version'] !== null ? (int) $row['thumbnail_version'] : null,
             $row['preview_version'] !== null ? (int) $row['preview_version'] : null,
             $row['large_version'] !== null ? (int) $row['large_version'] : null,
+            $row['video_presentation_version'] !== null ? (int) $row['video_presentation_version'] : null,
             $policy->resolve($settings->searchIndexDefault),
         );
     }

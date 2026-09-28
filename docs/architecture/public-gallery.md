@@ -63,17 +63,40 @@ can continue to use lightbox derivatives.
 
 ## Derivatives
 
-Public delivery exposes generated image derivatives only.
+Public delivery exposes generated presentation derivatives only. The immutable
+original has no public route.
 
-URL shape:
+Image URL shape:
 
 `/media/{media-id}/derivatives/v{processing-version}/{profile}`
 
-Allowed public profiles are currently `thumbnail`, `preview` and `large`.
+Allowed public image profiles are currently `thumbnail`, `preview` and
+`large`.
 
-Before streaming a derivative, Mediarama rechecks that the media is still reachable through an effectively public collection and still published/ready. The immutable original has no public route.
+Video presentation URL shape:
 
-Derivative URLs carry a processing version and may therefore use long-lived immutable caching.
+`/media/{media-id}/video/v{processing-version}/{profile}`
+
+The first video generation contains a complete pair:
+
+- `poster` — bounded JPEG poster frame;
+- `browser_mp4` — bounded H.264/AAC MP4 presentation rendition.
+
+The public MediaAsset page renders the MP4 through a normal HTML `<video
+controls>` element with the generated poster. It does not autoplay and it does
+not fall back to the immutable original when a presentation derivative is
+missing.
+
+Before streaming any derivative, Mediarama rechecks that the media is still
+reachable through an effectively public collection and still published/ready.
+
+Versioned playback supports single HTTP byte ranges so browsers can seek without
+turning the source/original into a public download contract. Multiple ranges are
+deliberately not implemented in the first version.
+
+Derivative URLs carry a processing version and therefore use long-lived
+immutable caching. MediaAsset `noindex` remains an independent HTTP response
+policy on derivative delivery.
 
 ## Search-engine discovery
 
@@ -93,11 +116,14 @@ The separate public-search read model applies an even smaller output contract; r
 
 ## Verification
 
-CI exercises public root and collection rendering, the stable MediaAsset detail route, derivative delivery, multi-membership privacy, ancestor/password visibility, processing/moderation safety gates and search-index behavior. HTTP smoke failures print the application server log before failing.
+CI exercises public root and collection rendering, the stable MediaAsset detail
+route, image derivative delivery, video processing, poster/playback generation,
+byte-range playback, multi-membership privacy, ancestor/password visibility,
+processing/moderation safety gates and search-index behavior. HTTP smoke
+failures print the application server log before failing.
 
 ## Next
 
 - cursor pagination for large public collections;
-- video poster/rendition delivery;
 - configurable collection covers;
 - password access flow with modern password hashing.
