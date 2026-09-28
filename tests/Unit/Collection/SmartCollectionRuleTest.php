@@ -177,7 +177,7 @@ final class SmartCollectionRuleTest extends TestCase
         self::assertStringContainsString('smart_t.slug', $compiled->sql);
         self::assertStringContainsString('smart_t.name', $compiled->sql);
         self::assertStringNotContainsString('Wedding', $compiled->sql);
-        self::assertSame(['Wedding'], array_values($compiled->parameters));
+        self::assertSame(['Wedding', 'Wedding'], array_values($compiled->parameters));
     }
 
     /**
