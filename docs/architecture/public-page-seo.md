@@ -66,7 +66,7 @@ When a public title exists:
 - social title: public media title
 
 Without a public title the deterministic social/title fallback is based on the
-media type: `Image`, `Video`, `Audio` or `Media`.
+media type. Video fallback titles include the stable MediaAsset UUID (`Video {uuid}`) so Google's required `VideoObject.name` remains unique even when editors have not supplied a public title.
 
 The public description is trimmed and whitespace-normalized. Empty
 descriptions use a media-type fallback such as
@@ -102,10 +102,10 @@ reachable `noindex` page. The derivative keeps its own MediaAsset
 `X-Robots-Tag` behavior.
 
 Public video MediaAssets use the generated poster derivative as `og:image`.
-The HTML page has a real generated MP4 presentation route, but Mediarama does
-not yet emit `og:video` or video-rich structured data. Rich video discovery is
-kept behind a stricter follow-up boundary so required publication metadata and
-crawl semantics are truthful rather than synthesized.
+The HTML page uses the generated browser MP4 presentation route. `og:video`
+remains intentionally absent for now; rich video discovery is carried by
+schema.org `VideoObject` plus the video extension in the canonical MediaAsset
+sitemap.
 
 ## Structured data
 
@@ -136,10 +136,19 @@ schema.org `ImageObject` containing only deliberate public fields:
 A reachable MediaAsset with effective `noindex` keeps canonical/Open Graph
 metadata but emits no index-oriented JSON-LD.
 
-Video pages receive stable public identity, social/canonical metadata, a
-generated poster and a generated browser MP4 presentation. They still do not
-emit `VideoObject`: Mediarama does not yet persist a truthful public
-publication/upload date required by the intended video discovery contract.
+An effectively indexable video MediaAsset emits schema.org `VideoObject` only
+when all of the following are true:
+
+- a complete matching poster + browser-MP4 presentation version exists;
+- `public_published_at` contains a truthful first-publication time;
+- the MediaAsset itself resolves to `index`.
+
+The object uses the generated poster as `thumbnailUrl`, the generated browser
+MP4 as `contentUrl`, canonical FFprobe-backed duration as ISO 8601
+`duration`, and the persisted first-publication time as `uploadDate`.
+Unknown publication time suppresses `VideoObject`; Mediarama never substitutes
+`created_at` or render-time `now`.
+
 Audio pages remain identity/metadata-only until an explicit browser presentation
 contract is implemented.
 
@@ -194,14 +203,17 @@ Integration tests cover:
 - multi-membership privacy;
 - source filename/raw metadata/GPS/storage-field exclusion;
 - video poster/playback URL generation from the trusted public origin;
-- public video playback without original-file exposure.
+- public video playback without original-file exposure;
+- truthful `VideoObject` publication/duration/content URLs;
+- video-sitemap and `VideoObject` consistency;
+- suppression of video discovery for unknown publication time, `noindex`,
+  inaccessible, unpublished and non-ready video resources.
 
 ## Future work
 
 The following stay outside this foundation:
 
 - editable SEO-title/description overrides;
-- `VideoObject` and video sitemap output;
 - deliberately published Smart Collection SEO;
 - richer nested Collection ancestry in breadcrumbs once that public navigation
   model is finalized;

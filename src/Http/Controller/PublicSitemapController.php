@@ -255,11 +255,14 @@ final class PublicSitemapController extends AbstractController
 
     private function truncate(string $value, int $maximumCharacters): string
     {
-        if (mb_strlen($value, 'UTF-8') <= $maximumCharacters) {
+        $length = iconv_strlen($value, 'UTF-8');
+        if ($length === false || $length <= $maximumCharacters) {
             return $value;
         }
 
-        return mb_substr($value, 0, $maximumCharacters, 'UTF-8');
+        $truncated = iconv_substr($value, 0, $maximumCharacters, 'UTF-8');
+
+        return is_string($truncated) ? $truncated : $value;
     }
 
     private function xmlResponse(string $xml): Response
