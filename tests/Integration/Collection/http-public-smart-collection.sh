@@ -273,11 +273,17 @@ grep -i -F 'x-robots-tag: noindex' /tmp/public-smart.headers >/dev/null
 grep -F "rel=\"canonical\" href=\"$CANONICAL_ORIGIN/collections/$SMART_ID\"" /tmp/public-smart.html >/dev/null
 ! grep -F "$HOSTILE_HOST" /tmp/public-smart.html >/dev/null
 
-curl --fail --silent --show-error --header "Host: $HOSTILE_HOST" "$BASE_URL/sitemap.xml" -o /tmp/public-smart-sitemap-index.xml
-if grep -F "/collections/$SMART_ID" /tmp/public-smart-sitemap-index.xml >/dev/null; then
-    echo "FAIL noindex Smart Collection leaked into sitemap index"
+NOINDEX_SITEMAP_STATUS="$(curl --silent --show-error --header "Host: $HOSTILE_HOST" --output /tmp/public-smart-noindex-collections.xml --write-out '%{http_code}' "$BASE_URL/sitemaps/collections-1.xml")"
+if [ "$NOINDEX_SITEMAP_STATUS" = "200" ]; then
+    if grep -F "<loc>$CANONICAL_ORIGIN/collections/$SMART_ID</loc>" /tmp/public-smart-noindex-collections.xml >/dev/null; then
+        echo "FAIL noindex Smart Collection leaked into Collection sitemap"
+        exit 1
+    fi
+elif [ "$NOINDEX_SITEMAP_STATUS" != "404" ]; then
+    echo "FAIL unexpected Collection sitemap status while Smart Collection is noindex: $NOINDEX_SITEMAP_STATUS"
     exit 1
 fi
+echo "OK noindex Smart Collection stays out of sitemap discovery"
 
 php <<'PHP'
 <?php
