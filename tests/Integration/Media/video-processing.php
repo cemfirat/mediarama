@@ -140,6 +140,9 @@ try {
         '-pix_fmt', 'yuv420p',
         '-c:a', 'aac',
         '-movflags', '+faststart',
+        '-metadata', 'title=PRIVATE_GLOBAL_VIDEO_METADATA_SENTINEL',
+        '-metadata:s:v:0', 'title=PRIVATE_VIDEO_STREAM_METADATA_SENTINEL',
+        '-metadata:s:a:0', 'title=PRIVATE_AUDIO_STREAM_METADATA_SENTINEL',
         $fixture,
     ]);
 
@@ -255,6 +258,31 @@ SQL,
         $playbackProperties->videoCodec === 'h264',
         'browser MP4 uses the configured H.264 video codec',
     );
+
+    $metadataProbe = new Process([
+        $ffprobeBinary,
+        '-v', 'error',
+        '-show_entries', 'format_tags:stream_tags',
+        '-of', 'json=c=1',
+        $playbackPath,
+    ]);
+    $metadataProbe->setTimeout(30.0);
+    $metadataProbe->run();
+    requireVideoProcessing(
+        $metadataProbe->isSuccessful(),
+        'generated browser MP4 metadata is inspectable',
+    );
+    $renderedTags = $metadataProbe->getOutput();
+    foreach ([
+        'PRIVATE_GLOBAL_VIDEO_METADATA_SENTINEL',
+        'PRIVATE_VIDEO_STREAM_METADATA_SENTINEL',
+        'PRIVATE_AUDIO_STREAM_METADATA_SENTINEL',
+    ] as $privateTag) {
+        requireVideoProcessing(
+            !str_contains($renderedTags, $privateTag),
+            'generated browser MP4 strips source metadata sentinel '.$privateTag,
+        );
+    }
 
     $metadata = $playback->metadata;
     requireVideoProcessing(

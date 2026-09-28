@@ -59,6 +59,8 @@ final readonly class FfmpegVideoDerivativeGenerator implements VideoPosterGenera
                 '-sn',
                 '-dn',
                 '-map_metadata', '-1',
+                '-map_metadata:s', '-1',
+                '-map_chapters', '-1',
                 '-q:v', (string) $profile->qualityScale,
                 $output,
             ]);
@@ -125,6 +127,8 @@ final readonly class FfmpegVideoDerivativeGenerator implements VideoPosterGenera
                 '-sn',
                 '-dn',
                 '-map_metadata', '-1',
+                '-map_metadata:s', '-1',
+                '-map_chapters', '-1',
                 '-vf', $this->scaleFilter($profile->maximumWidth, $profile->maximumHeight),
                 '-c:v', $profile->videoCodec,
                 '-preset', $profile->preset,

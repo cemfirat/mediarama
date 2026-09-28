@@ -189,7 +189,7 @@ The first browser presentation profile uses server-configured FFmpeg policy:
 - `yuv420p`;
 - AAC audio when the source has audio;
 - MP4 `faststart` layout;
-- source metadata stripped from the generated presentation;
+- global, per-stream and chapter metadata stripped from the generated presentation;
 - one bounded JPEG poster frame.
 
 Codec, quality, size and timeout values are deployment configuration and are not
