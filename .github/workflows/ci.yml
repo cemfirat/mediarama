@@ -247,6 +247,9 @@ jobs:
       - name: Verify AI provider capability, preflight and privacy boundary
         run: php tests/Integration/Organization/organization-ai-preflight.php
 
+      - name: Verify organization proposal review and atomic application
+        run: php tests/Integration/Organization/organization-review-application.php
+
       - name: Validate production security container
         run: APP_ENV=prod APP_DEBUG=0 php bin/console lint:container
 
@@ -261,6 +264,9 @@ jobs:
 
       - name: Verify deliberate public Smart Collection publication and SEO boundary
         run: bash tests/Integration/Collection/http-public-smart-collection.sh
+
+      - name: Verify authenticated organization review HTTP workflow
+        run: bash tests/Integration/Organization/http-organization-review.sh
 
       - name: Verify upload failure lifecycle
         run: tests/Integration/Upload/http-failure-lifecycle.sh
