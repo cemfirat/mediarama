@@ -204,6 +204,23 @@ assert_count() {
   fi
 }
 
+assert_media_detail_absent_from_index() {
+  local index_file="$1"
+  local label="$2"
+  local sitemap_url
+
+  while IFS= read -r sitemap_url; do
+    if [ -z "$sitemap_url" ]; then
+      continue
+    fi
+
+    fetch_xml "$sitemap_url" /tmp/sitemap-absence.headers /tmp/sitemap-absence.xml
+    assert_absent "<loc>$PUBLIC_BASE_URL/media/$MEDIA_ID</loc>" /tmp/sitemap-absence.xml "$label"
+  done < <(
+    grep -oE '<loc>[^<]+/sitemaps/media-[1-9][0-9]*\.xml</loc>' "$index_file"       | sed -E 's#</?loc>##g'       || true
+  )
+}
+
 fetch_xml "$BASE_URL/sitemap.xml" /tmp/sitemap-index.headers /tmp/sitemap-index.xml -H 'Host: attacker.invalid'
 assert_contains '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' /tmp/sitemap-index.xml "sitemap index namespace"
 assert_contains "$PUBLIC_BASE_URL/sitemaps/collections-1.xml" /tmp/sitemap-index.xml "configured canonical Collection sitemap origin"
@@ -246,8 +263,7 @@ assert_contains "$PUBLIC_BASE_URL/collections/$COLLECTION_ID" /tmp/sitemap-media
 assert_absent "/media/$MEDIA_ID/derivatives/" /tmp/sitemap-media-noindex.xml "noindex media resource"
 
 fetch_xml "$BASE_URL/sitemap.xml" /tmp/sitemap-media-noindex-index.headers /tmp/sitemap-media-noindex-index.xml
-assert_absent "$PUBLIC_BASE_URL/sitemaps/media-1.xml" /tmp/sitemap-media-noindex-index.xml "media sitemap chunk when no MediaAsset is indexable"
-expect_status 404 "$BASE_URL/sitemaps/media-1.xml" /tmp/sitemap-media-noindex-detail.html
+assert_media_detail_absent_from_index /tmp/sitemap-media-noindex-index.xml "noindex MediaAsset canonical page"
 
 php bin/console mediarama:platform:publication-settings --public-publishing=on --search-index-default=noindex >/dev/null
 php bin/console mediarama:search-index:set collection "$CATEGORY_ID" inherit >/dev/null
@@ -261,8 +277,7 @@ assert_absent "/collections/$COLLECTION_ID" /tmp/sitemap-site-noindex.xml "inher
 assert_absent "/media/$MEDIA_ID/derivatives/" /tmp/sitemap-site-noindex.xml "inherited noindex media"
 
 fetch_xml "$BASE_URL/sitemap.xml" /tmp/sitemap-site-noindex-index.headers /tmp/sitemap-site-noindex-index.xml
-assert_absent "$PUBLIC_BASE_URL/sitemaps/media-1.xml" /tmp/sitemap-site-noindex-index.xml "inherited noindex MediaAsset sitemap chunk"
-expect_status 404 "$BASE_URL/sitemaps/media-1.xml" /tmp/sitemap-site-noindex-media.html
+assert_media_detail_absent_from_index /tmp/sitemap-site-noindex-index.xml "inherited noindex MediaAsset canonical page"
 
 php bin/console mediarama:search-index:set collection "$COLLECTION_ID" index >/dev/null
 php bin/console mediarama:search-index:set media "$MEDIA_ID" index >/dev/null
@@ -287,7 +302,8 @@ PHP
 fetch_xml "$BASE_URL/sitemaps/collections-1.xml" /tmp/sitemap-private-parent.headers /tmp/sitemap-private-parent.xml
 assert_absent "/collections/$COLLECTION_ID" /tmp/sitemap-private-parent.xml "collection behind inaccessible ancestor"
 assert_absent "/media/$MEDIA_ID/derivatives/" /tmp/sitemap-private-parent.xml "media behind inaccessible ancestor"
-expect_status 404 "$BASE_URL/sitemaps/media-1.xml" /tmp/sitemap-private-parent-media.html
+fetch_xml "$BASE_URL/sitemap.xml" /tmp/sitemap-private-parent-index.headers /tmp/sitemap-private-parent-index.xml
+assert_media_detail_absent_from_index /tmp/sitemap-private-parent-index.xml "MediaAsset behind inaccessible ancestry"
 
 php <<'PHP'
 <?php
@@ -302,7 +318,8 @@ PHP
 fetch_xml "$BASE_URL/sitemaps/collections-1.xml" /tmp/sitemap-unpublished.headers /tmp/sitemap-unpublished.xml
 assert_contains "$PUBLIC_BASE_URL/collections/$COLLECTION_ID" /tmp/sitemap-unpublished.xml "public collection with unpublished media"
 assert_absent "/media/$MEDIA_ID/derivatives/" /tmp/sitemap-unpublished.xml "unpublished media"
-expect_status 404 "$BASE_URL/sitemaps/media-1.xml" /tmp/sitemap-unpublished-media.html
+fetch_xml "$BASE_URL/sitemap.xml" /tmp/sitemap-unpublished-index.headers /tmp/sitemap-unpublished-index.xml
+assert_media_detail_absent_from_index /tmp/sitemap-unpublished-index.xml "unpublished MediaAsset canonical page"
 
 php <<'PHP'
 <?php
