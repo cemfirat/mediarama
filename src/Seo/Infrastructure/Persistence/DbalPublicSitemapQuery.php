@@ -11,6 +11,7 @@ use Mediarama\Platform\Domain\SearchIndexPolicy;
 use Mediarama\Seo\Application\PublicSitemapQuery;
 use Mediarama\Seo\Domain\PublicSitemapCollection;
 use Mediarama\Seo\Domain\PublicSitemapImage;
+use Mediarama\Seo\Domain\PublicSitemapMedia;
 use Symfony\Component\Uid\Uuid;
 
 final readonly class DbalPublicSitemapQuery implements PublicSitemapQuery
@@ -47,9 +48,7 @@ SQL,
 
     public function indexableCollections(int $limit, int $offset): array
     {
-        if ($limit < 1 || $limit > 1000 || $offset < 0) {
-            throw new \InvalidArgumentException('Invalid sitemap pagination.');
-        }
+        $this->assertPagination($limit, $offset);
 
         $settings = $this->settings->current();
         if (!$settings->publicPublishingEnabled) {
@@ -185,5 +184,99 @@ SQL,
             ),
             array_values($collections),
         );
+    }
+
+    public function indexableMediaCount(): int
+    {
+        $settings = $this->settings->current();
+        if (!$settings->publicPublishingEnabled) {
+            return 0;
+        }
+
+        return (int) $this->connection->fetchOne(
+            <<<'SQL'
+SELECT COUNT(*)
+FROM media_assets m
+WHERE m.deleted_at IS NULL
+  AND m.processing_state = 'ready'
+  AND m.moderation_state = 'published'
+  AND (
+      m.search_index_policy = 'index'
+      OR (
+          m.search_index_policy = 'inherit'
+          AND :site_index_default = TRUE
+      )
+  )
+  AND EXISTS (
+      SELECT 1
+      FROM collection_media cm
+      JOIN effective_public_collections visible
+        ON visible.collection_id = cm.collection_id
+      WHERE cm.media_id = m.id
+  )
+SQL,
+            ['site_index_default' => $settings->searchIndexDefault === SearchIndexPolicy::Index],
+            ['site_index_default' => ParameterType::BOOLEAN],
+        );
+    }
+
+    public function indexableMedia(int $limit, int $offset): array
+    {
+        $this->assertPagination($limit, $offset);
+
+        $settings = $this->settings->current();
+        if (!$settings->publicPublishingEnabled) {
+            return [];
+        }
+
+        $rows = $this->connection->fetchFirstColumn(
+            <<<'SQL'
+SELECT m.id
+FROM media_assets m
+WHERE m.deleted_at IS NULL
+  AND m.processing_state = 'ready'
+  AND m.moderation_state = 'published'
+  AND (
+      m.search_index_policy = 'index'
+      OR (
+          m.search_index_policy = 'inherit'
+          AND :site_index_default = TRUE
+      )
+  )
+  AND EXISTS (
+      SELECT 1
+      FROM collection_media cm
+      JOIN effective_public_collections visible
+        ON visible.collection_id = cm.collection_id
+      WHERE cm.media_id = m.id
+  )
+ORDER BY m.created_at ASC, m.id ASC
+LIMIT :limit OFFSET :offset
+SQL,
+            [
+                'site_index_default' => $settings->searchIndexDefault === SearchIndexPolicy::Index,
+                'limit' => $limit,
+                'offset' => $offset,
+            ],
+            [
+                'site_index_default' => ParameterType::BOOLEAN,
+                'limit' => ParameterType::INTEGER,
+                'offset' => ParameterType::INTEGER,
+            ],
+        );
+
+        return array_map(
+            static fn (mixed $id): PublicSitemapMedia => new PublicSitemapMedia(
+                Uuid::fromString((string) $id),
+            ),
+            $rows,
+        );
+    }
+
+    private function assertPagination(int $limit, int $offset): void
+    {
+        if ($limit < 1 || $limit > 1000 || $offset < 0) {
+            throw new \InvalidArgumentException('Invalid sitemap pagination.');
+        }
     }
 }

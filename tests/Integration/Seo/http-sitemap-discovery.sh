@@ -188,9 +188,26 @@ assert_absent() {
   fi
 }
 
+assert_count() {
+  local expected="$1"
+  local needle="$2"
+  local file="$3"
+  local label="$4"
+  local actual
+
+  actual="$(grep -F -c "$needle" "$file" || true)"
+  if [ "$actual" != "$expected" ]; then
+    echo "FAIL $label: expected $expected occurrence(s), got $actual"
+    echo "Needle: $needle"
+    cat "$file"
+    exit 1
+  fi
+}
+
 fetch_xml "$BASE_URL/sitemap.xml" /tmp/sitemap-index.headers /tmp/sitemap-index.xml -H 'Host: attacker.invalid'
 assert_contains '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' /tmp/sitemap-index.xml "sitemap index namespace"
-assert_contains "$PUBLIC_BASE_URL/sitemaps/collections-1.xml" /tmp/sitemap-index.xml "configured canonical sitemap origin"
+assert_contains "$PUBLIC_BASE_URL/sitemaps/collections-1.xml" /tmp/sitemap-index.xml "configured canonical Collection sitemap origin"
+assert_contains "$PUBLIC_BASE_URL/sitemaps/media-1.xml" /tmp/sitemap-index.xml "configured canonical MediaAsset sitemap origin"
 assert_absent 'attacker.invalid' /tmp/sitemap-index.xml "forged Host header"
 
 fetch_xml "$BASE_URL/sitemaps/collections-1.xml" /tmp/sitemap-public.headers /tmp/sitemap-public.xml
@@ -203,6 +220,14 @@ assert_absent '/api/media' /tmp/sitemap-public.xml "ad-hoc search URL"
 assert_absent "$PRIVATE_SENTINEL" /tmp/sitemap-public.xml "private metadata sentinel"
 expect_status 404 "$BASE_URL/sitemaps/collections-2.xml" /tmp/sitemap-page-2.html
 
+fetch_xml "$BASE_URL/sitemaps/media-1.xml" /tmp/sitemap-media.headers /tmp/sitemap-media.xml -H 'Host: attacker.invalid'
+assert_contains "<loc>$PUBLIC_BASE_URL/media/$MEDIA_ID</loc>" /tmp/sitemap-media.xml "stable public MediaAsset detail URL"
+assert_count 1 "<loc>$PUBLIC_BASE_URL/media/$MEDIA_ID</loc>" /tmp/sitemap-media.xml "multi-membership MediaAsset deduplication"
+assert_absent 'attacker.invalid' /tmp/sitemap-media.xml "forged Host header in media sitemap"
+assert_absent "$PRIVATE_SENTINEL" /tmp/sitemap-media.xml "private metadata sentinel in media sitemap"
+assert_absent '/derivatives/' /tmp/sitemap-media.xml "derivative URL used as MediaAsset identity"
+expect_status 404 "$BASE_URL/sitemaps/media-2.xml" /tmp/sitemap-media-page-2.html
+
 php bin/console mediarama:search-index:set collection "$CATEGORY_ID" noindex >/dev/null
 php bin/console mediarama:search-index:set collection "$COLLECTION_ID" index >/dev/null
 php bin/console mediarama:search-index:set media "$MEDIA_ID" inherit >/dev/null
@@ -212,10 +237,17 @@ assert_absent "$PUBLIC_BASE_URL/collections/$CATEGORY_ID" /tmp/sitemap-collectio
 assert_contains "$PUBLIC_BASE_URL/collections/$COLLECTION_ID" /tmp/sitemap-collection-policy.xml "explicit-index collection"
 assert_contains "/media/$MEDIA_ID/derivatives/" /tmp/sitemap-collection-policy.xml "independently indexable media"
 
+fetch_xml "$BASE_URL/sitemaps/media-1.xml" /tmp/sitemap-media-collection-policy.headers /tmp/sitemap-media-collection-policy.xml
+assert_contains "<loc>$PUBLIC_BASE_URL/media/$MEDIA_ID</loc>" /tmp/sitemap-media-collection-policy.xml "Collection noindex does not remove MediaAsset canonical page"
+
 php bin/console mediarama:search-index:set media "$MEDIA_ID" noindex >/dev/null
 fetch_xml "$BASE_URL/sitemaps/collections-1.xml" /tmp/sitemap-media-noindex.headers /tmp/sitemap-media-noindex.xml
 assert_contains "$PUBLIC_BASE_URL/collections/$COLLECTION_ID" /tmp/sitemap-media-noindex.xml "collection remains indexable"
 assert_absent "/media/$MEDIA_ID/derivatives/" /tmp/sitemap-media-noindex.xml "noindex media resource"
+
+fetch_xml "$BASE_URL/sitemap.xml" /tmp/sitemap-media-noindex-index.headers /tmp/sitemap-media-noindex-index.xml
+assert_absent "$PUBLIC_BASE_URL/sitemaps/media-1.xml" /tmp/sitemap-media-noindex-index.xml "media sitemap chunk when no MediaAsset is indexable"
+expect_status 404 "$BASE_URL/sitemaps/media-1.xml" /tmp/sitemap-media-noindex-detail.html
 
 php bin/console mediarama:platform:publication-settings --public-publishing=on --search-index-default=noindex >/dev/null
 php bin/console mediarama:search-index:set collection "$CATEGORY_ID" inherit >/dev/null
@@ -228,11 +260,20 @@ assert_absent "/collections/$CATEGORY_ID" /tmp/sitemap-site-noindex.xml "inherit
 assert_absent "/collections/$COLLECTION_ID" /tmp/sitemap-site-noindex.xml "inherited noindex collection"
 assert_absent "/media/$MEDIA_ID/derivatives/" /tmp/sitemap-site-noindex.xml "inherited noindex media"
 
+fetch_xml "$BASE_URL/sitemap.xml" /tmp/sitemap-site-noindex-index.headers /tmp/sitemap-site-noindex-index.xml
+assert_absent "$PUBLIC_BASE_URL/sitemaps/media-1.xml" /tmp/sitemap-site-noindex-index.xml "inherited noindex MediaAsset sitemap chunk"
+expect_status 404 "$BASE_URL/sitemaps/media-1.xml" /tmp/sitemap-site-noindex-media.html
+
 php bin/console mediarama:search-index:set collection "$COLLECTION_ID" index >/dev/null
 php bin/console mediarama:search-index:set media "$MEDIA_ID" index >/dev/null
 fetch_xml "$BASE_URL/sitemaps/collections-1.xml" /tmp/sitemap-explicit-index.headers /tmp/sitemap-explicit-index.xml
 assert_contains "$PUBLIC_BASE_URL/collections/$COLLECTION_ID" /tmp/sitemap-explicit-index.xml "explicit collection index override"
 assert_contains "/media/$MEDIA_ID/derivatives/" /tmp/sitemap-explicit-index.xml "explicit media index override"
+
+fetch_xml "$BASE_URL/sitemap.xml" /tmp/sitemap-explicit-index-index.headers /tmp/sitemap-explicit-index-index.xml
+assert_contains "$PUBLIC_BASE_URL/sitemaps/media-1.xml" /tmp/sitemap-explicit-index-index.xml "explicit MediaAsset index override restores media sitemap chunk"
+fetch_xml "$BASE_URL/sitemaps/media-1.xml" /tmp/sitemap-explicit-media.headers /tmp/sitemap-explicit-media.xml
+assert_contains "<loc>$PUBLIC_BASE_URL/media/$MEDIA_ID</loc>" /tmp/sitemap-explicit-media.xml "explicit MediaAsset index override"
 
 php <<'PHP'
 <?php
@@ -246,6 +287,7 @@ PHP
 fetch_xml "$BASE_URL/sitemaps/collections-1.xml" /tmp/sitemap-private-parent.headers /tmp/sitemap-private-parent.xml
 assert_absent "/collections/$COLLECTION_ID" /tmp/sitemap-private-parent.xml "collection behind inaccessible ancestor"
 assert_absent "/media/$MEDIA_ID/derivatives/" /tmp/sitemap-private-parent.xml "media behind inaccessible ancestor"
+expect_status 404 "$BASE_URL/sitemaps/media-1.xml" /tmp/sitemap-private-parent-media.html
 
 php <<'PHP'
 <?php
@@ -260,6 +302,7 @@ PHP
 fetch_xml "$BASE_URL/sitemaps/collections-1.xml" /tmp/sitemap-unpublished.headers /tmp/sitemap-unpublished.xml
 assert_contains "$PUBLIC_BASE_URL/collections/$COLLECTION_ID" /tmp/sitemap-unpublished.xml "public collection with unpublished media"
 assert_absent "/media/$MEDIA_ID/derivatives/" /tmp/sitemap-unpublished.xml "unpublished media"
+expect_status 404 "$BASE_URL/sitemaps/media-1.xml" /tmp/sitemap-unpublished-media.html
 
 php <<'PHP'
 <?php
@@ -275,6 +318,10 @@ fetch_xml "$BASE_URL/sitemaps/collections-1.xml" /tmp/sitemap-private-collection
 assert_absent "/collections/$COLLECTION_ID" /tmp/sitemap-private-collection.xml "private collection despite index preference"
 assert_absent "/media/$MEDIA_ID/derivatives/" /tmp/sitemap-private-collection.xml "media reachable only through excluded host collection in this fixture"
 
+fetch_xml "$BASE_URL/sitemaps/media-1.xml" /tmp/sitemap-private-collection-media.headers /tmp/sitemap-private-collection-media.xml
+assert_contains "<loc>$PUBLIC_BASE_URL/media/$MEDIA_ID</loc>" /tmp/sitemap-private-collection-media.xml "public MediaAsset remains discoverable through other effective membership"
+assert_absent "Fixture Album" /tmp/sitemap-private-collection-media.xml "private Collection title"
+
 php <<'PHP'
 <?php
 require 'vendor/autoload.php';
@@ -287,6 +334,7 @@ PHP
 php bin/console mediarama:platform:publication-settings --public-publishing=off --search-index-default=noindex >/dev/null
 expect_status 404 "$BASE_URL/sitemap.xml" /tmp/sitemap-disabled-index.html
 expect_status 404 "$BASE_URL/sitemaps/collections-1.xml" /tmp/sitemap-disabled-chunk.html
+expect_status 404 "$BASE_URL/sitemaps/media-1.xml" /tmp/sitemap-disabled-media.html
 
 reset_fixture
 kill "$SERVER_PID" 2>/dev/null || true
