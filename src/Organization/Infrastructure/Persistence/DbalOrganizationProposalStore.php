@@ -322,31 +322,42 @@ SQL,
         });
     }
 
+    public function runs(
+        Uuid $requesterId,
+        int $limit = 50,
+    ): array {
+        if ($limit < 1 || $limit > 100) {
+            throw new \InvalidArgumentException(
+                'Organization run list limit must be between 1 and 100.',
+            );
+        }
+
+        $rows = $this->connection->fetchAllAssociative(
+            $this->runSelect().'
+WHERE r.requester_id = :requester
+ORDER BY r.updated_at DESC, r.id DESC
+LIMIT :limit',
+            [
+                'requester' => $requesterId->toRfc4122(),
+                'limit' => $limit,
+            ],
+            ['limit' => \Doctrine\DBAL\ParameterType::INTEGER],
+        );
+
+        return array_map(
+            fn (array $row): OrganizationRunResult => $this->mapRun($row),
+            $rows,
+        );
+    }
+
     public function run(
         Uuid $requesterId,
         Uuid $runId,
     ): OrganizationRunResult {
         $row = $this->connection->fetchAssociative(
-            <<<'SQL'
-SELECT
-    r.id,
-    r.requester_id,
-    r.producer_kind,
-    r.provider_name,
-    r.model_name,
-    r.model_version,
-    r.status,
-    r.created_at,
-    r.updated_at,
-    (
-        SELECT COUNT(*)
-        FROM organization_run_media rm
-        WHERE rm.run_id = r.id
-    ) AS media_count
-FROM organization_runs r
+            $this->runSelect().'
 WHERE r.id = :run
-  AND r.requester_id = :requester
-SQL,
+  AND r.requester_id = :requester',
             [
                 'run' => $runId->toRfc4122(),
                 'requester' => $requesterId->toRfc4122(),
@@ -362,6 +373,30 @@ SQL,
         return $this->mapRun($row);
     }
 
+    public function proposal(
+        Uuid $requesterId,
+        Uuid $proposalId,
+    ): OrganizationProposalResult {
+        $row = $this->connection->fetchAssociative(
+            $this->proposalSelect().'
+JOIN organization_runs r ON r.id = p.run_id
+WHERE p.id = :proposal
+  AND r.requester_id = :requester',
+            [
+                'proposal' => $proposalId->toRfc4122(),
+                'requester' => $requesterId->toRfc4122(),
+            ],
+        );
+
+        if ($row === false) {
+            throw new OrganizationProposalUnavailableException(
+                'Organization proposal is unavailable.',
+            );
+        }
+
+        return $this->mapProposal($row);
+    }
+
     public function proposals(
         Uuid $requesterId,
         Uuid $runId,
@@ -370,21 +405,9 @@ SQL,
         $this->run($requesterId, $runId);
 
         $rows = $this->connection->fetchAllAssociative(
-            <<<'SQL'
-SELECT
-    p.id,
-    p.run_id,
-    p.proposal_type,
-    p.status,
-    p.payload,
-    p.rationale,
-    p.reviewed_at,
-    p.created_at,
-    p.updated_at
-FROM organization_proposals p
+            $this->proposalSelect().'
 WHERE p.run_id = :run
-ORDER BY p.created_at ASC, p.id ASC
-SQL,
+ORDER BY p.created_at ASC, p.id ASC',
             ['run' => $runId->toRfc4122()],
         );
 
@@ -392,6 +415,82 @@ SQL,
             fn (array $row): OrganizationProposalResult => $this->mapProposal($row),
             $rows,
         );
+    }
+
+    public function updatePayload(
+        Uuid $requesterId,
+        Uuid $proposalId,
+        OrganizationProposalPayload $payload,
+    ): void {
+        $this->connection->transactional(function (Connection $connection) use (
+            $requesterId,
+            $proposalId,
+            $payload,
+        ): void {
+            $row = $connection->fetchAssociative(
+                <<<'SQL'
+SELECT p.proposal_type, p.status
+FROM organization_proposals p
+JOIN organization_runs r ON r.id = p.run_id
+WHERE p.id = :proposal
+  AND r.requester_id = :requester
+  AND r.status = 'ready_for_review'
+FOR UPDATE OF p
+SQL,
+                [
+                    'proposal' => $proposalId->toRfc4122(),
+                    'requester' => $requesterId->toRfc4122(),
+                ],
+            );
+
+            if ($row === false) {
+                throw new OrganizationProposalUnavailableException(
+                    'Organization proposal is unavailable for editing.',
+                );
+            }
+
+            if (
+                (string) $row['status']
+                !== OrganizationProposalStatus::PendingReview->value
+            ) {
+                throw new \DomainException(
+                    'Only a pending organization proposal can be edited.',
+                );
+            }
+
+            if ((string) $row['proposal_type'] !== $payload->type->value) {
+                throw new \InvalidArgumentException(
+                    'Organization proposal type cannot be changed during review.',
+                );
+            }
+
+            $mediaRows = $connection->fetchFirstColumn(
+                'SELECT media_id
+                 FROM organization_proposal_media
+                 WHERE proposal_id = :proposal
+                 ORDER BY position ASC',
+                ['proposal' => $proposalId->toRfc4122()],
+            );
+            $mediaIds = array_map(
+                static fn (mixed $id): Uuid => Uuid::fromString((string) $id),
+                $mediaRows,
+            );
+            $this->assertPayloadMediaConsistency(
+                $payload,
+                $mediaIds,
+            );
+
+            $connection->executeStatement(
+                'UPDATE organization_proposals
+                 SET payload = CAST(:payload AS jsonb),
+                     updated_at = CURRENT_TIMESTAMP
+                 WHERE id = :proposal',
+                [
+                    'payload' => $payload->toJson(),
+                    'proposal' => $proposalId->toRfc4122(),
+                ],
+            );
+        });
     }
 
     public function reject(
@@ -638,6 +737,47 @@ SQL,
         }
     }
 
+    private function runSelect(): string
+    {
+        return <<<'SQL'
+SELECT
+    r.id,
+    r.requester_id,
+    r.producer_kind,
+    r.provider_name,
+    r.model_name,
+    r.model_version,
+    r.status,
+    r.created_at,
+    r.updated_at,
+    (
+        SELECT COUNT(*)
+        FROM organization_run_media rm
+        WHERE rm.run_id = r.id
+    ) AS media_count
+FROM organization_runs r
+SQL;
+    }
+
+    private function proposalSelect(): string
+    {
+        return <<<'SQL'
+SELECT
+    p.id,
+    p.run_id,
+    p.proposal_type,
+    p.status,
+    p.payload,
+    p.rationale,
+    p.applied_resource_type,
+    p.applied_resource_id,
+    p.reviewed_at,
+    p.created_at,
+    p.updated_at
+FROM organization_proposals p
+SQL;
+    }
+
     /** @param array<string,mixed> $row */
     private function mapRun(array $row): OrganizationRunResult
     {
@@ -715,6 +855,12 @@ SQL,
             (string) $row['rationale'],
             $affectedMediaIds,
             $evidence,
+            $row['applied_resource_type'] !== null
+                ? (string) $row['applied_resource_type']
+                : null,
+            $row['applied_resource_id'] !== null
+                ? Uuid::fromString((string) $row['applied_resource_id'])
+                : null,
             $row['reviewed_at'] !== null
                 ? new DateTimeImmutable((string) $row['reviewed_at'])
                 : null,
