@@ -60,7 +60,6 @@ final class Collection
         Uuid $ownerId,
         string $title,
         SmartCollectionRule $rule,
-        Visibility $visibility = Visibility::Private,
     ): self {
         $now = new DateTimeImmutable();
 
@@ -69,7 +68,7 @@ final class Collection
             $ownerId,
             trim($title),
             null,
-            $visibility,
+            Visibility::Private,
             $now,
             $now,
             mode: CollectionMode::Smart,
