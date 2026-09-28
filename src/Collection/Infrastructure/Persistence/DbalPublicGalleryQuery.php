@@ -8,6 +8,7 @@ use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\ParameterType;
 use Mediarama\Collection\Application\PublicCollectionResult;
 use Mediarama\Collection\Application\PublicGalleryQuery;
+use Mediarama\Collection\Application\PublicMediaDetailResult;
 use Mediarama\Collection\Application\PublicMediaResult;
 use Mediarama\Platform\Application\PlatformSettingsRepository;
 use Mediarama\Platform\Domain\SearchIndexPolicy;
@@ -131,6 +132,93 @@ SQL,
             $row['thumbnail_version'] !== null ? (int) $row['thumbnail_version'] : null,
             $row['preview_version'] !== null ? (int) $row['preview_version'] : null,
         ), $rows);
+    }
+
+    public function mediaAsset(Uuid $mediaId): ?PublicMediaDetailResult
+    {
+        $settings = $this->settings->current();
+        if (!$settings->publicPublishingEnabled) {
+            return null;
+        }
+
+        $row = $this->connection->fetchAssociative(
+            <<<'SQL'
+SELECT
+    m.id,
+    m.title,
+    m.description,
+    m.mime_type,
+    m.media_type,
+    m.width,
+    m.height,
+    m.duration_ms,
+    m.search_index_policy,
+    thumbnail.processing_version AS thumbnail_version,
+    preview.processing_version AS preview_version,
+    large.processing_version AS large_version
+FROM media_assets m
+LEFT JOIN LATERAL (
+    SELECT d.processing_version
+    FROM media_derivatives d
+    WHERE d.media_id = m.id
+      AND d.kind = 'image'
+      AND d.profile = 'thumbnail'
+    ORDER BY d.processing_version DESC
+    LIMIT 1
+) thumbnail ON TRUE
+LEFT JOIN LATERAL (
+    SELECT d.processing_version
+    FROM media_derivatives d
+    WHERE d.media_id = m.id
+      AND d.kind = 'image'
+      AND d.profile = 'preview'
+    ORDER BY d.processing_version DESC
+    LIMIT 1
+) preview ON TRUE
+LEFT JOIN LATERAL (
+    SELECT d.processing_version
+    FROM media_derivatives d
+    WHERE d.media_id = m.id
+      AND d.kind = 'image'
+      AND d.profile = 'large'
+    ORDER BY d.processing_version DESC
+    LIMIT 1
+) large ON TRUE
+WHERE m.id = :media
+  AND m.deleted_at IS NULL
+  AND m.processing_state = 'ready'
+  AND m.moderation_state = 'published'
+  AND EXISTS (
+      SELECT 1
+      FROM collection_media cm
+      JOIN effective_public_collections epc
+        ON epc.collection_id = cm.collection_id
+      WHERE cm.media_id = m.id
+  )
+SQL,
+            ['media' => $mediaId->toRfc4122()],
+        );
+
+        if ($row === false) {
+            return null;
+        }
+
+        $policy = SearchIndexPolicy::from((string) $row['search_index_policy']);
+
+        return new PublicMediaDetailResult(
+            Uuid::fromString((string) $row['id']),
+            $row['title'] !== null ? (string) $row['title'] : null,
+            $row['description'] !== null ? (string) $row['description'] : null,
+            (string) $row['mime_type'],
+            (string) $row['media_type'],
+            $row['width'] !== null ? (int) $row['width'] : null,
+            $row['height'] !== null ? (int) $row['height'] : null,
+            $row['duration_ms'] !== null ? (int) $row['duration_ms'] : null,
+            $row['thumbnail_version'] !== null ? (int) $row['thumbnail_version'] : null,
+            $row['preview_version'] !== null ? (int) $row['preview_version'] : null,
+            $row['large_version'] !== null ? (int) $row['large_version'] : null,
+            $policy->resolve($settings->searchIndexDefault),
+        );
     }
 
     public function canViewMedia(Uuid $mediaId): bool
