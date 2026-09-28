@@ -38,6 +38,11 @@ interface OrganizationProposalStore
         Uuid $runId,
     ): void;
 
+    public function markNoSuggestions(
+        Uuid $requesterId,
+        Uuid $runId,
+    ): void;
+
     public function run(
         Uuid $requesterId,
         Uuid $runId,

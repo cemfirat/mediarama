@@ -378,7 +378,7 @@ Collection/tag state.
 - `requester_id uuid fk users`;
 - `producer_kind varchar` (`metadata | ai_external | ai_local`);
 - nullable provider/model/version audit identity, forbidden for metadata runs;
-- `status varchar` (`draft | ready_for_review | failed | cancelled`);
+- `status varchar` (`draft | ready_for_review | no_suggestions | failed | cancelled`);
 - timestamps.
 
 `organization_run_media` snapshots the authorized selected scope:

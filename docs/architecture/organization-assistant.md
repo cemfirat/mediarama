@@ -1,6 +1,6 @@
 # Organization Assistant
 
-Status: proposal foundation
+Status: proposal foundation + deterministic metadata producer
 Date: 2026-09-28
 
 Mediarama's organization assistant is a review layer over the normal media,
@@ -20,13 +20,14 @@ state.
 Run statuses:
 
 - `draft` — producers may add proposals;
-- `ready_for_review` — proposal generation is complete;
+- `ready_for_review` — proposal generation completed with reviewable proposals;
+- `no_suggestions` — analysis completed but all candidate groups stayed below usefulness thresholds;
 - `failed`;
 - `cancelled`.
 
 Only `draft` runs accept new proposals.
 
-A run becomes `ready_for_review` only when at least one proposal exists.
+A run becomes `ready_for_review` only when at least one proposal exists. A successful analysis with no useful proposals enters `no_suggestions` instead of remaining in an ambiguous draft state.
 
 ## Producers
 
@@ -34,8 +35,9 @@ A run becomes `ready_for_review` only when at least one proposal exists.
 
 `metadata` is the deterministic producer kind.
 
-It carries no provider/model identity and is the basis for #134. An
-installation with no AI provider can still use this path.
+It carries no provider/model identity. The deterministic analyzer uses this
+path directly, so an installation with no AI provider remains fully capable of
+metadata-only organization suggestions.
 
 ### External/local AI
 
@@ -133,13 +135,48 @@ Current operational bounds:
 
 Media rows are inserted in bounded batches.
 
-These are safety/operability limits rather than product recommendations. #134
-must use quality/support thresholds to avoid generating hundreds of trivial
-proposals merely because a metadata value exists.
+These are safety/operability limits rather than product recommendations.
+
+## Deterministic metadata suggestions
+
+The metadata-only producer reads only the authenticated run scope and a narrow
+normalized snapshot:
+
+- media type;
+- capture time;
+- camera model and lens;
+- coarse location name;
+- average rating;
+- normalized tags;
+- canonical dimensions where needed later;
+- whether the MediaAsset already has Collection membership visible to the requesting actor.
+
+It deliberately does not select source filenames, storage keys, raw metadata
+JSON, exact latitude/longitude or hidden Collection titles.
+
+The first deterministic planner uses a minimum support threshold of 5
+MediaAssets and emits at most 20 proposals per run. Per-dimension caps and
+exact affected-set de-duplication prevent one noisy metadata field from
+flooding review.
+
+Current deterministic candidates include:
+
+- coarse location + capture-month Smart Collections;
+- existing normalized tag Smart Collections;
+- high-rated Smart Collections;
+- media-type Smart Collections when more than one type is present;
+- camera-model and lens Smart Collections;
+- a review bucket for sufficiently large untagged/uncollected groups.
+
+Every Smart suggestion is validated through the normal Smart V1 grammar before
+persistence. Generation remains proposal-only; it never creates Collections,
+tags, memberships, ACL changes or publication state.
+
+The same authorized metadata snapshot produces the same proposal semantics.
+Provider configuration is not consulted.
 
 ## Next slices
 
-- #134 — deterministic metadata-only suggestions;
 - #135 — provider capability adapter + privacy/cost preflight;
 - #136 — authenticated review UI + atomic accept/edit/reject.
 

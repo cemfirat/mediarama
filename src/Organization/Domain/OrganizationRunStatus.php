@@ -8,6 +8,7 @@ enum OrganizationRunStatus: string
 {
     case Draft = 'draft';
     case ReadyForReview = 'ready_for_review';
+    case NoSuggestions = 'no_suggestions';
     case Failed = 'failed';
     case Cancelled = 'cancelled';
 }
