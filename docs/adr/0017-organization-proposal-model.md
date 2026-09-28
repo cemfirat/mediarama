@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-09-28
-- Tracks: #16, #133, #134
+- Tracks: #16, #133, #134, #135
 - Related: ADR-0008, ADR-0009
 
 ## Context
@@ -54,8 +54,23 @@ A metadata producer cannot carry provider/model fields.
 AI producers require a provider and model identity; an optional model version
 may also be recorded.
 
-The provider adapter and external-send preflight are separate work in #135.
-This ADR does not authorize an external network request.
+Provider adapters now sit behind an explicit capability registry and an
+approval-gated preflight boundary from #135.
+
+A configured provider advertises a stable provider key, producer kind,
+provider/model/version audit identity and supported capabilities. A deployment
+may have zero providers; deterministic metadata organization remains fully
+functional.
+
+Before provider inference can run, Mediarama persists a requester-owned
+preflight containing the exact authorized MediaAsset scope, requested
+capabilities, input mode, presentation-derivative send flags, sensitive-field
+exclusions, a local cost estimate when available, and configured
+privacy/retention notes.
+
+Provider inference is reachable only after explicit preflight approval.
+Configuration/model changes between approval and execution fail closed instead
+of silently changing the approved processing contract.
 
 ## Proposal types
 
@@ -125,9 +140,29 @@ authorized fields and visible Collection-membership state; hidden Collection
 names, source storage identity, raw metadata and exact GPS do not enter its
 analysis snapshot.
 
-Future AI producers remain responsible for constructing privacy-safe summaries;
-the provider preflight in #135 must additionally define exactly what leaves the
-installation.
+AI provider requests use a Mediarama-owned sanitized DTO rather than passing
+MediaAsset rows or source metadata directly.
+
+The default external-send boundary never includes:
+
+- immutable source/original bytes;
+- source storage identity;
+- original filename;
+- raw metadata/provenance bags;
+- exact latitude/longitude;
+- hidden Collection names.
+
+Creator and coarse location name are explicit preflight opt-ins rather than
+default provider inputs.
+
+When image understanding is approved, a provider receives only bounded
+generated presentation derivatives through an approval-scoped gateway. The
+gateway cannot read a MediaAsset outside the persisted send scope, and it never
+falls back to the immutable original.
+
+Raw provider requests/responses and credentials are not durable domain state.
+Provider failures persist only stable sanitized failure codes and leave normal
+Collections/tags/publication unchanged.
 
 ## Consequences
 
@@ -161,5 +196,10 @@ The implementation must prove:
 - affected MediaAssets cannot escape the run scope;
 - metadata-only runs need no AI configuration;
 - provider/model/version can be recorded without raw provider state;
+- provider capability mismatches fail before external inference;
+- provider inference cannot run before deliberate persisted approval;
+- approved presentation access is restricted to bounded generated derivatives;
+- exact GPS/source/raw metadata stay outside the provider DTO by default;
+- provider failures leave no partial proposal run or normal library mutation;
 - rejection leaves normal library organization unchanged;
 - proposal persistence does not acquire source/GPS data from MediaAssets.

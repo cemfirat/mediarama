@@ -1,6 +1,6 @@
 # Organization Assistant
 
-Status: proposal foundation + deterministic metadata producer
+Status: proposal foundation + deterministic metadata producer + approval-gated AI provider boundary
 Date: 2026-09-28
 
 Mediarama's organization assistant is a review layer over the normal media,
@@ -47,10 +47,56 @@ metadata-only organization suggestions.
 - model name;
 - optional model version.
 
-The current foundation does not call providers.
+AI providers are optional and registered through a provider-neutral capability
+adapter.
 
-Provider capabilities, external-send approval and privacy/cost preflight are
-implemented separately in #135.
+Each provider declares:
+
+- a stable provider key;
+- external vs local producer kind;
+- provider/model/version audit identity;
+- supported capabilities such as text reasoning, image understanding,
+  embeddings, batch analysis or local inference;
+- optional privacy and retention notes.
+
+No provider is required for Mediarama to operate. The deterministic metadata
+producer does not consult this registry.
+
+## AI privacy/cost preflight
+
+External/local AI analysis is approval-gated.
+
+Before inference, Mediarama builds and persists a preflight that states:
+
+- exact authorized MediaAsset count and media-type breakdown;
+- requested provider capabilities;
+- metadata-only vs metadata + presentation input mode;
+- how many bounded presentation derivatives are available to send;
+- creator/coarse-location opt-in state;
+- fields that are excluded from provider input;
+- a local cost estimate when the adapter can provide one without sending data;
+- configured provider privacy/retention notes.
+
+The persisted preflight starts in `pending_approval`. Provider inference is
+not reachable until the requester deliberately approves it.
+
+At execution time Mediarama revalidates authorization, provider/model identity,
+capabilities and approved presentation availability. A changed or unavailable
+scope fails closed.
+
+The provider receives a narrow Mediarama DTO. It has no original filename,
+source storage identity, raw metadata/provenance or exact GPS fields. Creator
+and coarse location name are excluded by default and require explicit
+preflight opt-in.
+
+For image understanding, only existing generated presentation derivatives are
+available. Mediarama uses a bounded approval-scoped gateway; it cannot fetch
+unapproved media and never falls back to immutable originals.
+
+Provider adapters return ordinary Mediarama proposal candidates. Raw provider
+request/response bodies and credentials are not stored. Failures record a
+stable sanitized failure code and do not create partial Collections, tags or
+proposal runs.
 
 ## Proposal model
 
@@ -120,9 +166,9 @@ Proposal payloads have strict application-owned schemas.
 
 Evidence persists only source kind + bounded summary.
 
-The provider adapter in #135 must additionally prevent sensitive fields from
-being sent externally by default and must show a deliberate privacy/cost
-preflight before any request.
+The AI provider boundary additionally prevents sensitive fields from being
+sent by default and requires deliberate privacy/cost preflight approval before
+provider inference.
 
 ## Limits
 
@@ -177,7 +223,9 @@ Provider configuration is not consulted.
 
 ## Next slices
 
-- #135 — provider capability adapter + privacy/cost preflight;
 - #136 — authenticated review UI + atomic accept/edit/reject.
+
+Provider-specific adapters can now be added behind the #135 capability/preflight
+contract without changing Mediarama's proposal domain.
 
 Hybrid Collection pins/exclusions remain #18.

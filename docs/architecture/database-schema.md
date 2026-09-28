@@ -405,9 +405,31 @@ foreign keys require every affected MediaAsset to belong to the same run scope.
 (`metadata | inference`) plus a bounded human-readable summary. It is not a
 raw provider-response archive.
 
-The organization tables deliberately do not persist source storage paths,
+AI provider execution adds a separate approval record rather than overloading
+`organization_runs`.
+
+`organization_ai_preflights` persists:
+
+- requester and provider/model/version audit identity;
+- requested capability list;
+- metadata-only vs metadata + presentation input mode;
+- media-type counts and total scope size;
+- presentation-derivative count;
+- explicit creator/coarse-location opt-ins;
+- explicit excluded-field list;
+- optional local cost estimate and configured privacy/retention notes;
+- approval/execution/completion timestamps;
+- stable sanitized failure code;
+- resulting organization-run ID only after successful proposal persistence.
+
+`organization_ai_preflight_media` stores the exact approved MediaAsset scope
+relationally plus a boolean indicating whether a generated presentation
+derivative may be sent for that item.
+
+The organization/AI tables deliberately do not persist source storage paths,
 original filenames, exact GPS, raw metadata snapshots, credentials or arbitrary
-provider request/response bodies.
+provider request/response bodies. Presentation derivative storage identities
+also remain outside preflight persistence and provider DTOs.
 
 See ADR-0017 and `docs/architecture/organization-assistant.md`.
 
