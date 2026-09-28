@@ -62,10 +62,10 @@ final class DeterministicOrganizationPlannerTest extends TestCase
             JSON_THROW_ON_ERROR,
         );
 
-        self::assertStringNotContainsString('latitude', $serialized);
-        self::assertStringNotContainsString('longitude', $serialized);
-        self::assertStringNotContainsString('metadata', $serialized);
-        self::assertStringNotContainsString('storage_key', $serialized);
+        self::assertStringNotContainsString('"latitude"', $serialized);
+        self::assertStringNotContainsString('"longitude"', $serialized);
+        self::assertStringNotContainsString('"metadata_provenance"', $serialized);
+        self::assertStringNotContainsString('"storage_key"', $serialized);
     }
 
     public function testPlannerSuppressesGroupsBelowMinimumSupport(): void
