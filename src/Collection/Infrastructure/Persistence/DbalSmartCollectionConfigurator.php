@@ -91,7 +91,7 @@ SQL,
     ): void {
         $row = $connection->fetchAssociative(
             <<<'SQL'
-SELECT owner_id
+SELECT owner_id, visibility
 FROM collections
 WHERE id = :collection
   AND deleted_at IS NULL
@@ -104,6 +104,7 @@ SQL,
             $row === false
             || $row['owner_id'] === null
             || (string) $row['owner_id'] !== $actorId->toRfc4122()
+            || (string) $row['visibility'] !== 'private'
         ) {
             throw new SmartCollectionUnavailableException(
                 'Smart Collection is unavailable.',
