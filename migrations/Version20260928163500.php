@@ -48,7 +48,7 @@ CREATE TABLE organization_ai_preflights (
     CONSTRAINT fk_organization_ai_preflight_requester
         FOREIGN KEY (requester_id) REFERENCES users (id) ON DELETE CASCADE,
     CONSTRAINT fk_organization_ai_preflight_run
-        FOREIGN KEY (run_id) REFERENCES organization_runs (id) ON DELETE SET NULL,
+        FOREIGN KEY (run_id) REFERENCES organization_runs (id) ON DELETE CASCADE,
     CONSTRAINT chk_organization_ai_preflight_producer
         CHECK (producer_kind IN ('ai_external', 'ai_local')),
     CONSTRAINT chk_organization_ai_preflight_capabilities
