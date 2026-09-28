@@ -1,6 +1,6 @@
 # Organization Assistant
 
-Status: proposal foundation + deterministic metadata producer + approval-gated AI provider boundary
+Status: proposal foundation + deterministic producer + approval-gated AI boundary + authenticated review/apply workflow
 Date: 2026-09-28
 
 Mediarama's organization assistant is a review layer over the normal media,
@@ -140,22 +140,54 @@ enforce this relationship.
 This is deliberately different from Collection membership. Proposal MediaAsset
 rows never make a MediaAsset public and never create `collection_media`.
 
-## Review safety
+## Authenticated review and application
 
-The first foundation implements explicit rejection.
+The authenticated UIkit review surface lives under `/library/organization`.
+A requester can inspect recent runs, open a run, review human-readable proposal
+payloads, rationale and typed evidence, see a bounded safe MediaAsset preview,
+edit non-structural proposal fields, accept/reject one proposal or atomically
+accept/reject a selected batch.
 
-Rejection:
+For completed AI runs, the review page also surfaces the persisted approval
+preflight: provider/model identity, approved input mode, presentation-media
+count, creator/coarse-location opt-ins, excluded fields, configured
+privacy/retention notes and the local cost estimate when available.
 
-- is requester-only;
-- is idempotent;
-- records review time;
-- changes proposal state only;
-- does not create/delete/edit Collections, tags or Collection membership;
-- does not change visibility, ACLs or publication.
+Review pages are authenticated, requester-only, `private, no-store` and
+`noindex, nofollow`. Their preview DTO contains only MediaAsset UUID, title
+and media type; it never exposes source filename/storage, raw metadata,
+provenance or exact GPS.
 
-Acceptance is intentionally not implemented in this slice. #136 must apply
-accepted proposals atomically through ordinary Mediarama application services
-and revalidate current permissions/staleness before mutation.
+Acceptance:
+
+- locks the requester-owned proposal/run in one database transaction;
+- revalidates that affected MediaAssets are still current, ready and owned by
+  the requester before a mutation that can reorganize them;
+- revalidates Smart rules against the current owner-wide Smart candidate
+  universe, so a rule cannot silently include MediaAssets outside the reviewed
+  affected set;
+- creates Smart Collections through the ordinary Smart Collection management
+  service;
+- creates Manual/Review Collections as ordinary private Manual Collections;
+- creates/reuses normalized tags and attaches them only to the reviewed
+  MediaAssets;
+- applies title/description and cover proposals only to owned current targets;
+- touches truthful public-update timestamps when an explicitly public target's
+  presentation changes;
+- records the applied entity identity on the proposal, making retry after a
+  successful accept idempotent;
+- never publishes a newly created Collection or changes ACLs automatically.
+
+Selected batch accepts share one transaction. If any selected proposal is stale
+or invalid, earlier mutations in that batch roll back.
+
+Editing is deliberately constrained. Titles, descriptions, tag names and a
+reviewed cover choice may be edited. A Smart rule or proposal target cannot be
+silently rewritten inside the review screen; structural changes require a new
+analysis so the affected MediaAsset set can be reviewed again.
+
+Rejection remains requester-only and idempotent. It records review state only
+and never mutates normal library organization.
 
 ## Privacy boundary
 
@@ -223,9 +255,10 @@ Provider configuration is not consulted.
 
 ## Next slices
 
-- #136 — authenticated review UI + atomic accept/edit/reject.
-
 Provider-specific adapters can now be added behind the #135 capability/preflight
-contract without changing Mediarama's proposal domain.
+contract without changing Mediarama's proposal domain. Product orchestration
+can build on the review/apply boundary to let users deliberately start
+metadata-only analysis or an approved optional AI analysis from a selected
+Library scope.
 
 Hybrid Collection pins/exclusions remain #18.

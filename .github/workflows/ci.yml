@@ -247,6 +247,9 @@ jobs:
       - name: Verify AI provider capability, preflight and privacy boundary
         run: php tests/Integration/Organization/organization-ai-preflight.php
 
+      - name: Verify organization proposal review and atomic application
+        run: php tests/Integration/Organization/organization-proposal-review.php
+
       - name: Validate production security container
         run: APP_ENV=prod APP_DEBUG=0 php bin/console lint:container
 
