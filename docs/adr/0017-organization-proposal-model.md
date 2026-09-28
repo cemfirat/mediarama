@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-09-28
-- Tracks: #16, #133
+- Tracks: #16, #133, #134
 - Related: ADR-0008, ADR-0009
 
 ## Context
@@ -93,7 +93,10 @@ MediaAsset or Collection.
 ## Review lifecycle
 
 Runs start in `draft` while producers add proposals. A run can move to
-`ready_for_review` only after at least one proposal exists.
+`ready_for_review` only after at least one proposal exists. A completed
+deterministic analysis that finds no candidates above the usefulness threshold
+uses the explicit `no_suggestions` state rather than remaining ambiguously
+draft.
 
 Proposals start in `pending_review`.
 
@@ -117,7 +120,12 @@ The proposal store deliberately does not copy:
 
 Evidence is a bounded human-readable summary, not a raw provider blob.
 
-Future producers remain responsible for constructing privacy-safe summaries;
+The deterministic metadata producer introduced in #134 reads only normalized,
+authorized fields and visible Collection-membership state; hidden Collection
+names, source storage identity, raw metadata and exact GPS do not enter its
+analysis snapshot.
+
+Future AI producers remain responsible for constructing privacy-safe summaries;
 the provider preflight in #135 must additionally define exactly what leaves the
 installation.
 
