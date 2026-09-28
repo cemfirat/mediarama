@@ -14,7 +14,7 @@ use Symfony\Component\Uid\Uuid;
 
 #[AsCommand(
     name: 'mediarama:media:regenerate',
-    description: 'Generate a new versioned derivative set for one image asset.',
+    description: 'Generate a new versioned derivative set for one image or video asset.',
 )]
 final class RegenerateMediaDerivativesCommand extends Command
 {
@@ -39,7 +39,7 @@ final class RegenerateMediaDerivativesCommand extends Command
         }
 
         $output->writeln(sprintf(
-            'Image derivatives regenerated as processing version %d.',
+            'Media derivatives regenerated as processing version %d.',
             $version,
         ));
 

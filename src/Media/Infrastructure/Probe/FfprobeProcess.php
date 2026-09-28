@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Mediarama\Media\Infrastructure\Probe;
 
 use JsonException;
+use Mediarama\Media\Application\VideoProperties;
 use Mediarama\Media\Infrastructure\Process\MediaToolRejected;
 use Mediarama\Media\Infrastructure\Process\MediaToolUnavailable;
 use Symfony\Component\Process\Exception\ExceptionInterface as ProcessException;
@@ -32,12 +33,113 @@ final readonly class FfprobeProcess
     /** @return list<string> */
     public function streamTypes(string $path): array
     {
+        $decoded = $this->probe(
+            'stream=codec_type',
+            $path,
+        );
+
+        if (!isset($decoded['streams']) || !is_array($decoded['streams'])) {
+            throw new MediaToolUnavailable('FFprobe response does not contain a streams array.');
+        }
+
+        $types = [];
+        foreach ($decoded['streams'] as $stream) {
+            if (!is_array($stream)) {
+                continue;
+            }
+
+            $type = $stream['codec_type'] ?? null;
+            if (is_string($type) && $type !== '') {
+                $types[$type] = true;
+            }
+        }
+
+        return array_keys($types);
+    }
+
+    public function videoProperties(string $path): VideoProperties
+    {
+        $decoded = $this->probe(
+            'format=duration,format_name:stream=codec_type,codec_name,width,height,duration:stream_tags=rotate:stream_side_data=rotation',
+            $path,
+        );
+
+        if (!isset($decoded['streams']) || !is_array($decoded['streams'])) {
+            throw new MediaToolUnavailable('FFprobe response does not contain a streams array.');
+        }
+
+        $video = null;
+        $audio = null;
+
+        foreach ($decoded['streams'] as $stream) {
+            if (!is_array($stream)) {
+                continue;
+            }
+
+            if (($stream['codec_type'] ?? null) === 'video' && $video === null) {
+                $video = $stream;
+            }
+
+            if (($stream['codec_type'] ?? null) === 'audio' && $audio === null) {
+                $audio = $stream;
+            }
+        }
+
+        if ($video === null) {
+            throw new MediaToolRejected('FFprobe did not report a video stream.');
+        }
+
+        $width = isset($video['width']) ? (int) $video['width'] : 0;
+        $height = isset($video['height']) ? (int) $video['height'] : 0;
+        $videoCodec = trim((string) ($video['codec_name'] ?? ''));
+
+        if ($width < 1 || $height < 1 || $videoCodec === '') {
+            throw new MediaToolRejected('FFprobe returned incomplete video stream properties.');
+        }
+
+        $rotation = $this->rotation($video);
+        if (in_array($rotation, [90, 270], true)) {
+            [$width, $height] = [$height, $width];
+        }
+
+        $durationSeconds = $this->positiveFloat($decoded['format']['duration'] ?? null)
+            ?? $this->positiveFloat($video['duration'] ?? null);
+        $durationMs = $durationSeconds !== null
+            ? (int) round($durationSeconds * 1000)
+            : null;
+
+        $audioCodec = null;
+        if ($audio !== null) {
+            $candidate = trim((string) ($audio['codec_name'] ?? ''));
+            $audioCodec = $candidate !== '' ? $candidate : null;
+        }
+
+        $formatName = null;
+        if (isset($decoded['format']) && is_array($decoded['format'])) {
+            $candidate = trim((string) ($decoded['format']['format_name'] ?? ''));
+            $formatName = $candidate !== '' ? $candidate : null;
+        }
+
+        return new VideoProperties(
+            $width,
+            $height,
+            $durationMs,
+            $audio !== null,
+            $videoCodec,
+            $audioCodec,
+            $formatName,
+        );
+    }
+
+    /** @return array<string,mixed> */
+    private function probe(string $showEntries, string $path): array
+    {
         $process = new Process([
             $this->binary,
             '-v', 'error',
             '-probesize', (string) $this->probeSizeBytes,
             '-analyzeduration', (string) $this->analyzeDurationMicroseconds,
-            '-show_entries', 'stream=codec_type',
+            '-show_entries', $showEntries,
             '-of', 'json=c=1',
             $path,
         ]);
@@ -80,22 +182,63 @@ final readonly class FfprobeProcess
             throw new MediaToolUnavailable('FFprobe returned invalid JSON.', 0, $error);
         }
 
-        if (!is_array($decoded) || !isset($decoded['streams']) || !is_array($decoded['streams'])) {
-            throw new MediaToolUnavailable('FFprobe response does not contain a streams array.');
+        if (!is_array($decoded)) {
+            throw new MediaToolUnavailable('FFprobe response is not a JSON object.');
         }
 
-        $types = [];
-        foreach ($decoded['streams'] as $stream) {
-            if (!is_array($stream)) {
-                continue;
-            }
+        return $decoded;
+    }
 
-            $type = $stream['codec_type'] ?? null;
-            if (is_string($type) && $type !== '') {
-                $types[$type] = true;
+    /** @param array<string,mixed> $stream */
+    private function rotation(array $stream): int
+    {
+        $rotation = null;
+
+        if (isset($stream['side_data_list']) && is_array($stream['side_data_list'])) {
+            foreach ($stream['side_data_list'] as $sideData) {
+                if (!is_array($sideData) || !isset($sideData['rotation'])) {
+                    continue;
+                }
+
+                if (is_numeric($sideData['rotation'])) {
+                    $rotation = (int) round((float) $sideData['rotation']);
+                    break;
+                }
             }
         }
 
-        return array_keys($types);
+        if (
+            $rotation === null
+            && isset($stream['tags'])
+            && is_array($stream['tags'])
+            && isset($stream['tags']['rotate'])
+            && is_numeric($stream['tags']['rotate'])
+        ) {
+            $rotation = (int) round((float) $stream['tags']['rotate']);
+        }
+
+        if ($rotation === null) {
+            return 0;
+        }
+
+        $normalized = (($rotation % 360) + 360) % 360;
+
+        return match (true) {
+            $normalized >= 45 && $normalized < 135 => 90,
+            $normalized >= 135 && $normalized < 225 => 180,
+            $normalized >= 225 && $normalized < 315 => 270,
+            default => 0,
+        };
+    }
+
+    private function positiveFloat(mixed $value): ?float
+    {
+        if (!is_numeric($value)) {
+            return null;
+        }
+
+        $number = (float) $value;
+
+        return is_finite($number) && $number >= 0 ? $number : null;
     }
 }
