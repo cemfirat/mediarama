@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace Mediarama\Organization\Infrastructure\Persistence;
 
+use DateTimeImmutable;
 use Doctrine\DBAL\Connection;
 use Mediarama\Media\Application\MediaAssetRepository;
 use Mediarama\Organization\Application\OwnedPresentationManagement;
+use Mediarama\Publishing\Application\PublicPublicationTimelineStore;
 use Symfony\Component\Uid\Uuid;
 
 final readonly class DbalOwnedPresentationManagement implements OwnedPresentationManagement
@@ -14,6 +16,7 @@ final readonly class DbalOwnedPresentationManagement implements OwnedPresentatio
     public function __construct(
         private Connection $connection,
         private MediaAssetRepository $media,
+        private PublicPublicationTimelineStore $timeline,
     ) {
     }
 
@@ -49,6 +52,32 @@ final readonly class DbalOwnedPresentationManagement implements OwnedPresentatio
         }
 
         $this->media->save($asset);
+
+        if ((bool) $this->connection->fetchOne(
+            <<<'SQL'
+SELECT EXISTS (
+    SELECT 1
+    FROM media_assets m
+    WHERE m.id = :media
+      AND m.deleted_at IS NULL
+      AND m.processing_state = 'ready'
+      AND m.moderation_state = 'published'
+      AND EXISTS (
+          SELECT 1
+          FROM collection_media membership
+          JOIN effective_public_collections visible
+            ON visible.collection_id = membership.collection_id
+          WHERE membership.media_id = m.id
+      )
+)
+SQL,
+            ['media' => $mediaId->toRfc4122()],
+        )) {
+            $this->timeline->touchMediaPublicContent(
+                $mediaId,
+                new DateTimeImmutable(),
+            );
+        }
     }
 
     public function updateCollection(
@@ -70,7 +99,7 @@ final readonly class DbalOwnedPresentationManagement implements OwnedPresentatio
             $description,
         ): void {
             $row = $connection->fetchAssociative(
-                'SELECT id
+                'SELECT id, visibility
                  FROM collections
                  WHERE id = :collection
                    AND owner_id = :owner
@@ -88,8 +117,12 @@ final readonly class DbalOwnedPresentationManagement implements OwnedPresentatio
                 );
             }
 
-            $sets = ['updated_at = CURRENT_TIMESTAMP'];
-            $params = ['collection' => $collectionId->toRfc4122()];
+            $changedAt = new DateTimeImmutable();
+            $sets = ['updated_at = :updated'];
+            $params = [
+                'collection' => $collectionId->toRfc4122(),
+                'updated' => $changedAt->format(DATE_ATOM),
+            ];
 
             if ($title !== null) {
                 $sets[] = 'title = :title';
@@ -107,6 +140,13 @@ final readonly class DbalOwnedPresentationManagement implements OwnedPresentatio
                  WHERE id = :collection',
                 $params,
             );
+
+            if ((string) $row['visibility'] === 'public') {
+                $this->timeline->touchCollectionPublicContent(
+                    $collectionId,
+                    $changedAt,
+                );
+            }
         });
     }
 
@@ -121,7 +161,7 @@ final readonly class DbalOwnedPresentationManagement implements OwnedPresentatio
             $mediaId,
         ): void {
             $collection = $connection->fetchAssociative(
-                'SELECT mode
+                'SELECT mode, visibility
                  FROM collections
                  WHERE id = :collection
                    AND owner_id = :owner
@@ -140,8 +180,10 @@ final readonly class DbalOwnedPresentationManagement implements OwnedPresentatio
             }
 
             $mode = (string) $collection['mode'];
-            $eligible = $mode === 'manual'
-                ? (bool) $connection->fetchOne(
+            $isPublic = (string) $collection['visibility'] === 'public';
+
+            if ($mode === 'manual') {
+                $eligible = (bool) $connection->fetchOne(
                     'SELECT EXISTS (
                         SELECT 1
                         FROM collection_media cm
@@ -150,13 +192,61 @@ final readonly class DbalOwnedPresentationManagement implements OwnedPresentatio
                           AND cm.media_id = :media
                           AND m.deleted_at IS NULL
                           AND m.processing_state = \'ready\'
+                          AND m.media_type = \'image\'
+                          AND EXISTS (
+                              SELECT 1
+                              FROM media_derivatives derivative
+                              WHERE derivative.media_id = m.id
+                                AND derivative.kind = \'image\'
+                                AND derivative.profile = \'thumbnail\'
+                          )
+                          AND (
+                              :public = FALSE
+                              OR m.moderation_state = \'published\'
+                          )
                     )',
                     [
                         'collection' => $collectionId->toRfc4122(),
                         'media' => $mediaId->toRfc4122(),
+                        'public' => $isPublic,
                     ],
-                )
-                : (bool) $connection->fetchOne(
+                    ['public' => \Doctrine\DBAL\ParameterType::BOOLEAN],
+                );
+            } elseif ($isPublic) {
+                $eligible = (bool) $connection->fetchOne(
+                    <<<'SQL'
+SELECT EXISTS (
+    SELECT 1
+    FROM media_assets m
+    WHERE m.id = :media
+      AND m.owner_id = :owner
+      AND m.deleted_at IS NULL
+      AND m.processing_state = 'ready'
+      AND m.moderation_state = 'published'
+      AND m.media_type = 'image'
+      AND EXISTS (
+          SELECT 1
+          FROM collection_media membership
+          JOIN effective_public_collections public_collection
+            ON public_collection.collection_id = membership.collection_id
+          WHERE membership.media_id = m.id
+      )
+      AND EXISTS (
+          SELECT 1
+          FROM media_derivatives derivative
+          WHERE derivative.media_id = m.id
+            AND derivative.kind = 'image'
+            AND derivative.profile = 'thumbnail'
+      )
+)
+SQL,
+                    [
+                        'media' => $mediaId->toRfc4122(),
+                        'owner' => $ownerId->toRfc4122(),
+                    ],
+                );
+            } else {
+                $eligible = (bool) $connection->fetchOne(
                     'SELECT EXISTS (
                         SELECT 1
                         FROM media_assets m
@@ -164,12 +254,21 @@ final readonly class DbalOwnedPresentationManagement implements OwnedPresentatio
                           AND m.owner_id = :owner
                           AND m.deleted_at IS NULL
                           AND m.processing_state = \'ready\'
+                          AND m.media_type = \'image\'
+                          AND EXISTS (
+                              SELECT 1
+                              FROM media_derivatives derivative
+                              WHERE derivative.media_id = m.id
+                                AND derivative.kind = \'image\'
+                                AND derivative.profile = \'thumbnail\'
+                          )
                     )',
                     [
                         'media' => $mediaId->toRfc4122(),
                         'owner' => $ownerId->toRfc4122(),
                     ],
                 );
+            }
 
             if (!$eligible) {
                 throw new \DomainException(
@@ -177,16 +276,25 @@ final readonly class DbalOwnedPresentationManagement implements OwnedPresentatio
                 );
             }
 
+            $changedAt = new DateTimeImmutable();
             $connection->executeStatement(
                 'UPDATE collections
                  SET cover_media_id = :media,
-                     updated_at = CURRENT_TIMESTAMP
+                     updated_at = :updated
                  WHERE id = :collection',
                 [
                     'media' => $mediaId->toRfc4122(),
+                    'updated' => $changedAt->format(DATE_ATOM),
                     'collection' => $collectionId->toRfc4122(),
                 ],
             );
+
+            if ($isPublic) {
+                $this->timeline->touchCollectionPublicContent(
+                    $collectionId,
+                    $changedAt,
+                );
+            }
         });
     }
 

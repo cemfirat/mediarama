@@ -503,7 +503,7 @@ SQL,
         ): void {
             $row = $connection->fetchAssociative(
                 <<<'SQL'
-SELECT p.status
+SELECT p.status, r.status AS run_status
 FROM organization_proposals p
 JOIN organization_runs r ON r.id = p.run_id
 WHERE p.id = :proposal
@@ -525,6 +525,15 @@ SQL,
             $status = OrganizationProposalStatus::from((string) $row['status']);
             if ($status === OrganizationProposalStatus::Rejected) {
                 return;
+            }
+
+            if (
+                (string) $row['run_status']
+                !== OrganizationRunStatus::ReadyForReview->value
+            ) {
+                throw new \DomainException(
+                    'Organization run is not ready for proposal review.',
+                );
             }
 
             if ($status !== OrganizationProposalStatus::PendingReview) {

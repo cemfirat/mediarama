@@ -58,16 +58,47 @@ final readonly class DbalMediaTagManagement implements MediaTagManagement
             }
 
             $existing = $connection->fetchOne(
-                'SELECT id FROM tags WHERE slug = :slug',
-                ['slug' => $slug],
+                'SELECT id
+                 FROM tags
+                 WHERE LOWER(name) = LOWER(:name)
+                 ORDER BY id ASC
+                 LIMIT 1',
+                ['name' => $name],
             );
 
             if ($existing === false) {
+                $resolvedSlug = $slug;
+                $slugOwner = $connection->fetchOne(
+                    'SELECT id FROM tags WHERE slug = :slug',
+                    ['slug' => $resolvedSlug],
+                );
+
+                if ($slugOwner !== false) {
+                    $suffix = substr(
+                        hash('sha256', mb_strtolower($name, 'UTF-8')),
+                        0,
+                        10,
+                    );
+                    $resolvedSlug = rtrim(
+                        substr($slug, 0, 149),
+                        '-',
+                    ).'-'.$suffix;
+
+                    if ($connection->fetchOne(
+                        'SELECT id FROM tags WHERE slug = :slug',
+                        ['slug' => $resolvedSlug],
+                    ) !== false) {
+                        throw new \DomainException(
+                            'Tag proposal could not allocate a unique stable slug.',
+                        );
+                    }
+                }
+
                 $tagId = Uuid::v7();
                 $now = (new DateTimeImmutable())->format(DATE_ATOM);
                 $connection->insert('tags', [
                     'id' => $tagId->toRfc4122(),
-                    'slug' => $slug,
+                    'slug' => $resolvedSlug,
                     'name' => $name,
                     'created_at' => $now,
                     'updated_at' => $now,
