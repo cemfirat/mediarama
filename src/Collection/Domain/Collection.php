@@ -23,16 +23,57 @@ final class Collection
         public ?string $slug = null,
         public int $position = 0,
         public SearchIndexPolicy $searchIndexPolicy = SearchIndexPolicy::Inherit,
+        public CollectionMode $mode = CollectionMode::Manual,
+        public ?SmartCollectionRule $smartRule = null,
     ) {
         if (trim($title) === '') {
             throw new \InvalidArgumentException('Collection title must not be empty.');
         }
+
+        if (
+            ($mode === CollectionMode::Manual && $smartRule !== null)
+            || ($mode === CollectionMode::Smart && $smartRule === null)
+        ) {
+            throw new \InvalidArgumentException('Collection mode and Smart rule are inconsistent.');
+        }
     }
 
-    public static function create(?Uuid $ownerId, string $title, Visibility $visibility = Visibility::Private): self
-    {
+    public static function create(
+        ?Uuid $ownerId,
+        string $title,
+        Visibility $visibility = Visibility::Private,
+    ): self {
         $now = new DateTimeImmutable();
 
-        return new self(Uuid::v7(), $ownerId, trim($title), null, $visibility, $now, $now);
+        return new self(
+            Uuid::v7(),
+            $ownerId,
+            trim($title),
+            null,
+            $visibility,
+            $now,
+            $now,
+        );
+    }
+
+    public static function createSmart(
+        Uuid $ownerId,
+        string $title,
+        SmartCollectionRule $rule,
+        Visibility $visibility = Visibility::Private,
+    ): self {
+        $now = new DateTimeImmutable();
+
+        return new self(
+            Uuid::v7(),
+            $ownerId,
+            trim($title),
+            null,
+            $visibility,
+            $now,
+            $now,
+            mode: CollectionMode::Smart,
+            smartRule: $rule,
+        );
     }
 }

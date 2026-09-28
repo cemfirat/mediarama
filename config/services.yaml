@@ -20,6 +20,7 @@ services:
             - '../src/Media/Application/VideoProperties.php'
             - '../src/Media/Application/VideoPosterProfile.php'
             - '../src/Media/Application/VideoPlaybackProfile.php'
+            - '../src/Collection/Application/SmartCollectionSqlPredicate.php'
             - '../src/Upload/Application/InspectedContent.php'
             - '../src/Export/Application/MetadataExportPolicy.php'
             - '../src/Security/Application/AuthenticatedUser.php'
@@ -101,6 +102,12 @@ services:
 
     Mediarama\Collection\Application\CollectionAccessPolicy:
         alias: Mediarama\Collection\Infrastructure\Persistence\DbalCollectionAccessPolicy
+
+    Mediarama\Collection\Application\SmartCollectionConfigurator:
+        alias: Mediarama\Collection\Infrastructure\Persistence\DbalSmartCollectionConfigurator
+
+    Mediarama\Collection\Application\SmartCollectionResolver:
+        alias: Mediarama\Collection\Infrastructure\Persistence\DbalSmartCollectionResolver
 
     Mediarama\Upload\Application\UploadDestinationAuthorizer:
         alias: Mediarama\Upload\Infrastructure\Authorization\CollectionUploadDestinationAuthorizer

@@ -22,34 +22,7 @@ final readonly class DbalLibraryMediaSearch implements LibraryMediaSearch
     public function search(Uuid $actorId, LibraryMediaSearchCriteria $c): array
     {
         $where = [
-            "m.deleted_at IS NULL",
-            "m.processing_state = 'ready'",
-            <<<'SQL'
-(
-    m.owner_id = :user
-    OR EXISTS (
-        SELECT 1
-        FROM collection_media membership
-        JOIN actor_visible_collections visible_collection
-          ON visible_collection.collection_id = membership.collection_id
-        JOIN collections granted_collection
-          ON granted_collection.id = membership.collection_id
-        LEFT JOIN effective_public_collections public_collection
-          ON public_collection.collection_id = membership.collection_id
-        WHERE membership.media_id = m.id
-          AND (
-              granted_collection.owner_id = :user
-              OR (
-                  m.moderation_state <> 'rejected'
-                  AND (
-                      public_collection.collection_id IS NULL
-                      OR m.moderation_state = 'published'
-                  )
-              )
-          )
-    )
-)
-SQL,
+            AuthenticatedMediaAccessSql::predicate('m'),
         ];
 
         $params = ['user' => $actorId->toRfc4122()];

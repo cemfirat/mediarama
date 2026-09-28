@@ -162,3 +162,48 @@ Hybrid behavior should receive its own explicit design instead of overloading th
 
 - GitHub issue #14 — Smart Collections from metadata and saved rules
 - GitHub issue #13 — integrated SEO, social metadata and media discovery
+
+
+## V1 implementation boundary
+
+The first implementation deliberately keeps Smart Collections inside the
+authenticated library. It does not make Smart Collections public or indexable.
+
+A Smart Collection belongs to a concrete owner. V1 dynamic membership starts
+from that owner's MediaAssets and then applies the normal authenticated
+MediaAsset visibility boundary for the requesting actor. This gives the saved
+rule a stable library universe while preventing a viewer's unrelated personal
+MediaAssets from appearing merely because they happen to match somebody else's
+shared Smart Collection.
+
+V1 rules are versioned JSON with a fixed allowlist:
+
+- media type;
+- capture time;
+- creator;
+- camera make/model;
+- lens;
+- coarse/location-name text;
+- tag slug/name;
+- average rating;
+- orientation derived from width/height.
+
+Exact GPS and arbitrary raw metadata/provenance paths are excluded.
+
+The compiler owns every SQL fragment and binds every rule value. Rules are
+limited to four group levels, 50 leaf predicates and 100 values per `in`
+predicate.
+
+Result ordering is deterministic:
+
+1. capture time descending, nulls last;
+2. record creation time descending;
+3. UUID descending.
+
+Manual Collections remain unchanged and continue to use `collection_media`.
+Converting a manual Collection that already has persisted membership into a
+Smart Collection fails closed instead of silently discarding or reinterpreting
+its curated membership.
+
+Public Smart Collection routing, publication and SEO remain a separate
+follow-up to #13/#14 after this deterministic resolver is proven.

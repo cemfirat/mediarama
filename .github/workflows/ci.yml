@@ -226,6 +226,9 @@ jobs:
       - name: Verify collection access policy
         run: php tests/Integration/Collection/access-policy.php
 
+      - name: Verify Smart Collection rule and dynamic membership foundation
+        run: php tests/Integration/Collection/smart-collections.php
+
       - name: Verify system administration permission policy
         run: php tests/Integration/Security/system-administration-policy.php
 
