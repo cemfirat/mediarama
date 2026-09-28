@@ -28,6 +28,10 @@
     <div class="uk-alert-warning" uk-alert>
         <p>Select one or more currently accessible MediaAssets before starting an organization analysis.</p>
     </div>
+{% elseif organization_error == 'no_ai_provider' %}
+    <div class="uk-alert-warning" uk-alert>
+        <p>No optional AI provider is configured. Deterministic metadata analysis remains fully available.</p>
+    </div>
 {% endif %}
 
 <section class="uk-card uk-card-default uk-card-body uk-margin-large-top" aria-labelledby="library-filter-heading">
@@ -110,7 +114,10 @@
         {% if items is not empty %}
         <form id="organization-analyze-form" method="post" action="{{ path('library_organization_analyze') }}">
             <input type="hidden" name="_csrf_token" value="{{ organization_csrf_token }}">
-            <button class="uk-button uk-button-secondary" type="submit">Analyze selected</button>
+            <button class="uk-button uk-button-secondary" type="submit" name="analysis_mode" value="metadata">Analyze selected</button>
+            {% if organization_ai_available %}
+                <button class="uk-button uk-button-default uk-margin-small-left" type="submit" name="analysis_mode" value="ai">AI-assisted analysis</button>
+            {% endif %}
         </form>
         {% endif %}
     </div>
