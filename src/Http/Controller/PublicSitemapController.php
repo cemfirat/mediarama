@@ -6,6 +6,7 @@ namespace Mediarama\Http\Controller;
 
 use Mediarama\Platform\Application\PlatformSettingsRepository;
 use Mediarama\Platform\Domain\SearchIndexPolicy;
+use Mediarama\Seo\Application\PublicMediaSeoText;
 use Mediarama\Seo\Application\PublicSitemapQuery;
 use Mediarama\Seo\Infrastructure\Http\PublicUrlGenerator;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -21,6 +22,7 @@ final class PublicSitemapController extends AbstractController
         private readonly PublicSitemapQuery $sitemap,
         private readonly PlatformSettingsRepository $settings,
         private readonly PublicUrlGenerator $urls,
+        private readonly PublicMediaSeoText $mediaText,
     ) {
     }
 
@@ -171,7 +173,7 @@ final class PublicSitemapController extends AbstractController
 
         $lines = [
             '<?xml version="1.0" encoding="UTF-8"?>',
-            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:video="http://www.google.com/schemas/sitemap-video/1.1">',
         ];
 
         foreach ($media as $item) {
@@ -180,12 +182,87 @@ final class PublicSitemapController extends AbstractController
                 'public_media_show',
                 ['id' => $item->id->toRfc4122()],
             )).'</loc>';
+
+            if ($item->video !== null) {
+                $title = $this->mediaText->title(
+                    $item->id,
+                    $item->video->title,
+                    'video',
+                );
+                $description = $this->mediaText->description(
+                    $item->video->description,
+                    'video',
+                );
+                $posterUrl = $this->urls->route(
+                    'public_video_derivative',
+                    [
+                        'id' => $item->id->toRfc4122(),
+                        'version' => $item->video->processingVersion,
+                        'profile' => 'poster',
+                    ],
+                );
+                $contentUrl = $this->urls->route(
+                    'public_video_derivative',
+                    [
+                        'id' => $item->id->toRfc4122(),
+                        'version' => $item->video->processingVersion,
+                        'profile' => 'browser_mp4',
+                    ],
+                );
+
+                $lines[] = '    <video:video>';
+                $lines[] = '      <video:thumbnail_loc>'.$this->xml($posterUrl).'</video:thumbnail_loc>';
+                $lines[] = '      <video:title>'.$this->xml($title).'</video:title>';
+                $lines[] = '      <video:description>'.$this->xml(
+                    $this->truncate($description, 2048),
+                ).'</video:description>';
+                $lines[] = '      <video:content_loc>'.$this->xml($contentUrl).'</video:content_loc>';
+
+                $duration = $this->videoSitemapDurationSeconds(
+                    $item->video->durationMs,
+                );
+                if ($duration !== null) {
+                    $lines[] = '      <video:duration>'.$duration.'</video:duration>';
+                }
+
+                $lines[] = '      <video:publication_date>'.$this->xml(
+                    $item->video->publishedAt->format(DATE_ATOM),
+                ).'</video:publication_date>';
+                $lines[] = '    </video:video>';
+            }
+
             $lines[] = '  </url>';
         }
 
         $lines[] = '</urlset>';
 
         return $this->xmlResponse(implode("\n", $lines)."\n");
+    }
+
+    private function videoSitemapDurationSeconds(?int $durationMs): ?int
+    {
+        if ($durationMs === null || $durationMs <= 0) {
+            return null;
+        }
+
+        $seconds = (int) ceil($durationMs / 1000);
+        if ($seconds < 1 || $seconds > 28800) {
+            return null;
+        }
+
+        return $seconds;
+    }
+
+    private function truncate(string $value, int $maximumCharacters): string
+    {
+        $length = iconv_strlen($value, 'UTF-8');
+        if ($length === false || $length <= $maximumCharacters) {
+            return $value;
+        }
+
+        $truncated = iconv_substr($value, 0, $maximumCharacters, 'UTF-8');
+
+        return is_string($truncated) ? $truncated : $value;
     }
 
     private function xmlResponse(string $xml): Response

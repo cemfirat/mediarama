@@ -88,7 +88,12 @@ The query uses an `EXISTS` visibility test rather than joining result rows to ev
 
 Collection index policy is deliberately independent. A `noindex` Collection does not remove an otherwise indexable MediaAsset detail page as long as the asset remains reachable through an effectively public membership.
 
-The MediaAsset sitemap query selects only the public route identity. It does not select titles, descriptions, filenames, storage keys, raw metadata, GPS values or private Collection names.
+The MediaAsset sitemap query normally needs only the public route identity.
+For qualifying videos it additionally selects the intentionally public
+title/description, canonical duration, truthful first-publication time and the
+latest complete poster/browser-MP4 presentation version. It never selects
+source filenames, original storage keys, raw metadata, GPS values, private
+Collection names or publication-provenance source identifiers.
 
 ## Image discovery
 
@@ -109,13 +114,31 @@ Only the derivative URL is emitted. Titles, descriptions, GPS, raw metadata, sto
 
 A MediaAsset may appear on more than one indexable Collection page. Repeating its image entry under each real host page is intentional and does not create a second MediaAsset identity.
 
-## What is intentionally absent
+## Video discovery
 
-### No video sitemap yet
+The existing bounded MediaAsset sitemap family carries Google's video sitemap
+extension on a canonical MediaAsset entry only when the video has:
 
-The public gallery does not yet expose a stable public video player/content URL. Google video sitemap metadata requires a real host page plus accessible thumbnail/player or content targets.
+- the normal effective public/indexable MediaAsset boundary;
+- a complete matching generated poster + browser-MP4 presentation version;
+- a non-null truthful `public_published_at`.
 
-Video sitemap support belongs with the future public video presentation route, not with a fabricated placeholder.
+The parent `<loc>` remains the stable `/media/{id}` watch page. The video
+extension uses:
+
+- generated poster derivative as `video:thumbnail_loc`;
+- the same public/fallback title and description semantics as `VideoObject`;
+- generated browser MP4 as `video:content_loc`;
+- canonical duration in whole seconds when it is inside Google's supported
+  1–28800 second range;
+- persisted first-publication time as `video:publication_date`.
+
+A public/indexable video with unknown publication time remains a normal
+MediaAsset sitemap URL but receives no `video:video` extension. This preserves
+canonical page discovery without fabricating video-rich metadata.
+
+MediaAsset `noindex`, inaccessible ancestry, unpublished/non-ready state or
+site publication-off remove the MediaAsset from sitemap discovery entirely.
 
 ### No synthetic lastmod
 
@@ -135,6 +158,11 @@ Integration coverage proves that the sitemap:
 - excludes unpublished media;
 - removes the entire discovery surface when public publishing is off;
 - never emits ad-hoc public search URLs;
-- never emits a deliberately inserted private metadata sentinel or private Collection title.
+- never emits a deliberately inserted private metadata sentinel or private Collection title;
+- emits video extension data only for complete public presentations with
+  truthful first-publication time;
+- keeps `VideoObject` and video-sitemap poster/content/title/description/date
+  semantics aligned;
+- never leaks original video storage identity or publication provenance source.
 
 The tests also send forged `Host` headers to both sitemap families and verify that every generated URL remains anchored to `PUBLIC_BASE_URL`.

@@ -8,7 +8,9 @@ use Symfony\Component\Uid\Uuid;
 
 final readonly class PublicSitemapMedia
 {
-    public function __construct(public Uuid $id)
-    {
+    public function __construct(
+        public Uuid $id,
+        public ?PublicSitemapVideo $video = null,
+    ) {
     }
 }

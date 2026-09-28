@@ -21,6 +21,7 @@ PLAYBACK_PATH="$DERIVATIVE_ROOT/browser_mp4.mp4"
 CANONICAL_URL="$CANONICAL_ORIGIN/media/$MEDIA_ID"
 POSTER_URL="$CANONICAL_ORIGIN/media/$MEDIA_ID/video/v1/poster"
 PLAYBACK_URL="$CANONICAL_ORIGIN/media/$MEDIA_ID/video/v1/browser_mp4"
+PUBLICATION_DATE="2024-02-03T04:05:06+00:00"
 
 cleanup() {
     if [ -n "$SERVER_PID" ]; then
@@ -71,7 +72,7 @@ POSTER_SIZE="$(wc -c < "$POSTER_PATH" | tr -d ' ')"
 PLAYBACK_SIZE="$(wc -c < "$PLAYBACK_PATH" | tr -d ' ')"
 SOURCE_SHA="$(sha256sum "$SOURCE_TMP" | awk '{print $1}')"
 
-PUBLIC_VIDEO_MEDIA_ID="$MEDIA_ID" PUBLIC_VIDEO_COLLECTION_ID="$COLLECTION_ID" PUBLIC_VIDEO_SOURCE_SIZE="$SOURCE_SIZE" PUBLIC_VIDEO_POSTER_SIZE="$POSTER_SIZE" PUBLIC_VIDEO_PLAYBACK_SIZE="$PLAYBACK_SIZE" PUBLIC_VIDEO_SOURCE_SHA="$SOURCE_SHA" php <<'PHP'
+PUBLIC_VIDEO_MEDIA_ID="$MEDIA_ID" PUBLIC_VIDEO_COLLECTION_ID="$COLLECTION_ID" PUBLIC_VIDEO_SOURCE_SIZE="$SOURCE_SIZE" PUBLIC_VIDEO_POSTER_SIZE="$POSTER_SIZE" PUBLIC_VIDEO_PLAYBACK_SIZE="$PLAYBACK_SIZE" PUBLIC_VIDEO_SOURCE_SHA="$SOURCE_SHA" PUBLIC_VIDEO_PUBLISHED_AT="$PUBLICATION_DATE" php <<'PHP'
 <?php
 require 'vendor/autoload.php';
 
@@ -88,6 +89,7 @@ $db = Doctrine\DBAL\DriverManager::getConnection($dsn->parse((string) getenv('DA
 $mediaId = (string) getenv('PUBLIC_VIDEO_MEDIA_ID');
 $collectionId = (string) getenv('PUBLIC_VIDEO_COLLECTION_ID');
 $now = (new DateTimeImmutable())->format(DATE_ATOM);
+$publishedAt = (string) getenv('PUBLIC_VIDEO_PUBLISHED_AT');
 
 $db->insert('media_assets', [
     'id' => $mediaId,
@@ -124,6 +126,10 @@ $db->insert('media_assets', [
     'longitude' => 16.456,
     'location_name' => 'PRIVATE LOCATION SENTINEL',
     'search_index_policy' => 'inherit',
+    'public_published_at' => $publishedAt,
+    'public_updated_at' => $publishedAt,
+    'public_published_origin' => 'imported',
+    'public_published_source' => 'PRIVATE_IMPORT_SOURCE_SENTINEL',
     'created_at' => $now,
     'updated_at' => $now,
     'deleted_at' => null,
@@ -291,6 +297,178 @@ expect_marker_url() {
     echo "OK $label"
 }
 
+assert_video_object() {
+    local file="$1"
+
+    PUBLIC_VIDEO_HTML_FILE="$file" \
+    PUBLIC_VIDEO_CANONICAL="$CANONICAL_URL" \
+    PUBLIC_VIDEO_POSTER="$POSTER_URL" \
+    PUBLIC_VIDEO_CONTENT="$PLAYBACK_URL" \
+    PUBLIC_VIDEO_PUBLISHED_AT="$PUBLICATION_DATE" \
+    php <<'PHP'
+<?php
+$html = (string) file_get_contents((string) getenv('PUBLIC_VIDEO_HTML_FILE'));
+if (!preg_match('~<script type="application/ld\\+json">(.*?)</script>~s', $html, $match)) {
+    fwrite(STDERR, "VideoObject JSON-LD script missing.\n");
+    exit(1);
+}
+
+$data = json_decode(trim($match[1]), true, flags: JSON_THROW_ON_ERROR);
+$expected = [
+    '@context' => 'https://schema.org',
+    '@type' => 'VideoObject',
+    'name' => 'Public Video Fixture',
+    'description' => 'Public video playback integration fixture.',
+    'thumbnailUrl' => (string) getenv('PUBLIC_VIDEO_POSTER'),
+    'uploadDate' => (string) getenv('PUBLIC_VIDEO_PUBLISHED_AT'),
+    'contentUrl' => (string) getenv('PUBLIC_VIDEO_CONTENT'),
+    'mainEntityOfPage' => (string) getenv('PUBLIC_VIDEO_CANONICAL'),
+    'duration' => 'PT1S',
+];
+
+foreach ($expected as $key => $value) {
+    if (($data[$key] ?? null) !== $value) {
+        fwrite(STDERR, "Unexpected VideoObject field ".$key.".\n");
+        exit(1);
+    }
+}
+
+$raw = (string) $match[1];
+foreach ([
+    'PRIVATE-video-source-sentinel.mov',
+    'PRIVATE_RAW_METADATA_SENTINEL',
+    'PRIVATE LOCATION SENTINEL',
+    'PRIVATE_IMPORT_SOURCE_SENTINEL',
+    'originals/',
+    'public_published_source',
+] as $forbidden) {
+    if (str_contains($raw, $forbidden)) {
+        fwrite(STDERR, "VideoObject leaked private field: ".$forbidden."\n");
+        exit(1);
+    }
+}
+
+echo "OK truthful privacy-safe VideoObject\n";
+PHP
+}
+
+fetch_media_sitemap_for_video() {
+    curl --fail --silent --show-error \
+        --header "Host: $HOSTILE_HOST" \
+        "$BASE_URL/sitemap.xml" \
+        -o /tmp/public-video-sitemap-index.xml
+
+    local path
+    while IFS= read -r path; do
+        [ -n "$path" ] || continue
+
+        curl --fail --silent --show-error \
+            --header "Host: $HOSTILE_HOST" \
+            "$BASE_URL$path" \
+            -o /tmp/public-video-media-sitemap.xml
+
+        if grep -F "<loc>$CANONICAL_URL</loc>" /tmp/public-video-media-sitemap.xml >/dev/null; then
+            printf '%s' "$path" >/tmp/public-video-media-sitemap-path
+            return 0
+        fi
+    done < <(
+        grep -oE '<loc>[^<]*/sitemaps/media-[1-9][0-9]*\.xml</loc>' /tmp/public-video-sitemap-index.xml \
+            | sed -E 's#.*(/sitemaps/media-[1-9][0-9]*\.xml).*</loc>#\1#' \
+            || true
+    )
+
+    return 1
+}
+
+assert_video_sitemap_entry() {
+    fetch_media_sitemap_for_video
+
+    expect_contains /tmp/public-video-media-sitemap.xml \
+        'xmlns:video="http://www.google.com/schemas/sitemap-video/1.1"' \
+        "Video sitemap namespace"
+    expect_contains /tmp/public-video-media-sitemap.xml \
+        "<video:thumbnail_loc>$POSTER_URL</video:thumbnail_loc>" \
+        "Video sitemap poster"
+    expect_contains /tmp/public-video-media-sitemap.xml \
+        '<video:title>Public Video Fixture</video:title>' \
+        "Video sitemap title"
+    expect_contains /tmp/public-video-media-sitemap.xml \
+        '<video:description>Public video playback integration fixture.</video:description>' \
+        "Video sitemap description"
+    expect_contains /tmp/public-video-media-sitemap.xml \
+        "<video:content_loc>$PLAYBACK_URL</video:content_loc>" \
+        "Video sitemap generated browser MP4"
+    expect_contains /tmp/public-video-media-sitemap.xml \
+        '<video:duration>1</video:duration>' \
+        "Video sitemap duration"
+    expect_contains /tmp/public-video-media-sitemap.xml \
+        "<video:publication_date>$PUBLICATION_DATE</video:publication_date>" \
+        "Video sitemap truthful publication date"
+    expect_absent /tmp/public-video-media-sitemap.xml "$HOSTILE_HOST" \
+        "Host header cannot influence video sitemap URLs"
+    expect_absent /tmp/public-video-media-sitemap.xml 'PRIVATE-video-source-sentinel.mov' \
+        "Video sitemap does not expose original filename"
+    expect_absent /tmp/public-video-media-sitemap.xml 'PRIVATE_RAW_METADATA_SENTINEL' \
+        "Video sitemap does not expose raw metadata"
+    expect_absent /tmp/public-video-media-sitemap.xml 'PRIVATE LOCATION SENTINEL' \
+        "Video sitemap does not expose private location"
+    expect_absent /tmp/public-video-media-sitemap.xml 'PRIVATE_IMPORT_SOURCE_SENTINEL' \
+        "Video sitemap does not expose publication provenance source"
+}
+
+assert_video_metadata_absent_from_own_sitemap_entry() {
+    fetch_media_sitemap_for_video
+
+    PUBLIC_VIDEO_SITEMAP_FILE="/tmp/public-video-media-sitemap.xml" \
+    PUBLIC_VIDEO_CANONICAL="$CANONICAL_URL" \
+    php <<'PHP'
+<?php
+$xml = (string) file_get_contents((string) getenv('PUBLIC_VIDEO_SITEMAP_FILE'));
+$canonical = preg_quote((string) getenv('PUBLIC_VIDEO_CANONICAL'), '~');
+
+if (!preg_match('~<url>\\s*<loc>'.$canonical.'</loc>(.*?)</url>~s', $xml, $match)) {
+    fwrite(STDERR, "Canonical MediaAsset sitemap entry missing.\n");
+    exit(1);
+}
+
+if (str_contains((string) $match[1], '<video:video>')) {
+    fwrite(STDERR, "Video discovery metadata should be absent from this canonical entry.\n");
+    exit(1);
+}
+
+echo "OK canonical MediaAsset remains listed without fabricated video discovery metadata\n";
+PHP
+}
+
+assert_media_canonical_absent_from_sitemaps() {
+    curl --fail --silent --show-error \
+        --header "Host: $HOSTILE_HOST" \
+        "$BASE_URL/sitemap.xml" \
+        -o /tmp/public-video-sitemap-index.xml
+
+    local path
+    while IFS= read -r path; do
+        [ -n "$path" ] || continue
+
+        curl --fail --silent --show-error \
+            --header "Host: $HOSTILE_HOST" \
+            "$BASE_URL$path" \
+            -o /tmp/public-video-absence-sitemap.xml
+
+        if grep -F "<loc>$CANONICAL_URL</loc>" /tmp/public-video-absence-sitemap.xml >/dev/null; then
+            echo "FAIL excluded video MediaAsset remained in sitemap: $path"
+            cat /tmp/public-video-absence-sitemap.xml
+            exit 1
+        fi
+    done < <(
+        grep -oE '<loc>[^<]*/sitemaps/media-[1-9][0-9]*\.xml</loc>' /tmp/public-video-sitemap-index.xml \
+            | sed -E 's#.*(/sitemaps/media-[1-9][0-9]*\.xml).*</loc>#\1#' \
+            || true
+    )
+
+    echo "OK excluded video MediaAsset absent from all media sitemap chunks"
+}
+
 expect_header() {
     local file="$1"
     local value="$2"
@@ -332,7 +510,9 @@ expect_absent /tmp/public-video-page.html 'autoplay' "Video player does not auto
 expect_absent /tmp/public-video-page.html 'PRIVATE-video-source-sentinel.mov' "Original filename remains private"
 expect_absent /tmp/public-video-page.html 'PRIVATE_RAW_METADATA_SENTINEL' "Raw metadata remains private"
 expect_absent /tmp/public-video-page.html 'PRIVATE LOCATION SENTINEL' "Private canonical location remains private"
-expect_absent /tmp/public-video-page.html 'application/ld+json' "VideoObject is deferred until publication-date semantics exist"
+expect_contains /tmp/public-video-page.html 'application/ld+json' "Published indexable video emits VideoObject"
+assert_video_object /tmp/public-video-page.html
+assert_video_sitemap_entry
 expect_absent /tmp/public-video-page.html "$HOSTILE_HOST" "Host header cannot influence video page metadata"
 
 expect_status 200 "/media/$MEDIA_ID/video/v1/poster" /tmp/public-video-poster.jpg /tmp/public-video-poster.headers
@@ -364,6 +544,47 @@ require 'vendor/autoload.php';
 $dsn = new Doctrine\DBAL\Tools\DsnParser(['postgresql' => 'pdo_pgsql', 'postgres' => 'pdo_pgsql']);
 $db = Doctrine\DBAL\DriverManager::getConnection($dsn->parse((string) getenv('DATABASE_URL')));
 $db->executeStatement(
+    "UPDATE media_assets
+     SET public_published_at = NULL,
+         public_updated_at = NULL,
+         public_published_origin = NULL,
+         public_published_source = NULL
+     WHERE id = :id",
+    ['id' => (string) getenv('PUBLIC_VIDEO_MEDIA_ID')],
+);
+$db->close();
+PHP
+
+fetch_page "/media/$MEDIA_ID" /tmp/public-video-unknown-publication.html /tmp/public-video-unknown-publication.headers
+expect_absent /tmp/public-video-unknown-publication.html 'application/ld+json' "Unknown public publication date suppresses VideoObject"
+assert_video_metadata_absent_from_own_sitemap_entry
+
+PUBLIC_VIDEO_MEDIA_ID="$MEDIA_ID" PUBLIC_VIDEO_PUBLISHED_AT="$PUBLICATION_DATE" php <<'PHP'
+<?php
+require 'vendor/autoload.php';
+$dsn = new Doctrine\DBAL\Tools\DsnParser(['postgresql' => 'pdo_pgsql', 'postgres' => 'pdo_pgsql']);
+$db = Doctrine\DBAL\DriverManager::getConnection($dsn->parse((string) getenv('DATABASE_URL')));
+$db->executeStatement(
+    "UPDATE media_assets
+     SET public_published_at = :published,
+         public_updated_at = :published,
+         public_published_origin = 'imported',
+         public_published_source = 'PRIVATE_IMPORT_SOURCE_SENTINEL'
+     WHERE id = :id",
+    [
+        'published' => (string) getenv('PUBLIC_VIDEO_PUBLISHED_AT'),
+        'id' => (string) getenv('PUBLIC_VIDEO_MEDIA_ID'),
+    ],
+);
+$db->close();
+PHP
+
+PUBLIC_VIDEO_MEDIA_ID="$MEDIA_ID" php <<'PHP'
+<?php
+require 'vendor/autoload.php';
+$dsn = new Doctrine\DBAL\Tools\DsnParser(['postgresql' => 'pdo_pgsql', 'postgres' => 'pdo_pgsql']);
+$db = Doctrine\DBAL\DriverManager::getConnection($dsn->parse((string) getenv('DATABASE_URL')));
+$db->executeStatement(
     "UPDATE media_assets SET search_index_policy = 'noindex' WHERE id = :id",
     ['id' => (string) getenv('PUBLIC_VIDEO_MEDIA_ID')],
 );
@@ -377,6 +598,7 @@ expect_absent /tmp/public-video-noindex.html 'application/ld+json' "Noindex vide
 
 expect_status 206 "/media/$MEDIA_ID/video/v1/browser_mp4" /tmp/public-video-noindex-range.bin /tmp/public-video-noindex-range.headers -H 'Range: bytes=0-31'
 expect_header /tmp/public-video-noindex-range.headers 'X-Robots-Tag: noindex' "Video rendition respects MediaAsset noindex"
+assert_media_canonical_absent_from_sitemaps
 
 PUBLIC_VIDEO_MEDIA_ID="$MEDIA_ID" PUBLIC_VIDEO_COLLECTION_ID="$COLLECTION_ID" php <<'PHP'
 <?php
@@ -396,6 +618,8 @@ PHP
 
 fetch_page "/media/$MEDIA_ID" /tmp/public-video-collection-noindex.html /tmp/public-video-collection-noindex.headers
 expect_no_header /tmp/public-video-collection-noindex.headers 'X-Robots-Tag: noindex' "Collection noindex does not override video MediaAsset policy"
+expect_contains /tmp/public-video-collection-noindex.html 'application/ld+json' "Collection noindex leaves VideoObject discoverable"
+assert_video_sitemap_entry
 
 PUBLIC_VIDEO_COLLECTION_ID="$COLLECTION_ID" php <<'PHP'
 <?php
@@ -412,6 +636,8 @@ PHP
 expect_status 404 "/media/$MEDIA_ID" /tmp/public-video-private.html /tmp/public-video-private.headers
 expect_status 404 "/media/$MEDIA_ID/video/v1/poster" /tmp/public-video-private-poster.html /tmp/public-video-private-poster.headers
 expect_status 404 "/media/$MEDIA_ID/video/v1/browser_mp4" /tmp/public-video-private-playback.html /tmp/public-video-private-playback.headers
+assert_media_canonical_absent_from_sitemaps
+echo "OK Private-only video MediaAsset is absent from sitemap discovery"
 
 PUBLIC_VIDEO_COLLECTION_ID="$COLLECTION_ID" php <<'PHP'
 <?php
@@ -421,6 +647,53 @@ $db = Doctrine\DBAL\DriverManager::getConnection($dsn->parse((string) getenv('DA
 $db->executeStatement(
     "UPDATE collections SET password_protected = FALSE WHERE id = :id",
     ['id' => (string) getenv('PUBLIC_VIDEO_COLLECTION_ID')],
+);
+$db->close();
+PHP
+
+PUBLIC_VIDEO_MEDIA_ID="$MEDIA_ID" php <<'PHP'
+<?php
+require 'vendor/autoload.php';
+$dsn = new Doctrine\DBAL\Tools\DsnParser(['postgresql' => 'pdo_pgsql', 'postgres' => 'pdo_pgsql']);
+$db = Doctrine\DBAL\DriverManager::getConnection($dsn->parse((string) getenv('DATABASE_URL')));
+$db->executeStatement(
+    "UPDATE media_assets SET moderation_state = 'pending_review' WHERE id = :id",
+    ['id' => (string) getenv('PUBLIC_VIDEO_MEDIA_ID')],
+);
+$db->close();
+PHP
+
+expect_status 404 "/media/$MEDIA_ID" /tmp/public-video-pending.html /tmp/public-video-pending.headers
+assert_media_canonical_absent_from_sitemaps
+echo "OK Pending-review video is absent from page and sitemap discovery"
+
+PUBLIC_VIDEO_MEDIA_ID="$MEDIA_ID" php <<'PHP'
+<?php
+require 'vendor/autoload.php';
+$dsn = new Doctrine\DBAL\Tools\DsnParser(['postgresql' => 'pdo_pgsql', 'postgres' => 'pdo_pgsql']);
+$db = Doctrine\DBAL\DriverManager::getConnection($dsn->parse((string) getenv('DATABASE_URL')));
+$db->executeStatement(
+    "UPDATE media_assets
+     SET moderation_state = 'published',
+         processing_state = 'failed'
+     WHERE id = :id",
+    ['id' => (string) getenv('PUBLIC_VIDEO_MEDIA_ID')],
+);
+$db->close();
+PHP
+
+expect_status 404 "/media/$MEDIA_ID" /tmp/public-video-not-ready.html /tmp/public-video-not-ready.headers
+assert_media_canonical_absent_from_sitemaps
+echo "OK Non-ready video is absent from page and sitemap discovery"
+
+PUBLIC_VIDEO_MEDIA_ID="$MEDIA_ID" php <<'PHP'
+<?php
+require 'vendor/autoload.php';
+$dsn = new Doctrine\DBAL\Tools\DsnParser(['postgresql' => 'pdo_pgsql', 'postgres' => 'pdo_pgsql']);
+$db = Doctrine\DBAL\DriverManager::getConnection($dsn->parse((string) getenv('DATABASE_URL')));
+$db->executeStatement(
+    "UPDATE media_assets SET processing_state = 'ready' WHERE id = :id",
+    ['id' => (string) getenv('PUBLIC_VIDEO_MEDIA_ID')],
 );
 $db->close();
 PHP
