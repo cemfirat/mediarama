@@ -1,0 +1,65 @@
+<div class="uk-margin">
+    <label class="uk-form-label" for="smart-title">Title</label>
+    <input class="uk-input" id="smart-title" name="title" maxlength="200" required value="{{ collection_title }}">
+</div>
+
+<div class="uk-margin">
+    <label class="uk-form-label" for="smart-group">Combine rules</label>
+    <select class="uk-select uk-width-small" id="smart-group" name="group_operator">
+        <option value="and" {% if group_operator == 'and' %}selected{% endif %}>AND</option>
+        <option value="or" {% if group_operator == 'or' %}selected{% endif %}>OR</option>
+    </select>
+</div>
+
+<div class="uk-overflow-auto">
+<table class="uk-table uk-table-divider uk-table-small uk-table-middle">
+    <thead><tr><th>Field</th><th>Operator</th><th>Value</th><th>Second value</th></tr></thead>
+    <tbody>
+    {% for row in rows %}
+        <tr>
+            <td>
+                <select class="uk-select" name="field[]">
+                    <option value="">— unused —</option>
+                    {% for value, label in {
+                        'media_type':'Media type',
+                        'captured_at':'Captured at',
+                        'creator':'Creator',
+                        'camera_make':'Camera make',
+                        'camera_model':'Camera model',
+                        'lens':'Lens',
+                        'location_name':'Location name',
+                        'tag':'Tag',
+                        'rating_average':'Average rating',
+                        'orientation':'Orientation'
+                    } %}
+                        <option value="{{ value }}" {% if row.field == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </td>
+            <td>
+                <select class="uk-select" name="operator[]">
+                    <option value="">—</option>
+                    {% for value, label in {
+                        'eq':'equals',
+                        'neq':'not equal',
+                        'in':'in list',
+                        'gte':'≥',
+                        'lte':'≤',
+                        'between':'between',
+                        'contains':'contains',
+                        'has_tag':'has tag'
+                    } %}
+                        <option value="{{ value }}" {% if row.operator == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </td>
+            <td><input class="uk-input" name="value[]" value="{{ row.value }}" placeholder="Value; comma-separated for in"></td>
+            <td><input class="uk-input" name="secondary[]" value="{{ row.secondary }}" placeholder="Only for between"></td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+</div>
+<p class="uk-text-meta">
+    The server validates field/operator combinations, value types and complexity. Exact GPS and arbitrary raw metadata paths are not available.
+</p>

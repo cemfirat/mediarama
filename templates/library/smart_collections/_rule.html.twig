@@ -1,0 +1,19 @@
+{% macro node(node) %}
+    {% import _self as rules %}
+    {% if node.field is defined %}
+        <span class="uk-text-bold">{{ node.field|replace({'_': ' '}) }}</span>
+        <span class="uk-text-muted">{{ node.operator }}</span>
+        {% if node.value is iterable %}
+            <span>{{ node.value|join(' · ') }}</span>
+        {% else %}
+            <span>{{ node.value }}</span>
+        {% endif %}
+    {% else %}
+        <span class="uk-label">{{ node.op|upper }}</span>
+        <ul class="uk-list uk-list-divider uk-margin-small-top">
+            {% for child in node.rules %}
+                <li>{{ rules.node(child) }}</li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+{% endmacro %}

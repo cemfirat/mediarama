@@ -109,6 +109,9 @@ services:
     Mediarama\Collection\Application\SmartCollectionResolver:
         alias: Mediarama\Collection\Infrastructure\Persistence\DbalSmartCollectionResolver
 
+    Mediarama\Collection\Application\SmartCollectionManagement:
+        alias: Mediarama\Collection\Infrastructure\Persistence\DbalSmartCollectionManagement
+
     Mediarama\Upload\Application\UploadDestinationAuthorizer:
         alias: Mediarama\Upload\Infrastructure\Authorization\CollectionUploadDestinationAuthorizer
 
