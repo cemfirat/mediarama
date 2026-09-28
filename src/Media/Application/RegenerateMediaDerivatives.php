@@ -12,6 +12,7 @@ final readonly class RegenerateMediaDerivatives
     public function __construct(
         private MediaAssetRepository $media,
         private GenerateImageDerivatives $images,
+        private GenerateVideoDerivatives $videos,
     ) {
     }
 
@@ -19,10 +20,12 @@ final readonly class RegenerateMediaDerivatives
     {
         $asset = $this->media->get($mediaId);
 
-        if ($asset->mediaType !== MediaType::Image) {
-            throw new \DomainException('Versioned derivative regeneration currently supports image media only.');
-        }
-
-        return $this->images->regenerate($asset);
+        return match ($asset->mediaType) {
+            MediaType::Image => $this->images->regenerate($asset),
+            MediaType::Video => $this->videos->regenerate($asset),
+            default => throw new \DomainException(
+                'Versioned derivative regeneration currently supports image and video media only.',
+            ),
+        };
     }
 }

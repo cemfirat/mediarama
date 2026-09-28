@@ -15,6 +15,8 @@ final readonly class ProcessMediaHandler
         private InspectMediaMetadata $metadata,
         private GenerateImageDerivatives $images,
         private InspectImageGeometry $geometry,
+        private InspectVideoProperties $videoProperties,
+        private GenerateVideoDerivatives $videos,
         private MediaAssetRepository $media,
     ) {
     }
@@ -39,6 +41,16 @@ final readonly class ProcessMediaHandler
                 $this->media->save($asset);
 
                 ($this->images)($asset);
+            } elseif ($asset->mediaType === MediaType::Video) {
+                $properties = ($this->videoProperties)($asset);
+                $asset->setVideoProperties(
+                    $properties->width,
+                    $properties->height,
+                    $properties->durationMs,
+                );
+                $this->media->save($asset);
+
+                ($this->videos)($asset);
             }
 
             $asset->markReady();

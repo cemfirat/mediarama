@@ -101,8 +101,11 @@ Open Graph describes a reachable public page, so it remains available on a
 reachable `noindex` page. The derivative keeps its own MediaAsset
 `X-Robots-Tag` behavior.
 
-Mediarama does not emit synthetic `og:video` metadata before a real public
-video presentation/player contract exists.
+Public video MediaAssets use the generated poster derivative as `og:image`.
+The HTML page has a real generated MP4 presentation route, but Mediarama does
+not yet emit `og:video` or video-rich structured data. Rich video discovery is
+kept behind a stricter follow-up boundary so required publication metadata and
+crawl semantics are truthful rather than synthesized.
 
 ## Structured data
 
@@ -133,9 +136,12 @@ schema.org `ImageObject` containing only deliberate public fields:
 A reachable MediaAsset with effective `noindex` keeps canonical/Open Graph
 metadata but emits no index-oriented JSON-LD.
 
-Video/audio pages receive stable public identity and social/canonical metadata,
-but no `VideoObject` or analogous rich object is emitted until Mediarama has a
-real browser presentation contract with the required public content fields.
+Video pages receive stable public identity, social/canonical metadata, a
+generated poster and a generated browser MP4 presentation. They still do not
+emit `VideoObject`: Mediarama does not yet persist a truthful public
+publication/upload date required by the intended video discovery contract.
+Audio pages remain identity/metadata-only until an explicit browser presentation
+contract is implemented.
 
 ## Public metadata allowlist
 
@@ -186,14 +192,15 @@ Integration tests cover:
 - private ancestry and site-publication 404 behavior;
 - unpublished/non-ready MediaAsset blocking;
 - multi-membership privacy;
-- source filename/raw metadata/GPS/storage-field exclusion.
+- source filename/raw metadata/GPS/storage-field exclusion;
+- video poster/playback URL generation from the trusted public origin;
+- public video playback without original-file exposure.
 
 ## Future work
 
 The following stay outside this foundation:
 
 - editable SEO-title/description overrides;
-- public video poster/rendition/player routes;
 - `VideoObject` and video sitemap output;
 - deliberately published Smart Collection SEO;
 - richer nested Collection ancestry in breadcrumbs once that public navigation
