@@ -112,10 +112,15 @@ final readonly class OrganizationAiProviderDescriptor
         string $label,
         int $maximumLength,
     ): void {
-        $value = trim($value);
-        $length = iconv_strlen($value, 'UTF-8');
+        $trimmed = trim($value);
+        $length = iconv_strlen($trimmed, 'UTF-8');
 
-        if ($value === '' || $length === false || $length > $maximumLength) {
+        if (
+            $value !== $trimmed
+            || $trimmed === ''
+            || $length === false
+            || $length > $maximumLength
+        ) {
             throw new \InvalidArgumentException(sprintf(
                 'Organization AI %s must contain 1-%d characters.',
                 $label,
@@ -129,8 +134,17 @@ final readonly class OrganizationAiProviderDescriptor
         string $label,
         int $maximumLength,
     ): void {
-        $value = trim((string) $value);
-        if ($value === '') {
+        if ($value === null) {
+            return;
+        }
+
+        if (trim($value) === '') {
+            if ($value !== '') {
+                throw new \InvalidArgumentException(
+                    'Organization AI '.$label.' must not contain only whitespace.',
+                );
+            }
+
             return;
         }
 
