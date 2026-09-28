@@ -227,7 +227,8 @@ final class SmartCollectionRuleCompiler
         array &$parameters,
         int &$counter,
     ): string {
-        $placeholder = $this->parameter($value, $parameters, $counter);
+        $slug = $this->parameter($value, $parameters, $counter);
+        $name = $this->parameter($value, $parameters, $counter);
 
         return 'EXISTS (
             SELECT 1
@@ -235,8 +236,8 @@ final class SmartCollectionRuleCompiler
             JOIN tags smart_t ON smart_t.id = smart_mt.tag_id
             WHERE smart_mt.media_id = '.$alias.'.id
               AND (
-                  smart_t.slug = '.$placeholder.'
-                  OR LOWER(smart_t.name) = LOWER('.$placeholder.')
+                  smart_t.slug = '.$slug.'
+                  OR LOWER(smart_t.name) = LOWER('.$name.')
               )
         )';
     }
