@@ -128,7 +128,12 @@ final class SmartCollectionController extends AbstractController
         );
     }
 
-    #[Route('/library/smart-collections/{id}', name: 'library_smart_collection_show', methods: ['GET', 'POST'])]
+    #[Route(
+        '/library/smart-collections/{id}',
+        name: 'library_smart_collection_show',
+        requirements: ['id' => '[0-9a-fA-F-]{36}'],
+        methods: ['GET', 'POST'],
+    )]
     public function show(string $id, Request $request): Response
     {
         $user = $this->user();
@@ -177,7 +182,12 @@ final class SmartCollectionController extends AbstractController
         return $this->renderDetail($collection, $user->id, $request);
     }
 
-    #[Route('/library/smart-collections/{id}/delete', name: 'library_smart_collection_delete', methods: ['POST'])]
+    #[Route(
+        '/library/smart-collections/{id}/delete',
+        name: 'library_smart_collection_delete',
+        requirements: ['id' => '[0-9a-fA-F-]{36}'],
+        methods: ['POST'],
+    )]
     public function delete(string $id, Request $request): Response
     {
         $user = $this->user();
@@ -199,7 +209,12 @@ final class SmartCollectionController extends AbstractController
         );
     }
 
-    #[Route('/library/smart-collections/{id}/manual', name: 'library_smart_collection_manual', methods: ['POST'])]
+    #[Route(
+        '/library/smart-collections/{id}/manual',
+        name: 'library_smart_collection_manual',
+        requirements: ['id' => '[0-9a-fA-F-]{36}'],
+        methods: ['POST'],
+    )]
     public function convertManual(string $id, Request $request): Response
     {
         $user = $this->user();
