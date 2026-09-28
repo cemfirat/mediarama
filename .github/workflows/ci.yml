@@ -238,6 +238,9 @@ jobs:
       - name: Verify authenticated library media search
         run: php tests/Integration/Media/library-search.php
 
+      - name: Verify organization proposal foundation
+        run: php tests/Integration/Organization/organization-proposals.php
+
       - name: Validate production security container
         run: APP_ENV=prod APP_DEBUG=0 php bin/console lint:container
 
