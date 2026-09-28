@@ -212,6 +212,8 @@ A collection is not a storage directory.
 
 Manual Collections persist membership in `collection_media`. Smart Collections persist a versioned validated Mediarama rule and resolve membership dynamically; their result rows are not copied into `collection_media`. Existing and Coppermine-imported Collections remain manual.
 
+Smart v1 additionally requires a non-null owner and `visibility = private`. The database rejects public Smart rows and rejects `collection_media` inserts/retargets to Smart Collections. Existing upload/add authorization also treats Smart Collections as non-manual destinations.
+
 Public publication timestamps are intentionally separate from ordinary creation/update timestamps. Existing rows are not backfilled from `created_at`; see `docs/architecture/publication-timeline.md`.
 
 ## collection_media
