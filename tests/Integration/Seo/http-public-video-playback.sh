@@ -274,6 +274,23 @@ expect_absent() {
     echo "OK $label"
 }
 
+expect_marker_url() {
+    local file="$1"
+    local marker="$2"
+    local url="$3"
+    local label="$4"
+
+    if ! grep -F "$marker" "$file" | grep -F "$url" >/dev/null; then
+        echo "FAIL $label"
+        echo "Expected marker: $marker"
+        echo "Expected URL: $url"
+        cat "$file"
+        exit 1
+    fi
+
+    echo "OK $label"
+}
+
 expect_header() {
     local file="$1"
     local value="$2"
@@ -306,8 +323,8 @@ fetch_page "/media/$MEDIA_ID" /tmp/public-video-page.html /tmp/public-video-page
 expect_contains /tmp/public-video-page.html '<title>Public Video Fixture · Mediarama</title>' "Video detail title"
 expect_contains /tmp/public-video-page.html "$CANONICAL_URL" "Video detail canonical uses trusted origin"
 expect_contains /tmp/public-video-page.html "$POSTER_URL" "Video Open Graph poster uses trusted origin"
-expect_contains /tmp/public-video-page.html "poster="/media/$MEDIA_ID/video/v1/poster"" "Video player uses public poster derivative"
-expect_contains /tmp/public-video-page.html "src="/media/$MEDIA_ID/video/v1/browser_mp4"" "Video player uses public browser rendition"
+expect_marker_url /tmp/public-video-page.html 'poster="' "/media/$MEDIA_ID/video/v1/poster" "Video player uses public poster derivative"
+expect_marker_url /tmp/public-video-page.html 'src="' "/media/$MEDIA_ID/video/v1/browser_mp4" "Video player uses public browser rendition"
 expect_contains /tmp/public-video-page.html '<video' "Video detail renders a browser video element"
 expect_contains /tmp/public-video-page.html 'controls' "Video player exposes user controls"
 expect_contains /tmp/public-video-page.html 'preload="metadata"' "Video player avoids eager full download"
