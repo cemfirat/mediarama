@@ -1,0 +1,5 @@
+services:
+    Mediarama\Tests\Fixture\OrganizationBrowserAiProvider:
+        autowire: true
+        tags:
+            - 'mediarama.organization_ai_provider'

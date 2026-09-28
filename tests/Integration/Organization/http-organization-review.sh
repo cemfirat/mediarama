@@ -333,6 +333,16 @@ OTHER_JAR=/tmp/organization-other.cookies
 expect_status 302 "$(login organization-http-owner "$OWNER_JAR")" "organization owner can authenticate"
 expect_status 302 "$(login organization-http-other "$OTHER_JAR")" "second user can authenticate"
 
+LIBRARY_STATUS="$(curl --silent --show-error \
+    --cookie "$OWNER_JAR" --cookie-jar "$OWNER_JAR" \
+    --output /tmp/organization-library-no-provider.html \
+    --write-out '%{http_code}' \
+    "$BASE_URL/library")"
+expect_status 200 "$LIBRARY_STATUS" "deterministic Library organization remains available without an AI provider"
+grep -F 'Analyze selected' /tmp/organization-library-no-provider.html >/dev/null
+! grep -F 'AI-assisted analysis' /tmp/organization-library-no-provider.html >/dev/null
+! grep -F 'Browser Test AI' /tmp/organization-library-no-provider.html >/dev/null
+
 RUN_STATUS="$(curl --silent --show-error \
     --cookie "$OWNER_JAR" --cookie-jar "$OWNER_JAR" \
     --dump-header /tmp/organization-run.headers \
