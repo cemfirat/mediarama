@@ -43,6 +43,16 @@ final class Version20260928093000 extends AbstractMigration
              WHERE mode = 'smart'"
         );
 
+        $this->addSql(
+            'CREATE INDEX idx_media_owner_active
+             ON media_assets (owner_id)
+             WHERE owner_id IS NOT NULL AND deleted_at IS NULL'
+        );
+        $this->addSql(
+            'CREATE INDEX idx_ratings_media
+             ON ratings (media_id)'
+        );
+
         $this->addSql(<<<'SQL'
 CREATE FUNCTION mediarama_require_manual_collection_membership()
 RETURNS trigger
@@ -106,6 +116,8 @@ SQL);
         $this->addSql('DROP FUNCTION mediarama_require_empty_smart_collection');
         $this->addSql('DROP TRIGGER trg_collection_media_requires_manual_collection ON collection_media');
         $this->addSql('DROP FUNCTION mediarama_require_manual_collection_membership');
+        $this->addSql('DROP INDEX idx_ratings_media');
+        $this->addSql('DROP INDEX idx_media_owner_active');
         $this->addSql('DROP INDEX idx_collections_smart_owner');
         $this->addSql('ALTER TABLE collections DROP CONSTRAINT chk_collections_smart_rule');
         $this->addSql('ALTER TABLE collections DROP CONSTRAINT chk_collections_mode');
