@@ -1,6 +1,6 @@
 # Organization Assistant
 
-Status: proposal foundation + deterministic metadata producer + approval-gated AI provider boundary
+Status: proposal foundation + deterministic metadata producer + approval-gated AI provider boundary + authenticated review/application
 Date: 2026-09-28
 
 Mediarama's organization assistant is a review layer over the normal media,
@@ -124,7 +124,7 @@ A proposal carries one or more evidence entries, each classified as:
 - `metadata` — deterministic evidence from Mediarama state;
 - `inference` — an AI/model inference.
 
-This distinction remains visible to the future review UI.
+This distinction remains visible in the authenticated review UI.
 
 ## Media scope
 
@@ -140,22 +140,61 @@ enforce this relationship.
 This is deliberately different from Collection membership. Proposal MediaAsset
 rows never make a MediaAsset public and never create `collection_media`.
 
-## Review safety
+## Authenticated review and application
 
-The first foundation implements explicit rejection.
+Requester-owned analysis runs have a private UIkit review surface under
+`/library/organization`. Review pages are authenticated, `noindex` and
+`private, no-store`.
 
-Rejection:
+The UI shows:
 
-- is requester-only;
-- is idempotent;
-- records review time;
-- changes proposal state only;
-- does not create/delete/edit Collections, tags or Collection membership;
-- does not change visibility, ACLs or publication.
+- proposal type and presentation title;
+- rationale;
+- metadata-vs-inference evidence labels;
+- affected MediaAsset count and a bounded authorized preview;
+- human-readable Smart rules;
+- provider/model plus the approved privacy/cost preflight when the run came
+  from an AI provider.
 
-Acceptance is intentionally not implemented in this slice. #136 must apply
-accepted proposals atomically through ordinary Mediarama application services
-and revalidate current permissions/staleness before mutation.
+Pending proposals may be edited only through their type-specific validated
+payload. Smart proposal editing intentionally changes curated title/description
+only; changing rule membership requires a new analysis rather than silently
+rewriting the reviewed rule.
+
+Review actions are requester-only and CSRF-protected. A proposal may be:
+
+- accepted once;
+- accepted as part of a selected set;
+- rejected once or as part of a selected set;
+- left pending.
+
+Each accepted proposal is applied inside one database transaction and persists
+the resulting resource identity on the proposal. A retry therefore returns the
+same result instead of creating a duplicate.
+
+Acceptance revalidates current ownership/authorization and the affected
+MediaAsset scope immediately before mutation. Smart proposals additionally
+re-evaluate their reviewed rule against the snapshotted run scope. A stale
+proposal is invalidated rather than partially applied.
+
+Normal Mediarama boundaries perform the mutation:
+
+- Smart proposals create ordinary private Smart Collections;
+- Manual/review-bucket proposals create ordinary private Manual Collections;
+- tag proposals use normalized tag membership;
+- title/description and cover proposals require requester ownership.
+
+Acceptance never publishes a Collection, changes an ACL or grants MediaAsset
+visibility. Public presentation edits that are already allowed advance the
+truthful public-update timeline. A cover selected for an already-public Smart
+Collection must independently satisfy the normal public image boundary.
+
+Rejection is idempotent and non-mutating. It is permitted only while the run is
+actually ready for review.
+
+Smart Collections remain dynamic after acceptance. The reviewed affected set
+describes the analysis scope at review time; the accepted Smart rule may later
+match additional owned MediaAssets as ordinary library metadata changes.
 
 ## Privacy boundary
 
@@ -223,9 +262,9 @@ Provider configuration is not consulted.
 
 ## Next slices
 
-- #136 — authenticated review UI + atomic accept/edit/reject.
-
 Provider-specific adapters can now be added behind the #135 capability/preflight
-contract without changing Mediarama's proposal domain.
+contract without changing Mediarama's proposal or review domain.
 
-Hybrid Collection pins/exclusions remain #18.
+The remaining #16 work should be evaluated as concrete provider/product
+integration rather than by weakening the proposal-first boundary. Hybrid
+Collection pins/exclusions remain #18.

@@ -8,7 +8,10 @@
         <h1 class="uk-heading-small uk-margin-remove-bottom">Library</h1>
         <p class="uk-text-lead uk-margin-small-top">Search your accessible media and save useful filters as Smart Collections.</p>
     </div>
-    <a class="uk-button uk-button-default" href="{{ path('library_smart_collections') }}">Smart Collections</a>
+    <div>
+        <a class="uk-button uk-button-default" href="{{ path('library_organization') }}">Organization</a>
+        <a class="uk-button uk-button-default uk-margin-small-left" href="{{ path('library_smart_collections') }}">Smart Collections</a>
+    </div>
 </div>
 
 {% if error %}
@@ -20,6 +23,11 @@
     </div>
 {% elseif smart_error == 'converted_manual' %}
     <div class="uk-alert-success" uk-alert><p>The Smart Collection was converted back to Manual mode.</p></div>
+{% endif %}
+{% if organization_error == 'invalid_scope' %}
+    <div class="uk-alert-warning" uk-alert>
+        <p>Select one or more currently accessible MediaAssets before starting an organization analysis.</p>
+    </div>
 {% endif %}
 
 <section class="uk-card uk-card-default uk-card-body uk-margin-large-top" aria-labelledby="library-filter-heading">
@@ -97,16 +105,32 @@
 {% endif %}
 
 <section class="uk-margin-large-top" aria-labelledby="library-results-heading">
-    <h2 id="library-results-heading" class="uk-h3">Results</h2>
+    <div class="uk-flex uk-flex-between uk-flex-middle uk-flex-wrap">
+        <h2 id="library-results-heading" class="uk-h3">Results</h2>
+        {% if items is not empty %}
+        <form id="organization-analyze-form" method="post" action="{{ path('library_organization_analyze') }}">
+            <input type="hidden" name="_csrf_token" value="{{ organization_csrf_token }}">
+            <button class="uk-button uk-button-secondary" type="submit">Analyze selected</button>
+        </form>
+        {% endif %}
+    </div>
     {% if items is empty %}
         <div class="uk-placeholder uk-text-center">No matching media.</div>
     {% else %}
         <div class="uk-overflow-auto">
             <table class="uk-table uk-table-divider uk-table-small uk-table-middle">
-                <thead><tr><th>Title</th><th>File</th><th>Captured</th><th>Creator</th><th>Camera</th><th>Location</th></tr></thead>
+                <thead><tr><th>Analyze</th><th>Title</th><th>File</th><th>Captured</th><th>Creator</th><th>Camera</th><th>Location</th></tr></thead>
                 <tbody>
                 {% for item in items %}
                     <tr>
+                        <td>
+                            <input class="uk-checkbox"
+                                   type="checkbox"
+                                   form="organization-analyze-form"
+                                   name="media_ids[]"
+                                   value="{{ item.id.toRfc4122() }}"
+                                   aria-label="Select {{ item.title ?: 'untitled MediaAsset' }} for organization analysis">
+                        </td>
                         <td>{{ item.title ?: 'Untitled' }}</td>
                         <td class="uk-text-meta">{{ item.originalFilename }}</td>
                         <td>{{ item.capturedAt ? item.capturedAt|date('Y-m-d H:i') : '—' }}</td>

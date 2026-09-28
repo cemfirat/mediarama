@@ -153,6 +153,23 @@ WHERE p.id = :preflight
         return $this->map($row);
     }
 
+    public function forRun(
+        Uuid $requesterId,
+        Uuid $runId,
+    ): ?OrganizationAiPreflightResult {
+        $row = $this->connection->fetchAssociative(
+            $this->select().'
+WHERE p.run_id = :run
+  AND p.requester_id = :requester',
+            [
+                'run' => $runId->toRfc4122(),
+                'requester' => $requesterId->toRfc4122(),
+            ],
+        );
+
+        return $row === false ? null : $this->map($row);
+    }
+
     public function media(
         Uuid $requesterId,
         Uuid $preflightId,
