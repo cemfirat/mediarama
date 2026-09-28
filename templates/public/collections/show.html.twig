@@ -1,6 +1,10 @@
 {% extends 'base.html.twig' %}
 
-{% block title %}{{ collection.title }} · Mediarama{% endblock %}
+{% block title %}{{ seo.pageTitle }}{% endblock %}
+
+{% block head %}
+    {% include '@Mediarama/public/_seo.html.twig' with {seo: seo} only %}
+{% endblock %}
 
 {% block body %}
 <nav aria-label="Breadcrumb">
