@@ -231,6 +231,9 @@ jobs:
       - name: Verify safe new-installation publication defaults
         run: php tests/Integration/Platform/publication-settings.php
 
+      - name: Verify truthful public publication timeline semantics
+        run: php tests/Integration/Publishing/publication-timeline.php
+
       - name: Verify secure first-run administrator bootstrap
         run: bash tests/Integration/Security/http-first-run-setup.sh
 

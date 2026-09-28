@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Mediarama\Collection\Infrastructure\Persistence;
 
+use DateTimeImmutable;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\ParameterType;
 use Mediarama\Collection\Application\PublicCollectionResult;
@@ -152,6 +153,8 @@ SELECT
     m.width,
     m.height,
     m.duration_ms,
+    m.public_published_at,
+    m.public_updated_at,
     m.search_index_policy,
     thumbnail.processing_version AS thumbnail_version,
     preview.processing_version AS preview_version,
@@ -236,6 +239,8 @@ SQL,
             $row['preview_version'] !== null ? (int) $row['preview_version'] : null,
             $row['large_version'] !== null ? (int) $row['large_version'] : null,
             $row['video_presentation_version'] !== null ? (int) $row['video_presentation_version'] : null,
+            $row['public_published_at'] !== null ? new DateTimeImmutable((string) $row['public_published_at']) : null,
+            $row['public_updated_at'] !== null ? new DateTimeImmutable((string) $row['public_updated_at']) : null,
             $policy->resolve($settings->searchIndexDefault),
         );
     }
@@ -327,6 +332,8 @@ SELECT
     c.id,
     c.title,
     c.description,
+    c.public_published_at,
+    c.public_updated_at,
     c.search_index_policy,
     (
         SELECT COUNT(*)
@@ -386,6 +393,8 @@ SQL;
             (int) $row['child_count'],
             $row['cover_media_id'] !== null ? Uuid::fromString((string) $row['cover_media_id']) : null,
             $row['cover_thumbnail_version'] !== null ? (int) $row['cover_thumbnail_version'] : null,
+            $row['public_published_at'] !== null ? new DateTimeImmutable((string) $row['public_published_at']) : null,
+            $row['public_updated_at'] !== null ? new DateTimeImmutable((string) $row['public_updated_at']) : null,
             $policy->resolve($siteDefault),
         );
     }

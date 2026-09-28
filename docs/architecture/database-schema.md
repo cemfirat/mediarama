@@ -195,6 +195,10 @@ is retryable/idempotent.
 - `description text nullable`
 - `visibility varchar`
 - `search_index_policy varchar` (`inherit | index | noindex`)
+- `public_published_at timestamptz nullable`
+- `public_updated_at timestamptz nullable`
+- `public_published_origin varchar nullable` (`editorial | imported`)
+- `public_published_source varchar nullable` (required only for imported publication dates)
 - `cover_media_id uuid fk media_assets nullable`
 - `position integer default 0`
 - `view_count bigint not null default 0`
@@ -202,6 +206,8 @@ is retryable/idempotent.
 - `deleted_at nullable`
 
 A collection is not a storage directory.
+
+Public publication timestamps are intentionally separate from ordinary creation/update timestamps. Existing rows are not backfilled from `created_at`; see `docs/architecture/publication-timeline.md`.
 
 `view_count` is a product/read-model counter, not embedded metadata. Imported Coppermine `pictures.hits` and `albums.alb_hits` seed these counters, while detailed historical hit telemetry remains outside the core domain.
 
