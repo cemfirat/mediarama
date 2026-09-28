@@ -20,6 +20,7 @@ final readonly class PublicMediaDetailResult
         public ?int $thumbnailVersion,
         public ?int $previewVersion,
         public ?int $largeVersion,
+        public ?int $videoPresentationVersion,
         public bool $indexable,
     ) {
     }
@@ -53,5 +54,10 @@ final readonly class PublicMediaDetailResult
             'thumbnail' => $this->thumbnailVersion,
             default => null,
         };
+    }
+
+    public function hasVideoPresentation(): bool
+    {
+        return $this->mediaType === 'video' && $this->videoPresentationVersion !== null;
     }
 }

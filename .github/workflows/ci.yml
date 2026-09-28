@@ -214,6 +214,9 @@ jobs:
       - name: Verify derivative regeneration persistence and locking
         run: php tests/Integration/Media/derivative-regeneration.php
 
+      - name: Verify video processing and immutable derivatives
+        run: php tests/Integration/Media/video-processing.php
+
       - name: Verify derivative retention and cleanup
         run: php tests/Integration/Media/derivative-cleanup.php
 
@@ -496,6 +499,9 @@ jobs:
 
       - name: Verify public MediaAsset identity and SEO boundary
         run: bash tests/Integration/Seo/http-public-media-detail.sh
+
+      - name: Verify public video playback and byte ranges
+        run: bash tests/Integration/Seo/http-public-video-playback.sh
 
       - name: Verify publication and search-index HTTP policy
         run: bash tests/Integration/Platform/http-publication-index-policy.sh

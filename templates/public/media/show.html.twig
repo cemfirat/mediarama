@@ -38,6 +38,30 @@
                 class="uk-width-1-1"
             >
         </figure>
+    {% elseif media.hasVideoPresentation() %}
+        <div class="uk-margin-large-bottom">
+            <video
+                controls
+                preload="metadata"
+                playsinline
+                poster="{{ path('public_video_derivative', {
+                    id: media.id.toRfc4122(),
+                    version: media.videoPresentationVersion,
+                    profile: 'poster'
+                }) }}"
+                class="uk-width-1-1"
+            >
+                <source
+                    src="{{ path('public_video_derivative', {
+                        id: media.id.toRfc4122(),
+                        version: media.videoPresentationVersion,
+                        profile: 'browser_mp4'
+                    }) }}"
+                    type="video/mp4"
+                >
+                Your browser does not support HTML video playback.
+            </video>
+        </div>
     {% else %}
         <div class="uk-placeholder uk-text-center uk-margin-large-bottom">
             <span class="uk-text-meta">

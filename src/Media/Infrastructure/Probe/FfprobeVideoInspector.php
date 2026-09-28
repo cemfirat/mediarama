@@ -30,6 +30,7 @@ final readonly class FfprobeVideoInspector implements InspectVideoProperties
         try {
             $target = fopen($temporary, 'wb');
             if ($target === false) {
+                fclose($source);
                 throw new \RuntimeException('Unable to open video probe input.');
             }
 

@@ -7,9 +7,11 @@ namespace Mediarama\Tests\Unit\Media;
 use Mediarama\Media\Application\ApplyInspectedMetadata;
 use Mediarama\Media\Application\DerivativeCleanupRepository;
 use Mediarama\Media\Application\GenerateImageDerivatives;
+use Mediarama\Media\Application\GenerateVideoDerivatives;
 use Mediarama\Media\Application\ImageDerivativeGenerator;
 use Mediarama\Media\Application\ImageDerivativeProfile;
 use Mediarama\Media\Application\InspectImageGeometry;
+use Mediarama\Media\Application\InspectVideoProperties;
 use Mediarama\Media\Application\InspectMediaMetadata;
 use Mediarama\Media\Application\InspectedMetadata;
 use Mediarama\Media\Application\MediaAssetRepository;
@@ -20,6 +22,11 @@ use Mediarama\Media\Application\StoredObject;
 use Mediarama\Media\Application\MediaMetadataInspector;
 use Mediarama\Media\Application\ProcessMedia;
 use Mediarama\Media\Application\ProcessMediaHandler;
+use Mediarama\Media\Application\VideoPlaybackGenerator;
+use Mediarama\Media\Application\VideoPlaybackProfile;
+use Mediarama\Media\Application\VideoPosterGenerator;
+use Mediarama\Media\Application\VideoPosterProfile;
+use Mediarama\Media\Application\VideoProperties;
 use Mediarama\Media\Domain\MediaAsset;
 use Mediarama\Media\Domain\MediaDerivative;
 use Mediarama\Media\Domain\MediaType;
@@ -204,10 +211,60 @@ final class ProcessMediaHandlerFailureTest extends TestCase
             }
         };
 
+        $videoProperties = new class implements InspectVideoProperties {
+            public function __invoke(MediaAsset $media): VideoProperties
+            {
+                throw new \LogicException('Video inspection must not run for an image.');
+            }
+        };
+
+        $posterGenerator = new class implements VideoPosterGenerator {
+            public function generate(
+                MediaAsset $media,
+                VideoPosterProfile $profile,
+                int $processingVersion,
+            ): MediaDerivative {
+                throw new \LogicException('Video poster generation must not run for an image.');
+            }
+        };
+
+        $playbackGenerator = new class implements VideoPlaybackGenerator {
+            public function generate(
+                MediaAsset $media,
+                VideoPlaybackProfile $profile,
+                int $processingVersion,
+            ): MediaDerivative {
+                throw new \LogicException('Video playback generation must not run for an image.');
+            }
+        };
+
+        $videos = new GenerateVideoDerivatives(
+            $derivatives,
+            $posterGenerator,
+            $playbackGenerator,
+            $storage,
+            $cleanup,
+            $regenerationLock,
+            new VideoPosterProfile('poster', 1280, 1280),
+            new VideoPlaybackProfile(
+                'browser_mp4',
+                1920,
+                1080,
+                'libx264',
+                23,
+                'medium',
+                'aac',
+                '128k',
+            ),
+            1,
+        );
+
         $handler = new ProcessMediaHandler(
             $metadata,
             $images,
             $geometry,
+            $videoProperties,
+            $videos,
             $media,
         );
 
