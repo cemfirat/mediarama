@@ -120,6 +120,17 @@ final class SmartCollectionManagementInputTest extends TestCase
         );
     }
 
+    public function testExactCoordinatePresenceRemainsSearchOnly(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+
+        (new LibraryFilterSmartCollectionRuleFactory())->create(
+            new LibraryMediaSearchCriteria(
+                hasLocation: true,
+            ),
+        );
+    }
+
     public function testEmptyLibraryFilterCannotCreateSmartCollection(): void
     {
         $this->expectException(\InvalidArgumentException::class);

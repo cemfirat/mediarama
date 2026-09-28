@@ -129,6 +129,13 @@ Search-only criteria that are still not silently serialized:
 Those filters keep working for Library search, but the UI explains that they
 cannot yet be saved as a Smart Collection rule.
 
+For every saveable facet, Library filtering and Smart V1 use equivalent
+predicate semantics. Tag and rating filters read normalized relational state,
+orientation derives from canonical dimensions, and coarse location uses
+`location_name` only. The V1 Smart candidate universe remains the Collection
+owner's MediaAssets as defined above; saving a filter never copies shared media
+into Smart membership and never grants access.
+
 ## Publication
 
 Smart Collections are private by default. An owner may deliberately publish a
