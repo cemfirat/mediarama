@@ -24,6 +24,8 @@ final readonly class OrganizationProposalResult
         public string $rationale,
         public array $affectedMediaIds,
         public array $evidence,
+        public ?string $appliedResourceType,
+        public ?Uuid $appliedResourceId,
         public ?DateTimeImmutable $reviewedAt,
         public DateTimeImmutable $createdAt,
         public DateTimeImmutable $updatedAt,
