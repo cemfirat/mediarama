@@ -1,0 +1,114 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}AI preflight · Organization · Mediarama{% endblock %}
+
+{% block body %}
+<div class="uk-flex uk-flex-between uk-flex-middle uk-flex-wrap">
+    <div>
+        <p class="uk-text-meta uk-margin-remove-bottom">Organization AI · {{ preflight.status.value|replace({'_':' '}) }}</p>
+        <h1 class="uk-heading-small uk-margin-small-top">Review AI preflight</h1>
+    </div>
+    <a class="uk-button uk-button-text" href="{{ path('library_home') }}">Back to Library</a>
+</div>
+
+{% if prepared %}
+<div class="uk-alert-primary" uk-alert>
+    <p>No provider inference has run. Review this persisted scope before approving external or local AI execution.</p>
+</div>
+{% endif %}
+{% if approved %}
+<div class="uk-alert-success" uk-alert>
+    <p>Preflight approved. Provider execution is now permitted once, using this exact persisted scope.</p>
+</div>
+{% endif %}
+{% if action_error %}
+<div class="uk-alert-warning" uk-alert>
+    <p>This preflight cannot be approved in its current state.</p>
+</div>
+{% endif %}
+{% if execution_error %}
+<div class="uk-alert-danger" uk-alert>
+    <p>AI analysis could not be completed safely. No partial organization proposal run was accepted. Prepare a new preflight before retrying.</p>
+</div>
+{% endif %}
+
+<section class="uk-card uk-card-default uk-card-body uk-margin" aria-labelledby="ai-provider-heading">
+    <h2 id="ai-provider-heading" class="uk-card-title">Provider</h2>
+    <dl class="uk-description-list">
+        <dt>Provider / model</dt>
+        <dd>
+            {{ preflight.producer.providerName }} · {{ preflight.producer.modelName }}
+            {% if preflight.producer.modelVersion %} · {{ preflight.producer.modelVersion }}{% endif %}
+        </dd>
+        <dt>Execution type</dt>
+        <dd>{{ preflight.producer.kind.value|replace({'_':' '}) }}</dd>
+        <dt>Capabilities</dt>
+        <dd>{% for capability in preflight.capabilities %}{{ capability.value|replace({'_':' '}) }}{% if not loop.last %}, {% endif %}{% endfor %}</dd>
+        <dt>Status</dt>
+        <dd>{{ preflight.status.value|replace({'_':' '}) }}</dd>
+    </dl>
+</section>
+
+<section class="uk-card uk-card-default uk-card-body uk-margin" aria-labelledby="ai-scope-heading">
+    <h2 id="ai-scope-heading" class="uk-card-title">Approved data scope</h2>
+    <dl class="uk-description-list">
+        <dt>MediaAssets</dt>
+        <dd>{{ preflight.mediaCount }}</dd>
+        <dt>Media types</dt>
+        <dd>
+            {% for type, count in preflight.mediaTypeCounts %}
+                {{ type }}: {{ count }}{% if not loop.last %} · {% endif %}
+            {% endfor %}
+        </dd>
+        <dt>Input mode</dt>
+        <dd>{{ preflight.inputMode.value|replace({'_':' '}) }}</dd>
+        <dt>Presentation derivatives</dt>
+        <dd>{{ preflight.presentationMediaCount }} of {{ preflight.mediaCount }}</dd>
+        <dt>Immutable originals</dt>
+        <dd>Never sent</dd>
+        <dt>Creator</dt>
+        <dd>{{ preflight.includeCreator ? 'included by explicit opt-in' : 'excluded' }}</dd>
+        <dt>Coarse location name</dt>
+        <dd>{{ preflight.includeLocationName ? 'included by explicit opt-in' : 'excluded' }}</dd>
+        <dt>Always/explicitly excluded fields</dt>
+        <dd>{{ preflight.excludedFields|join(', ') }}</dd>
+    </dl>
+</section>
+
+<section class="uk-card uk-card-default uk-card-body uk-margin" aria-labelledby="ai-policy-heading">
+    <h2 id="ai-policy-heading" class="uk-card-title">Cost, privacy and retention</h2>
+    <dl class="uk-description-list">
+        <dt>Local cost estimate</dt>
+        <dd>{{ preflight.costEstimate ?: 'No local estimate provided by this adapter.' }}</dd>
+        <dt>Privacy note</dt>
+        <dd>{{ preflight.privacyNote ?: 'No additional provider privacy note configured.' }}</dd>
+        <dt>Retention note</dt>
+        <dd>{{ preflight.retentionNote ?: 'No additional provider retention note configured.' }}</dd>
+    </dl>
+</section>
+
+<section class="uk-card uk-card-default uk-card-body uk-margin" aria-labelledby="ai-action-heading">
+    <h2 id="ai-action-heading" class="uk-card-title">Approval</h2>
+
+    {% if preflight.status.value == 'pending_approval' %}
+        <p>Approval authorizes this exact provider/model/capability/media scope. It does not apply any resulting proposal to the library.</p>
+        <form method="post" action="{{ path('library_organization_ai_approve', {id: preflight.id.toRfc4122()}) }}">
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token('organization_ai_approve_' ~ preflight.id.toRfc4122()) }}">
+            <button class="uk-button uk-button-primary" type="submit">Approve this preflight</button>
+        </form>
+    {% elseif preflight.status.value == 'approved' %}
+        <p>Provider execution may now run once. Results become pending review proposals; they do not mutate Collections, Smart Collections, tags, visibility or ACLs automatically.</p>
+        <form method="post" action="{{ path('library_organization_ai_execute', {id: preflight.id.toRfc4122()}) }}">
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token('organization_ai_execute_' ~ preflight.id.toRfc4122()) }}">
+            <button class="uk-button uk-button-primary" type="submit">Run approved AI analysis</button>
+        </form>
+    {% elseif preflight.status.value == 'completed' and preflight.runId %}
+        <p>This approved provider execution completed and produced an ordinary Mediarama organization review run.</p>
+        <a class="uk-button uk-button-primary" href="{{ path('library_organization_run', {id: preflight.runId.toRfc4122()}) }}">Open proposal review</a>
+    {% elseif preflight.status.value == 'failed' %}
+        <p>This execution failed closed. No resend/retry occurs from this state; return to Library and prepare a new preflight deliberately.</p>
+    {% else %}
+        <p>This preflight is not actionable in its current state.</p>
+    {% endif %}
+</section>
+{% endblock %}

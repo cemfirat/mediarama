@@ -7,6 +7,7 @@ namespace Mediarama\Http\Controller\Library;
 use Mediarama\Http\Support\LibraryMediaSearchCriteriaFactory;
 use Mediarama\Media\Application\LibraryMediaSearch;
 use Mediarama\Media\Application\LibraryMediaSearchCriteria;
+use Mediarama\Organization\Application\OrganizationAiProviderRegistry;
 use Mediarama\Security\Application\CurrentUser;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
@@ -19,6 +20,7 @@ final class LibraryBrowserController extends AbstractController
     public function __construct(
         private readonly LibraryMediaSearch $search,
         private readonly LibraryMediaSearchCriteriaFactory $criteriaFactory,
+        private readonly OrganizationAiProviderRegistry $aiProviders,
         private readonly CurrentUser $currentUser,
         private readonly CsrfTokenManagerInterface $csrf,
     ) {
@@ -55,6 +57,10 @@ final class LibraryBrowserController extends AbstractController
                     ->getValue(),
                 'organization_csrf_token' => $this->csrf
                     ->getToken('organization_analyze')
+                    ->getValue(),
+                'organization_ai_providers' => $this->aiProviders->available(),
+                'organization_ai_prepare_csrf_token' => $this->csrf
+                    ->getToken('organization_ai_prepare')
                     ->getValue(),
                 'error' => $error,
                 'smart_error' => $request->query->getString('smart_error') ?: null,

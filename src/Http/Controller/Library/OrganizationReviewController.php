@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace Mediarama\Http\Controller\Library;
 
 use Mediarama\Organization\Application\DeterministicOrganizationAnalyzer;
+use Mediarama\Organization\Application\OrganizationAiCoordinator;
 use Mediarama\Organization\Application\OrganizationAiPreflightStore;
+use Mediarama\Organization\Application\OrganizationAiProviderExecutionException;
 use Mediarama\Organization\Application\OrganizationMetadataSnapshotQuery;
 use Mediarama\Organization\Application\OrganizationProposalApplication;
 use Mediarama\Organization\Application\OrganizationProposalPayloadEditor;
@@ -13,6 +15,8 @@ use Mediarama\Organization\Application\OrganizationProposalStaleException;
 use Mediarama\Organization\Application\OrganizationProposalStore;
 use Mediarama\Organization\Application\OrganizationProposalUnavailableException;
 use Mediarama\Organization\Application\OrganizationRunUnavailableException;
+use Mediarama\Organization\Domain\OrganizationAiCapability;
+use Mediarama\Organization\Domain\OrganizationAiInputMode;
 use Mediarama\Security\Application\CurrentUser;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
@@ -33,6 +37,7 @@ final class OrganizationReviewController extends AbstractController
         private readonly OrganizationProposalApplication $application,
         private readonly OrganizationProposalPayloadEditor $editor,
         private readonly OrganizationMetadataSnapshotQuery $metadata,
+        private readonly OrganizationAiCoordinator $ai,
         private readonly OrganizationAiPreflightStore $preflights,
         private readonly CurrentUser $currentUser,
         private readonly CsrfTokenManagerInterface $csrf,
@@ -72,6 +77,211 @@ final class OrganizationReviewController extends AbstractController
             return $this->redirectToRoute('library_home', [
                 'organization_error' => 'invalid_scope',
             ]);
+        }
+
+        return $this->redirectToRoute(
+            'library_organization_run',
+            ['id' => $runId->toRfc4122(), 'created' => 1],
+        );
+    }
+
+    #[Route(
+        '/library/organization/ai/preflights',
+        name: 'library_organization_ai_prepare',
+        methods: ['POST'],
+    )]
+    public function prepareAi(Request $request): Response
+    {
+        $user = $this->user();
+        $this->requireCsrf(
+            'organization_ai_prepare',
+            (string) $request->request->get('_csrf_token', ''),
+        );
+
+        try {
+            $mediaIds = $this->ids(
+                $request->request->all('media_ids'),
+                self::MAX_BROWSER_ANALYSIS_MEDIA,
+            );
+            $providerKey = trim($request->request->getString('provider_key'));
+            if ($providerKey === '') {
+                throw new \InvalidArgumentException(
+                    'Choose an Organization AI provider.',
+                );
+            }
+
+            $capabilitiesByProvider = $request->request->all('capabilities');
+            $rawCapabilities = $capabilitiesByProvider[$providerKey] ?? null;
+            if (!is_array($rawCapabilities)) {
+                throw new \InvalidArgumentException(
+                    'Choose at least one supported Organization AI capability.',
+                );
+            }
+
+            $capabilities = [];
+            foreach ($rawCapabilities as $value) {
+                if (!is_string($value)) {
+                    throw new \InvalidArgumentException(
+                        'Organization AI capability selection is invalid.',
+                    );
+                }
+
+                $capability = OrganizationAiCapability::tryFrom($value);
+                if ($capability === null) {
+                    throw new \InvalidArgumentException(
+                        'Organization AI capability selection is invalid.',
+                    );
+                }
+
+                $capabilities[] = $capability;
+            }
+
+            $inputMode = OrganizationAiInputMode::tryFrom(
+                $request->request->getString('input_mode'),
+            );
+            if ($inputMode === null) {
+                throw new \InvalidArgumentException(
+                    'Choose an Organization AI input mode.',
+                );
+            }
+
+            $preflight = $this->ai->prepare(
+                $user->id,
+                $providerKey,
+                $capabilities,
+                $inputMode,
+                $mediaIds,
+                $request->request->getBoolean('include_creator'),
+                $request->request->getBoolean('include_location_name'),
+            );
+        } catch (\InvalidArgumentException|\DomainException) {
+            return $this->redirectToRoute('library_home', [
+                'organization_error' => 'ai_preflight',
+            ]);
+        }
+
+        return $this->redirectToRoute(
+            'library_organization_ai_preflight',
+            [
+                'id' => $preflight->id->toRfc4122(),
+                'prepared' => 1,
+            ],
+        );
+    }
+
+    #[Route(
+        '/library/organization/ai/preflights/{id}',
+        name: 'library_organization_ai_preflight',
+        requirements: ['id' => '[0-9a-fA-F-]{36}'],
+        methods: ['GET'],
+    )]
+    public function aiPreflight(string $id, Request $request): Response
+    {
+        $user = $this->user();
+        $preflightId = $this->id($id);
+
+        try {
+            $preflight = $this->preflights->get(
+                $user->id,
+                $preflightId,
+            );
+        } catch (\DomainException) {
+            throw $this->createNotFoundException();
+        }
+
+        return $this->privateResponse($this->render(
+            '@Mediarama/library/organization/ai_preflight.html.twig',
+            [
+                'preflight' => $preflight,
+                'prepared' => $request->query->getBoolean('prepared'),
+                'approved' => $request->query->getBoolean('approved'),
+                'action_error' => $request->query->getBoolean('action_error'),
+                'execution_error' => $request->query->getBoolean('execution_error'),
+            ],
+        ));
+    }
+
+    #[Route(
+        '/library/organization/ai/preflights/{id}/approve',
+        name: 'library_organization_ai_approve',
+        requirements: ['id' => '[0-9a-fA-F-]{36}'],
+        methods: ['POST'],
+    )]
+    public function approveAi(string $id, Request $request): Response
+    {
+        $user = $this->user();
+        $preflightId = $this->id($id);
+
+        try {
+            $this->preflights->get($user->id, $preflightId);
+        } catch (\DomainException) {
+            throw $this->createNotFoundException();
+        }
+
+        $this->requireCsrf(
+            'organization_ai_approve_'.$preflightId->toRfc4122(),
+            (string) $request->request->get('_csrf_token', ''),
+        );
+
+        try {
+            $this->ai->approve(
+                $user->id,
+                $preflightId,
+            );
+        } catch (\DomainException) {
+            return $this->redirectToRoute(
+                'library_organization_ai_preflight',
+                [
+                    'id' => $preflightId->toRfc4122(),
+                    'action_error' => 1,
+                ],
+            );
+        }
+
+        return $this->redirectToRoute(
+            'library_organization_ai_preflight',
+            [
+                'id' => $preflightId->toRfc4122(),
+                'approved' => 1,
+            ],
+        );
+    }
+
+    #[Route(
+        '/library/organization/ai/preflights/{id}/execute',
+        name: 'library_organization_ai_execute',
+        requirements: ['id' => '[0-9a-fA-F-]{36}'],
+        methods: ['POST'],
+    )]
+    public function executeAi(string $id, Request $request): Response
+    {
+        $user = $this->user();
+        $preflightId = $this->id($id);
+
+        try {
+            $this->preflights->get($user->id, $preflightId);
+        } catch (\DomainException) {
+            throw $this->createNotFoundException();
+        }
+
+        $this->requireCsrf(
+            'organization_ai_execute_'.$preflightId->toRfc4122(),
+            (string) $request->request->get('_csrf_token', ''),
+        );
+
+        try {
+            $runId = $this->ai->execute(
+                $user->id,
+                $preflightId,
+            );
+        } catch (OrganizationAiProviderExecutionException|\DomainException) {
+            return $this->redirectToRoute(
+                'library_organization_ai_preflight',
+                [
+                    'id' => $preflightId->toRfc4122(),
+                    'execution_error' => 1,
+                ],
+            );
         }
 
         return $this->redirectToRoute(

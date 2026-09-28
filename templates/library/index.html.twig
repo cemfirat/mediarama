@@ -28,6 +28,10 @@
     <div class="uk-alert-warning" uk-alert>
         <p>Select one or more currently accessible MediaAssets before starting an organization analysis.</p>
     </div>
+{% elseif organization_error == 'ai_preflight' %}
+    <div class="uk-alert-warning" uk-alert>
+        <p>The AI analysis request could not be prepared safely. Check the selected provider, capabilities, input mode and media scope.</p>
+    </div>
 {% endif %}
 
 <section class="uk-card uk-card-default uk-card-body uk-margin-large-top" aria-labelledby="library-filter-heading">
@@ -105,43 +109,123 @@
 {% endif %}
 
 <section class="uk-margin-large-top" aria-labelledby="library-results-heading">
-    <div class="uk-flex uk-flex-between uk-flex-middle uk-flex-wrap">
-        <h2 id="library-results-heading" class="uk-h3">Results</h2>
-        {% if items is not empty %}
-        <form id="organization-analyze-form" method="post" action="{{ path('library_organization_analyze') }}">
-            <input type="hidden" name="_csrf_token" value="{{ organization_csrf_token }}">
-            <button class="uk-button uk-button-secondary" type="submit">Analyze selected</button>
-        </form>
-        {% endif %}
-    </div>
+    <h2 id="library-results-heading" class="uk-h3">Results</h2>
     {% if items is empty %}
         <div class="uk-placeholder uk-text-center">No matching media.</div>
     {% else %}
-        <div class="uk-overflow-auto">
-            <table class="uk-table uk-table-divider uk-table-small uk-table-middle">
-                <thead><tr><th>Analyze</th><th>Title</th><th>File</th><th>Captured</th><th>Creator</th><th>Camera</th><th>Location</th></tr></thead>
-                <tbody>
-                {% for item in items %}
-                    <tr>
-                        <td>
-                            <input class="uk-checkbox"
-                                   type="checkbox"
-                                   form="organization-analyze-form"
-                                   name="media_ids[]"
-                                   value="{{ item.id.toRfc4122() }}"
-                                   aria-label="Select {{ item.title ?: 'untitled MediaAsset' }} for organization analysis">
-                        </td>
-                        <td>{{ item.title ?: 'Untitled' }}</td>
-                        <td class="uk-text-meta">{{ item.originalFilename }}</td>
-                        <td>{{ item.capturedAt ? item.capturedAt|date('Y-m-d H:i') : '—' }}</td>
-                        <td>{{ item.creator ?: '—' }}</td>
-                        <td>{{ item.cameraModel ?: item.cameraMake ?: '—' }}</td>
-                        <td>{{ item.locationName ?: '—' }}</td>
-                    </tr>
-                {% endfor %}
-                </tbody>
-            </table>
-        </div>
+        <form id="organization-scope-form" method="post" action="{{ path('library_organization_analyze') }}">
+            <div class="uk-card uk-card-default uk-card-body uk-margin">
+                <div class="uk-flex uk-flex-between uk-flex-middle uk-flex-wrap">
+                    <div>
+                        <strong>Organization analysis</strong>
+                        <div class="uk-text-meta">Select MediaAssets below. Deterministic analysis always stays available without an AI provider.</div>
+                    </div>
+                    <button class="uk-button uk-button-secondary"
+                            type="submit"
+                            formaction="{{ path('library_organization_analyze') }}"
+                            name="_csrf_token"
+                            value="{{ organization_csrf_token }}">Analyze selected</button>
+                </div>
+
+                {% if organization_ai_providers is not empty %}
+                <details class="uk-margin-top">
+                    <summary class="uk-button uk-button-text">AI-assisted analysis</summary>
+                    <div class="uk-margin uk-card uk-card-muted uk-card-body">
+                        <p>
+                            Provider execution is blocked until you review and explicitly approve a persisted privacy/cost preflight.
+                            Immutable originals, exact GPS, raw metadata, provenance and source storage are never part of the provider request.
+                        </p>
+
+                        <fieldset class="uk-fieldset">
+                            <legend class="uk-legend uk-h4">Provider and capabilities</legend>
+                            <div class="uk-child-width-1-2@m uk-grid-match" uk-grid>
+                                {% for provider in organization_ai_providers %}
+                                <div>
+                                    <label class="uk-card uk-card-default uk-card-body uk-display-block">
+                                        <input class="uk-radio"
+                                               type="radio"
+                                               name="provider_key"
+                                               value="{{ provider.key }}"
+                                               {% if loop.first %}checked{% endif %}>
+                                        <strong>{{ provider.providerName }}</strong>
+                                        <div class="uk-text-meta">
+                                            {{ provider.producerKind.value|replace({'_':' '}) }} · {{ provider.modelName }}
+                                            {% if provider.modelVersion %} · {{ provider.modelVersion }}{% endif %}
+                                        </div>
+                                        <div class="uk-margin-small-top">
+                                            {% for capability in provider.capabilities %}
+                                                {% if capability.value != 'local_inference' %}
+                                                <label class="uk-display-block uk-margin-small-top">
+                                                    <input class="uk-checkbox"
+                                                           type="checkbox"
+                                                           name="capabilities[{{ provider.key }}][]"
+                                                           value="{{ capability.value }}"
+                                                           {% if capability.value == 'text_reasoning' %}checked{% endif %}>
+                                                    {{ capability.value|replace({'_':' '}) }}
+                                                </label>
+                                                {% else %}
+                                                    <span class="uk-label uk-margin-small-top">local inference</span>
+                                                {% endif %}
+                                            {% endfor %}
+                                        </div>
+                                    </label>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </fieldset>
+
+                        <div class="uk-grid-small uk-child-width-1-2@m uk-margin" uk-grid>
+                            <div>
+                                <label class="uk-form-label">Input mode</label>
+                                <select class="uk-select" name="input_mode">
+                                    <option value="metadata_only" selected>Metadata only</option>
+                                    <option value="metadata_and_presentation">Metadata + bounded presentation derivatives</option>
+                                </select>
+                                <div class="uk-text-meta uk-margin-small-top">Image understanding requires presentation mode and an available generated preview/poster.</div>
+                            </div>
+                            <div>
+                                <label class="uk-form-label">Optional metadata</label>
+                                <label class="uk-display-block"><input class="uk-checkbox" type="checkbox" name="include_creator" value="1"> Include creator</label>
+                                <label class="uk-display-block uk-margin-small-top"><input class="uk-checkbox" type="checkbox" name="include_location_name" value="1"> Include coarse location name</label>
+                                <div class="uk-text-meta uk-margin-small-top">Exact GPS stays excluded regardless of these choices.</div>
+                            </div>
+                        </div>
+
+                        <button class="uk-button uk-button-primary"
+                                type="submit"
+                                formaction="{{ path('library_organization_ai_prepare') }}"
+                                name="_csrf_token"
+                                value="{{ organization_ai_prepare_csrf_token }}">Review AI preflight</button>
+                    </div>
+                </details>
+                {% endif %}
+            </div>
+
+            <div class="uk-overflow-auto">
+                <table class="uk-table uk-table-divider uk-table-small uk-table-middle">
+                    <thead><tr><th>Analyze</th><th>Title</th><th>File</th><th>Captured</th><th>Creator</th><th>Camera</th><th>Location</th></tr></thead>
+                    <tbody>
+                    {% for item in items %}
+                        <tr>
+                            <td>
+                                <input class="uk-checkbox"
+                                       type="checkbox"
+                                       name="media_ids[]"
+                                       value="{{ item.id.toRfc4122() }}"
+                                       aria-label="Select {{ item.title ?: 'untitled MediaAsset' }} for organization analysis">
+                            </td>
+                            <td>{{ item.title ?: 'Untitled' }}</td>
+                            <td class="uk-text-meta">{{ item.originalFilename }}</td>
+                            <td>{{ item.capturedAt ? item.capturedAt|date('Y-m-d H:i') : '—' }}</td>
+                            <td>{{ item.creator ?: '—' }}</td>
+                            <td>{{ item.cameraModel ?: item.cameraMake ?: '—' }}</td>
+                            <td>{{ item.locationName ?: '—' }}</td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </form>
     {% endif %}
 </section>
 {% endblock %}
