@@ -147,6 +147,7 @@ $viewer = Uuid::v7();
 $otherOwner = Uuid::v7();
 
 $smartCollection = Uuid::v7();
+$secondSmartCollection = Uuid::v7();
 $manualCollection = Uuid::v7();
 $publicCandidate = Uuid::v7();
 
@@ -163,6 +164,7 @@ try {
     insertSmartUser($db, $otherOwner, 'smart-other-'.$otherOwner->toRfc4122());
 
     insertSmartCollection($db, $smartCollection, $owner, 'Smart test');
+    insertSmartCollection($db, $secondSmartCollection, $owner, 'Second Smart test');
     insertSmartCollection($db, $manualCollection, $owner, 'Manual test');
     insertSmartCollection($db, $publicCandidate, $owner, 'Public candidate', 'public');
 
@@ -255,6 +257,20 @@ try {
     }
 
     $configurator->configureSmart($owner, $smartCollection, $cameraRule);
+    $configurator->configureSmart($owner, $secondSmartCollection, $cameraRule);
+
+    requireSmart(
+        smartIds($resolver->resolve($owner, $secondSmartCollection))
+        === [$newest->toRfc4122()],
+        'one MediaAsset can resolve into several Smart Collections without duplication',
+    );
+    requireSmart(
+        (int) $db->fetchOne(
+            'SELECT COUNT(*) FROM collection_media WHERE collection_id = :id',
+            ['id' => $secondSmartCollection->toRfc4122()],
+        ) === 0,
+        'second Smart Collection also has no materialized membership',
+    );
 
     $configuration = $db->fetchAssociative(
         'SELECT mode, smart_rule FROM collections WHERE id = :id',
@@ -532,6 +548,7 @@ try {
     $db->delete('tags', ['id' => $tag->toRfc4122()]);
     $db->delete('collections', ['id' => $publicCandidate->toRfc4122()]);
     $db->delete('collections', ['id' => $manualCollection->toRfc4122()]);
+    $db->delete('collections', ['id' => $secondSmartCollection->toRfc4122()]);
     $db->delete('collections', ['id' => $smartCollection->toRfc4122()]);
     foreach ([$newest, $middle, $oldest, $otherOwnedMatch] as $mediaId) {
         $db->delete('media_assets', ['id' => $mediaId->toRfc4122()]);
