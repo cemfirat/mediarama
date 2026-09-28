@@ -200,7 +200,7 @@ Result ordering is deterministic:
 2. record creation time descending;
 3. UUID descending.
 
-Manual Collections remain unchanged and continue to use `collection_media`.
+Manual Collections remain unchanged and continue to use `collection_media`. Upload/manual-add destinations also reject Smart Collections before persistence, and a database trigger provides a final invariant if an older write path attempts to add persisted membership anyway.
 Converting a manual Collection that already has persisted membership into a
 Smart Collection fails closed instead of silently discarding or reinterpreting
 its curated membership.
