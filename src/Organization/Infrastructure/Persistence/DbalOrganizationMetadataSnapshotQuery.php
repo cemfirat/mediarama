@@ -52,6 +52,8 @@ SELECT
     EXISTS (
         SELECT 1
         FROM collection_media cm
+        JOIN actor_visible_collections visible_collection
+          ON visible_collection.collection_id = cm.collection_id
         WHERE cm.media_id = m.id
     ) AS has_collection_membership
 FROM media_assets m

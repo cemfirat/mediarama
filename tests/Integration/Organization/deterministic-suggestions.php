@@ -148,6 +148,7 @@ $inaccessible = Uuid::v7();
 $mediaIds = [];
 $architectureTag = Uuid::v7();
 $videoTag = Uuid::v7();
+$hiddenCollection = Uuid::v7();
 
 try {
     insertDeterministicUser($db, $requester, 'deterministic-requester');
@@ -190,6 +191,28 @@ try {
     );
 
     $now = (new DateTimeImmutable())->format(DATE_ATOM);
+    $db->insert('collections', [
+        'id' => $hiddenCollection->toRfc4122(),
+        'owner_id' => $other->toRfc4122(),
+        'parent_id' => null,
+        'cover_media_id' => null,
+        'slug' => null,
+        'title' => 'PRIVATE HIDDEN COLLECTION SENTINEL',
+        'description' => null,
+        'visibility' => 'private',
+        'position' => 0,
+        'created_at' => $now,
+        'updated_at' => $now,
+        'deleted_at' => null,
+    ]);
+    $db->insert('collection_media', [
+        'collection_id' => $hiddenCollection->toRfc4122(),
+        'media_id' => $mediaIds[10]->toRfc4122(),
+        'position' => 0,
+        'added_by' => null,
+        'created_at' => $now,
+    ]);
+
     $db->insert('tags', [
         'id' => $architectureTag->toRfc4122(),
         'slug' => 'organization-architecture-'.$architectureTag->toRfc4122(),
@@ -231,8 +254,20 @@ try {
     }
 
     $store = new DbalOrganizationProposalStore($db);
+    $snapshotQuery = new DbalOrganizationMetadataSnapshotQuery($db);
+
+    $hiddenMembershipSnapshot = $snapshotQuery->snapshot(
+        $requester,
+        [$mediaIds[10]],
+    );
+    requireDeterministic(
+        count($hiddenMembershipSnapshot) === 1
+        && !$hiddenMembershipSnapshot[0]->hasCollectionMembership,
+        'hidden Collection membership is excluded from deterministic organization signals',
+    );
+
     $analyzer = new DeterministicOrganizationAnalyzer(
-        new DbalOrganizationMetadataSnapshotQuery($db),
+        $snapshotQuery,
         new DeterministicOrganizationPlanner(),
         $store,
     );
@@ -366,6 +401,7 @@ SQL,
         '16.654321',
         'PRIVATE-SOURCE-',
         'PRIVATE OTHER LOCATION',
+        'PRIVATE HIDDEN COLLECTION SENTINEL',
     ] as $forbidden) {
         requireDeterministic(
             !str_contains($persisted, $forbidden),
@@ -382,6 +418,8 @@ SQL,
             'other' => $other->toRfc4122(),
         ],
     );
+
+    $db->delete('collections', ['id' => $hiddenCollection->toRfc4122()]);
 
     foreach ($mediaIds as $mediaId) {
         $db->delete('media_assets', ['id' => $mediaId->toRfc4122()]);

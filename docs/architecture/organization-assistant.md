@@ -149,7 +149,7 @@ normalized snapshot:
 - average rating;
 - normalized tags;
 - canonical dimensions where needed later;
-- whether the MediaAsset already has Collection membership.
+- whether the MediaAsset already has Collection membership visible to the requesting actor.
 
 It deliberately does not select source filenames, storage keys, raw metadata
 JSON, exact latitude/longitude or hidden Collection titles.
