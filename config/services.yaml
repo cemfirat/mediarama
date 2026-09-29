@@ -91,15 +91,15 @@ services:
     Mediarama\Media\Application\ValidateStoredMediaStructure:
         alias: Mediarama\Media\Infrastructure\Probe\LocalStoredMediaStructureValidator
 
-    Mediarama\Media\Application\InspectVideoProperties:
-        alias: Mediarama\Media\Infrastructure\Probe\FfprobeVideoInspector
-
     Mediarama\Media\Infrastructure\Probe\FfprobeProcess:
         arguments:
             $binary: '%env(FFPROBE_BINARY)%'
             $timeoutSeconds: '%env(float:FFPROBE_PROCESS_TIMEOUT_SECONDS)%'
             $probeSizeBytes: '%env(int:FFPROBE_PROBE_SIZE_BYTES)%'
             $analyzeDurationMicroseconds: '%env(int:FFPROBE_ANALYZE_DURATION_US)%'
+
+    Mediarama\Media\Application\InspectVideoProperties:
+        alias: Mediarama\Media\Infrastructure\Probe\FfprobeVideoInspector
 
     Mediarama\Media\Infrastructure\Video\FfmpegProcess:
         arguments:
@@ -312,6 +312,10 @@ services:
     Mediarama\Import\Coppermine\CoppermineConnectionFactory:
         arguments:
             $databaseUrl: '%env(COPPERMINE_DATABASE_URL)%'
+
+    Mediarama\Import\Coppermine\CoppermineSourceKey:
+        arguments:
+            $sourceId: '%env(COPPERMINE_SOURCE_ID)%'
 
     Mediarama\Import\Coppermine\CoppermineTablePrefix:
         arguments:

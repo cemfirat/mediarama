@@ -92,6 +92,13 @@ Destination authorization is checked when the session is created and again at fi
 
 Collection owners may upload to their own collection. Resource-scoped `collection.media.add` rules may grant upload capability to explicitly allowed users or groups.
 
+For migrated Coppermine albums, these collection rules are created only when both conditions were true in the source:
+
+- the group could upload pictures;
+- the album allowed visitor uploads.
+
+This preserves the source's album-level upload switch instead of treating a global `media.upload` capability as permission to upload everywhere.
+
 Upload authorization delegates this decision to the shared actor-aware Collection access policy. `collection.media.add` remains independent from `collection.view`; an upload grant does not implicitly expose a private Collection.
 
 Broader view/sharing semantics are documented in `docs/architecture/collection-access.md`.

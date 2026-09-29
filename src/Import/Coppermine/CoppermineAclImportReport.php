@@ -12,6 +12,7 @@ final readonly class CoppermineAclImportReport
     public function __construct(
         public int $processedAlbums,
         public int $createdAccessRules,
+        public int $createdCategoryCreationRules,
         public array $unmappedPrincipals,
         public array $passwordResetAlbums,
     ) {

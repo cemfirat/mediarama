@@ -14,7 +14,9 @@ final readonly class CoppermineInteractionImporter
         private CoppermineConnectionFactory $sourceFactory,
         private Connection $target,
         private ImportMappingRepository $mappings,
+        private CoppermineSourceKey $sourceKey,
         private CoppermineTablePrefix $prefix,
+        private CoppermineFavoriteDecoder $favoriteDecoder,
     ) {
     }
 
@@ -24,10 +26,12 @@ final readonly class CoppermineInteractionImporter
         $warnings = [];
 
         $commentsImported = $this->importComments($source, $warnings);
+        $favoritesImported = $this->importFavorites($source, $warnings);
         [$ratingsImported, $aggregates, $unrecoverable] = $this->importRatings($source, $warnings);
 
         return new CoppermineInteractionImportReport(
             $commentsImported,
+            $favoritesImported,
             $ratingsImported,
             $aggregates,
             $unrecoverable,
@@ -47,18 +51,18 @@ final readonly class CoppermineInteractionImporter
 
         foreach ($rows as $row) {
             $sourceId = (string) $row['msg_id'];
-            if ($this->mappings->findTargetId('coppermine', 'comment', $sourceId) !== null) {
+            if ($this->mappings->findTargetId($this->sourceKey->value(), 'comment', $sourceId) !== null) {
                 continue;
             }
 
-            $mediaId = $this->mappings->findTargetId('coppermine', 'picture', (string) $row['pid']);
+            $mediaId = $this->mappings->findTargetId($this->sourceKey->value(), 'picture', (string) $row['pid']);
             if ($mediaId === null) {
                 $warnings[] = sprintf('Comment %s references unmapped picture %s.', $sourceId, $row['pid']);
                 continue;
             }
 
             $userId = (int) $row['author_id'] > 0
-                ? $this->mappings->findTargetId('coppermine', 'user', (string) $row['author_id'])
+                ? $this->mappings->findTargetId($this->sourceKey->value(), 'user', (string) $row['author_id'])
                 : null;
 
             $moderationState = (string) $row['spam'] === 'YES'
@@ -82,8 +86,70 @@ final readonly class CoppermineInteractionImporter
                 'deleted_at' => null,
             ]);
 
-            $this->mappings->remember('coppermine', 'comment', $sourceId, $commentId);
+            $this->mappings->remember($this->sourceKey->value(), 'comment', $sourceId, $commentId);
             ++$count;
+        }
+
+        return $count;
+    }
+
+    /** @param list<string> $warnings */
+    private function importFavorites(Connection $source, array &$warnings): int
+    {
+        $schema = $source->createSchemaManager();
+        $tableName = $this->prefix->table('favpics');
+
+        if (!in_array($tableName, $schema->listTableNames(), true)) {
+            return 0;
+        }
+
+        $table = $source->quoteIdentifier($tableName);
+        $rows = $source->fetchAllAssociative(
+            'SELECT user_id, user_favpics FROM '.$table." WHERE user_favpics <> '' ORDER BY user_id ASC",
+        );
+
+        $count = 0;
+
+        foreach ($rows as $row) {
+            $sourceUserId = (string) $row['user_id'];
+            $userId = $this->mappings->findTargetId($this->sourceKey->value(), 'user', $sourceUserId);
+
+            if ($userId === null) {
+                $warnings[] = sprintf('Favorites for user %s could not resolve the user.', $sourceUserId);
+                continue;
+            }
+
+            $pictureIds = $this->favoriteDecoder->decode((string) $row['user_favpics']);
+
+            if ($pictureIds === [] && trim((string) $row['user_favpics']) !== '') {
+                $warnings[] = sprintf('Favorites for user %s could not be decoded safely.', $sourceUserId);
+                continue;
+            }
+
+            foreach ($pictureIds as $sourcePictureId) {
+                $mediaId = $this->mappings->findTargetId($this->sourceKey->value(), 'picture', $sourcePictureId);
+
+                if ($mediaId === null) {
+                    $warnings[] = sprintf(
+                        'Favorite for user %s references unmapped picture %s.',
+                        $sourceUserId,
+                        $sourcePictureId,
+                    );
+                    continue;
+                }
+
+                $count += $this->target->executeStatement(
+                    <<<'SQL'
+INSERT INTO favorites (user_id, media_id, created_at)
+VALUES (:user_id, :media_id, NOW())
+ON CONFLICT (user_id, media_id) DO NOTHING
+SQL,
+                    [
+                        'user_id' => $userId->toRfc4122(),
+                        'media_id' => $mediaId->toRfc4122(),
+                    ],
+                );
+            }
         }
 
         return $count;
@@ -115,7 +181,7 @@ final readonly class CoppermineInteractionImporter
         );
 
         foreach ($pictureRows as $row) {
-            $mediaId = $this->mappings->findTargetId('coppermine', 'picture', (string) $row['pid']);
+            $mediaId = $this->mappings->findTargetId($this->sourceKey->value(), 'picture', (string) $row['pid']);
             if ($mediaId === null) {
                 $warnings[] = sprintf('Rating aggregate references unmapped picture %s.', $row['pid']);
                 continue;
@@ -149,8 +215,8 @@ SQL,
         );
 
         foreach ($rows as $row) {
-            $mediaId = $this->mappings->findTargetId('coppermine', 'picture', (string) $row['pid']);
-            $userId = $this->mappings->findTargetId('coppermine', 'user', (string) $row['uid']);
+            $mediaId = $this->mappings->findTargetId($this->sourceKey->value(), 'picture', (string) $row['pid']);
+            $userId = $this->mappings->findTargetId($this->sourceKey->value(), 'user', (string) $row['uid']);
 
             if ($mediaId === null || $userId === null) {
                 $warnings[] = sprintf(

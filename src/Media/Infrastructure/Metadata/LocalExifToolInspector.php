@@ -28,7 +28,7 @@ final readonly class LocalExifToolInspector implements MediaMetadataInspector
         $json = $this->process->run([
             '-json',
             '-struct',
-            '-G1',
+            '-G1:4',
             '-a',
             '-n',
             '--',

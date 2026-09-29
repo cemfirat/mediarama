@@ -16,15 +16,30 @@ final readonly class UploadContentPolicy
 
     public function assertAllowed(InspectedContent $content): void
     {
-        if (!in_array($content->mimeType, $this->allowedMimeTypes, true)) {
+        $this->assertMimeAllowed($content->mimeType);
+
+        if ($content->mediaType === MediaType::Document) {
             throw UploadProblem::terminal(
                 'media_type_not_allowed',
                 UploadFailureStage::Finalization,
-                sprintf('MIME type "%s" is not allowed for upload.', $content->mimeType),
+                'Generic document uploads are not enabled.',
+            );
+        }
+    }
+
+    public function assertMimeAllowed(string $mimeType): void
+    {
+        if (!in_array($mimeType, $this->allowedMimeTypes, true)) {
+            throw UploadProblem::terminal(
+                'media_type_not_allowed',
+                UploadFailureStage::Finalization,
+                sprintf('MIME type "%s" is not allowed for upload.', $mimeType),
             );
         }
 
-        if ($content->mediaType === MediaType::Document) {
+        if (!str_starts_with($mimeType, 'image/')
+            && !str_starts_with($mimeType, 'video/')
+            && !str_starts_with($mimeType, 'audio/')) {
             throw UploadProblem::terminal(
                 'media_type_not_allowed',
                 UploadFailureStage::Finalization,

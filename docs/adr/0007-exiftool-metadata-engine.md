@@ -35,14 +35,16 @@ Preferred shape:
 ```text
 -json
 -struct
--G4
+-G1:4
 -a
 -n
 ```
 
-Exact arguments may be refined through fixtures.
+Family 1 preserves the specific metadata location/namespace (for example `IFD0`, `ExifIFD` and `XMP-dc`). Family 4 adds an instance group where necessary so duplicate tags receive unique JSON names instead of being silently suppressed.
 
-Important: do not flatten away XMP structures unnecessarily.
+The stored snapshot keeps the complete group-qualified tag key rather than stripping the group name.
+
+Important: do not flatten away XMP structures or group identity unnecessarily.
 
 ## Performance
 

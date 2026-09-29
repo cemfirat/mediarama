@@ -37,6 +37,8 @@ Stored in JSONB under stable top-level namespaces:
 }
 ```
 
+Keys inside each bucket retain ExifTool's group-qualified identity, for example `IFD0:Make`, `ExifIFD:ISO` and `XMP-dc:Title`. When ExifTool reports duplicate instances, the family-4 `CopyN` component is retained as well. This prevents metadata namespaces from collapsing onto the same JSON key.
+
 Raw binary metadata blobs are not stored in PostgreSQL unless a specific format requires it.
 
 ### Canonical metadata

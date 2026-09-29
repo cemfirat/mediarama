@@ -17,6 +17,7 @@ final readonly class CoppermineIdentityImporter
         private Connection $target,
         private ImportMappingRepository $mappings,
         private ImportCheckpointRepository $checkpoints,
+        private CoppermineSourceKey $sourceKey,
         private CoppermineTablePrefix $prefix,
     ) {
     }
@@ -24,7 +25,7 @@ final readonly class CoppermineIdentityImporter
     public function importGroups(int $batchSize = 100): int
     {
         $source = $this->sourceFactory->create();
-        $cursor = (int) ($this->checkpoints->get('coppermine', 'groups') ?? '0');
+        $cursor = (int) ($this->checkpoints->get($this->sourceKey->value(), 'groups') ?? '0');
         $table = $source->quoteIdentifier($this->prefix->table('usergroups'));
 
         $rows = $source->fetchAllAssociative(
@@ -38,7 +39,7 @@ final readonly class CoppermineIdentityImporter
 
         foreach ($rows as $row) {
             $sourceId = (string) $row['group_id'];
-            $targetId = $this->mappings->findTargetId('coppermine', 'group', $sourceId) ?? Uuid::v7();
+            $targetId = $this->mappings->findTargetId($this->sourceKey->value(), 'group', $sourceId) ?? Uuid::v7();
             $slug = 'coppermine-group-'.$sourceId;
 
             $this->target->executeStatement(
@@ -89,8 +90,8 @@ SQL,
                 );
             }
 
-            $this->mappings->remember('coppermine', 'group', $sourceId, $targetId);
-            $this->checkpoints->save('coppermine', 'groups', $sourceId);
+            $this->mappings->remember($this->sourceKey->value(), 'group', $sourceId, $targetId);
+            $this->checkpoints->save($this->sourceKey->value(), 'groups', $sourceId);
         }
 
         return count($rows);
@@ -99,8 +100,9 @@ SQL,
     public function importUsers(int $batchSize = 100): int
     {
         $source = $this->sourceFactory->create();
-        $cursor = (int) ($this->checkpoints->get('coppermine', 'users') ?? '0');
+        $cursor = (int) ($this->checkpoints->get($this->sourceKey->value(), 'users') ?? '0');
         $table = $source->quoteIdentifier($this->prefix->table('users'));
+        $languageLocales = $this->languageLocales($source);
 
         $rows = $source->fetchAllAssociative(
             sprintf(
@@ -114,7 +116,7 @@ SQL,
 
         foreach ($rows as $row) {
             $sourceId = (string) $row['user_id'];
-            $targetId = $this->mappings->findTargetId('coppermine', 'user', $sourceId) ?? Uuid::v7();
+            $targetId = $this->mappings->findTargetId($this->sourceKey->value(), 'user', $sourceId) ?? Uuid::v7();
 
             $this->target->executeStatement(
                 <<<'SQL'
@@ -140,7 +142,7 @@ SQL,
                     'email' => trim((string) $row['user_email']) !== '' ? (string) $row['user_email'] : null,
                     'display_name' => (string) $row['user_name'],
                     'status' => (string) $row['user_active'] === 'YES' ? 'password_reset_required' : 'inactive',
-                    'locale' => trim((string) $row['user_language']) !== '' ? (string) $row['user_language'] : null,
+                    'locale' => $this->localeForLanguage((string) $row['user_language'], $languageLocales),
                     'created_at' => $this->safeDate((string) $row['user_regdate'])->format(DATE_ATOM),
                     'last_login_at' => $this->nullableDate((string) $row['user_lastvisit'])?->format(DATE_ATOM),
                 ],
@@ -155,7 +157,7 @@ SQL,
 
             $groupIds = $this->groupIds((string) $row['user_group'], (string) $row['user_group_list']);
             foreach ($groupIds as $index => $sourceGroupId) {
-                $groupId = $this->mappings->findTargetId('coppermine', 'group', $sourceGroupId);
+                $groupId = $this->mappings->findTargetId($this->sourceKey->value(), 'group', $sourceGroupId);
                 if ($groupId === null) {
                     continue;
                 }
@@ -175,8 +177,8 @@ SQL,
                 );
             }
 
-            $this->mappings->remember('coppermine', 'user', $sourceId, $targetId);
-            $this->checkpoints->save('coppermine', 'users', $sourceId);
+            $this->mappings->remember($this->sourceKey->value(), 'user', $sourceId, $targetId);
+            $this->checkpoints->save($this->sourceKey->value(), 'users', $sourceId);
         }
 
         return count($rows);
@@ -206,6 +208,45 @@ SQL,
         }
 
         return $permissions;
+    }
+
+    /** @return array<string,string> */
+    private function languageLocales(Connection $source): array
+    {
+        $table = $source->quoteIdentifier($this->prefix->table('languages'));
+        $rows = $source->fetchAllAssociative(
+            'SELECT lang_id, abbr FROM '.$table.' ORDER BY lang_id ASC',
+        );
+
+        $locales = [];
+        foreach ($rows as $row) {
+            $language = trim((string) $row['lang_id']);
+            $locale = trim((string) $row['abbr']);
+
+            if ($language !== '' && $locale !== '') {
+                $locales[$language] = $locale;
+            }
+        }
+
+        return $locales;
+    }
+
+    /** @param array<string,string> $languageLocales */
+    private function localeForLanguage(string $language, array $languageLocales): ?string
+    {
+        $language = trim($language);
+        if ($language === '') {
+            return null;
+        }
+
+        if (!isset($languageLocales[$language])) {
+            throw new \RuntimeException(sprintf(
+                'Coppermine language "%s" has no locale mapping in the languages table.',
+                $language,
+            ));
+        }
+
+        return $languageLocales[$language];
     }
 
     /** @return list<string> */

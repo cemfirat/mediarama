@@ -13,31 +13,31 @@ final readonly class DbalImportCheckpointRepository implements ImportCheckpointR
     {
     }
 
-    public function get(string $source, string $stage): ?string
+    public function get(string $sourceKey, string $stage): ?string
     {
         $value = $this->connection->fetchOne(
-            'SELECT cursor FROM import_checkpoints WHERE source = :source AND stage = :stage',
-            ['source' => $source, 'stage' => $stage],
+            'SELECT cursor FROM import_checkpoints WHERE source_key = :source_key AND stage = :stage',
+            ['source_key' => $sourceKey, 'stage' => $stage],
         );
 
         return $value === false ? null : (string) $value;
     }
 
-    public function save(string $source, string $stage, string $cursor): void
+    public function save(string $sourceKey, string $stage, string $cursor): void
     {
         $this->connection->executeStatement(
             <<<'SQL'
-INSERT INTO import_checkpoints (source, stage, cursor, updated_at)
-VALUES (:source, :stage, :cursor, NOW())
-ON CONFLICT (source, stage)
+INSERT INTO import_checkpoints (source_key, stage, cursor, updated_at)
+VALUES (:source_key, :stage, :cursor, NOW())
+ON CONFLICT (source_key, stage)
 DO UPDATE SET cursor = EXCLUDED.cursor, updated_at = NOW()
 SQL,
-            ['source' => $source, 'stage' => $stage, 'cursor' => $cursor],
+            ['source_key' => $sourceKey, 'stage' => $stage, 'cursor' => $cursor],
         );
     }
 
-    public function clear(string $source, string $stage): void
+    public function clear(string $sourceKey, string $stage): void
     {
-        $this->connection->delete('import_checkpoints', ['source' => $source, 'stage' => $stage]);
+        $this->connection->delete('import_checkpoints', ['source_key' => $sourceKey, 'stage' => $stage]);
     }
 }

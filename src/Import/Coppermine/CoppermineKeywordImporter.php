@@ -15,6 +15,7 @@ final readonly class CoppermineKeywordImporter
         private CoppermineConnectionFactory $sourceFactory,
         private Connection $target,
         private ImportMappingRepository $mappings,
+        private CoppermineSourceKey $sourceKey,
         private CoppermineTablePrefix $prefix,
     ) {
     }
@@ -29,7 +30,9 @@ final readonly class CoppermineKeywordImporter
             'SELECT value FROM '.$config." WHERE name = 'keyword_separator'",
         ) ?: ';');
 
-        if ($separator === '') {
+        if ($separator === '%20') {
+            $separator = ' ';
+        } elseif ($separator === '') {
             $separator = ';';
         }
 
@@ -43,7 +46,7 @@ final readonly class CoppermineKeywordImporter
         $unmapped = [];
 
         foreach ($rows as $row) {
-            $mediaId = $this->mappings->findTargetId('coppermine', 'picture', (string) $row['pid']);
+            $mediaId = $this->mappings->findTargetId($this->sourceKey->value(), 'picture', (string) $row['pid']);
             if ($mediaId === null) {
                 $unmapped[] = (string) $row['pid'];
                 continue;
@@ -85,6 +88,87 @@ SQL,
             }
         }
 
-        return new CoppermineKeywordImportReport($tags, $links, $unmapped, $separator);
+        [$linkedMemberships, $unmappedAlbums, $unmappedLinkedPictures] = $this->importAlbumKeywordMemberships($source);
+
+        $unmapped = array_values(array_unique(array_merge($unmapped, $unmappedLinkedPictures)));
+
+        return new CoppermineKeywordImportReport(
+            $tags,
+            $links,
+            $linkedMemberships,
+            $unmapped,
+            $unmappedAlbums,
+            $separator,
+        );
+    }
+
+    /**
+     * Coppermine album keywords make pictures appear in additional albums when
+     * the raw picture keyword string matches the album keyword via SQL LIKE.
+     *
+     * @return array{0:int,1:list<string>,2:list<string>}
+     */
+    private function importAlbumKeywordMemberships(Connection $source): array
+    {
+        $albums = $source->quoteIdentifier($this->prefix->table('albums'));
+        $pictures = $source->quoteIdentifier($this->prefix->table('pictures'));
+
+        $albumRows = $source->fetchAllAssociative(
+            'SELECT aid, keyword FROM '.$albums." WHERE keyword IS NOT NULL AND keyword <> '' ORDER BY aid ASC",
+        );
+
+        $created = 0;
+        $unmappedAlbums = [];
+        $unmappedPictures = [];
+
+        foreach ($albumRows as $album) {
+            $sourceAlbumId = (string) $album['aid'];
+            $collectionId = $this->mappings->findTargetId($this->sourceKey->value(), 'album', $sourceAlbumId);
+
+            if ($collectionId === null) {
+                $unmappedAlbums[] = $sourceAlbumId;
+                continue;
+            }
+
+            $keyword = (string) $album['keyword'];
+            $pictureRows = $source->fetchAllAssociative(
+                'SELECT pid, position, owner_id FROM '.$pictures.' WHERE keywords LIKE :pattern ORDER BY position ASC, pid ASC',
+                ['pattern' => '%'.$keyword.'%'],
+            );
+
+            foreach ($pictureRows as $picture) {
+                $sourcePictureId = (string) $picture['pid'];
+                $mediaId = $this->mappings->findTargetId($this->sourceKey->value(), 'picture', $sourcePictureId);
+
+                if ($mediaId === null) {
+                    $unmappedPictures[] = $sourcePictureId;
+                    continue;
+                }
+
+                $addedBy = (int) $picture['owner_id'] > 0
+                    ? $this->mappings->findTargetId($this->sourceKey->value(), 'user', (string) $picture['owner_id'])
+                    : null;
+
+                $created += $this->target->executeStatement(
+                    <<<'SQL'
+INSERT INTO collection_media (collection_id, media_id, position, added_by, created_at)
+VALUES (:collection_id, :media_id, :position, :added_by, NOW())
+ON CONFLICT (collection_id, media_id) DO NOTHING
+SQL,
+                    [
+                        'collection_id' => $collectionId->toRfc4122(),
+                        'media_id' => $mediaId->toRfc4122(),
+                        'position' => (int) $picture['position'],
+                        'added_by' => $addedBy?->toRfc4122(),
+                    ],
+                );
+            }
+        }
+
+        return [
+            $created,
+            array_values(array_unique($unmappedAlbums)),
+            array_values(array_unique($unmappedPictures)),
+        ];
     }
 }

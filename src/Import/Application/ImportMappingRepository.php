@@ -8,7 +8,7 @@ use Symfony\Component\Uid\Uuid;
 
 interface ImportMappingRepository
 {
-    public function findTargetId(string $source, string $entityType, string $sourceId): ?Uuid;
+    public function findTargetId(string $sourceKey, string $entityType, string $sourceId): ?Uuid;
 
-    public function remember(string $source, string $entityType, string $sourceId, Uuid $targetId): void;
+    public function remember(string $sourceKey, string $entityType, string $sourceId, Uuid $targetId): void;
 }

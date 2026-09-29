@@ -15,6 +15,8 @@ Spam comments are preserved as `rejected`. Unapproved comments become `pending_r
 
 Source IP addresses and browser-identification fields are deliberately **not** migrated. They are not required to preserve the comment and importing them would unnecessarily carry historical personal/network data into the new installation.
 
+The cross-cutting rationale for this and the other deliberate data reductions is centralized in `docs/research/coppermine-intentional-omissions.md`.
+
 ## Ratings
 
 Coppermine stores the current aggregate on `pictures.pic_rating` and `pictures.votes`.

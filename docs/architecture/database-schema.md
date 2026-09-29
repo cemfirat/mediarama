@@ -120,10 +120,7 @@ Permissions use stable string keys such as `media.upload`.
 - `processing_state varchar`
 - `moderation_state varchar`
 - `search_index_policy varchar` (`inherit | index | noindex`)
-- `public_published_at timestamptz nullable`
-- `public_updated_at timestamptz nullable`
-- `public_published_origin varchar nullable` (`editorial | imported`)
-- `public_published_source varchar nullable` (required only for imported publication dates)
+- `view_count bigint not null default 0`
 - `metadata jsonb not null default '{}'`
 - `created_at timestamptz`
 - `updated_at timestamptz`
@@ -134,6 +131,7 @@ Constraints:
 - byte_size >= 0
 - width/height > 0 when present
 - duration >= 0 when present
+- view_count >= 0
 - unique `(storage_disk, storage_key)`
 
 Do not put a collection/album ID on this table.
@@ -205,6 +203,7 @@ is retryable/idempotent.
 - `public_published_source varchar nullable` (required only for imported publication dates)
 - `cover_media_id uuid fk media_assets nullable`
 - `position integer default 0`
+- `view_count bigint not null default 0`
 - timestamps
 - `deleted_at nullable`
 
@@ -215,6 +214,8 @@ Manual Collections persist membership in `collection_media`. Smart Collections p
 Smart Collections require a non-null owner. They are private by default, but may be deliberately published with `visibility = public` when password protection/reset flags are clear. The database still rejects persisted `collection_media` inserts/retargets to Smart Collections. Existing upload/add authorization also treats Smart Collections as non-manual destinations. Public dynamic matches do not become MediaAsset publication grants; each MediaAsset must independently cross the normal public boundary.
 
 Public publication timestamps are intentionally separate from ordinary creation/update timestamps. Existing rows are not backfilled from `created_at`; see `docs/architecture/publication-timeline.md`.
+
+`view_count` is a product/read-model counter, not embedded metadata. Imported Coppermine `pictures.hits` and `albums.alb_hits` seed these counters, while detailed historical hit telemetry remains outside the core domain.
 
 ## collection_media
 
@@ -437,6 +438,7 @@ See ADR-0017 and `docs/architecture/organization-assistant.md`.
 
 - `id uuid primary key`
 - `source_type varchar`
+- `source_key varchar nullable` (non-null for new Coppermine migration runs)
 - `source_version varchar nullable`
 - `status varchar`
 - `options jsonb`
@@ -445,15 +447,28 @@ See ADR-0017 and `docs/architecture/organization-assistant.md`.
 - `completed_at nullable`
 - timestamps
 
-## import_id_map
+Each row is one execution attempt. `source_key` links attempts for the same external source without making the attempt itself the owner of resumable state.
 
-- `import_run_id uuid fk import_runs`
+## import_mappings
+
+- `source_key varchar`
 - `entity_type varchar`
 - `source_id varchar`
 - `target_id uuid`
-- primary key `(import_run_id, entity_type, source_id)`
+- `imported_at timestamptz`
+- primary key `(source_key, entity_type, source_id)`
 
-This makes Coppermine import resumable and auditable.
+## import_checkpoints
+
+- `source_key varchar`
+- `stage varchar`
+- `cursor varchar`
+- `updated_at timestamptz`
+- primary key `(source_key, stage)`
+
+Mappings/checkpoints belong to a stable source instance so a failed run can resume in a later run. Different source galleries use different source keys and therefore cannot collide even when their native IDs are identical.
+
+The earlier unused `import_id_map` table is removed to avoid a second, contradictory mapping model.
 
 ## Smart Collection rule JSON
 

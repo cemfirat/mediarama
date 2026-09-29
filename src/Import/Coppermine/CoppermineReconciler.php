@@ -11,6 +11,7 @@ final readonly class CoppermineReconciler
     public function __construct(
         private CoppermineConnectionFactory $sourceFactory,
         private Connection $target,
+        private CoppermineSourceKey $sourceKey,
         private CoppermineTablePrefix $prefix,
         private CoppermineFileLocator $files,
     ) {
@@ -20,30 +21,35 @@ final readonly class CoppermineReconciler
     {
         $source = $this->sourceFactory->create();
         $picturesTable = $source->quoteIdentifier($this->prefix->table('pictures'));
+        $sourceKey = $this->sourceKey->value();
 
         $sourcePictures = (int) $source->fetchOne('SELECT COUNT(*) FROM '.$picturesTable);
         $mappedPictures = (int) $this->target->fetchOne(
-            "SELECT COUNT(*) FROM import_mappings WHERE source = 'coppermine' AND entity_type = 'picture'",
+            "SELECT COUNT(*) FROM import_mappings WHERE source_key = :source_key AND entity_type = 'picture'",
+            ['source_key' => $sourceKey],
         );
         $targetMedia = (int) $this->target->fetchOne(
             <<<'SQL'
 SELECT COUNT(*)
 FROM media_assets m
 JOIN import_mappings i ON i.target_id = m.id
-WHERE i.source = 'coppermine' AND i.entity_type = 'picture'
+WHERE i.source_key = :source_key AND i.entity_type = 'picture'
 SQL,
+            ['source_key' => $sourceKey],
         );
         $collectionLinks = (int) $this->target->fetchOne(
             <<<'SQL'
 SELECT COUNT(*)
 FROM collection_media cm
 JOIN import_mappings i ON i.target_id = cm.media_id
-WHERE i.source = 'coppermine' AND i.entity_type = 'picture'
+WHERE i.source_key = :source_key AND i.entity_type = 'picture'
 SQL,
+            ['source_key' => $sourceKey],
         );
 
         $mappedIds = $this->target->fetchFirstColumn(
-            "SELECT source_id FROM import_mappings WHERE source = 'coppermine' AND entity_type = 'picture'",
+            "SELECT source_id FROM import_mappings WHERE source_key = :source_key AND entity_type = 'picture'",
+            ['source_key' => $sourceKey],
         );
         $mapped = array_fill_keys(array_map('strval', $mappedIds), true);
 

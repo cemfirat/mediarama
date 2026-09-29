@@ -37,6 +37,7 @@ final class CoppermineImportCommand extends Command
         $output->writeln('Target media: '.$result->reconciliation->targetMedia);
         $output->writeln('Collection links: '.$result->reconciliation->collectionLinks);
         $output->writeln('Comments imported: '.$result->interactions->commentsImported);
+        $output->writeln('Favorites imported: '.$result->interactions->favoritesImported);
         $output->writeln('Individual ratings imported: '.$result->interactions->ratingsImported);
         $output->writeln('Migration completed and reconciled.');
 

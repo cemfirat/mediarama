@@ -1,9 +1,15 @@
 # Coppermine 1.6.x vs 1.7.x — Technical Research
 
-Status: **initial verified research**
+Status: **ongoing verified research — not eligible for architecture closure**
 Date: 2026-09-25
 
 This document records the first technical comparison used to decide how Mediarama should relate to Coppermine.
+
+## Research closure warning
+
+This document is **not** evidence that Coppermine research is complete. The remaining tasks below are now governed by the exhaustive exit audit in `docs/research/coppermine-exit-audit.md` and GitHub issue #11.
+
+A working importer, a clear Mediarama architecture direction, or a successful synthetic migration fixture are insufficient reasons to close Coppermine as an architecture/research topic. Closure requires exhaustive capability inventory, 1.6/1.7 comparison, migration-loss analysis, real-world migration evidence and source-provenance/license review.
 
 The goal is not to judge Coppermine as a product. It is to identify which concepts are valuable to preserve, which implementation choices are legacy constraints, and whether either existing branch is a suitable technical foundation for Mediarama.
 

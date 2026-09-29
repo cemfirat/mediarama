@@ -1,0 +1,351 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+required_env=(
+  DATABASE_URL
+  MEDIA_STORAGE_PATH
+  COPPERMINE_DATABASE_URL
+  COPPERMINE_SOURCE_ID
+  COPPERMINE_TABLE_PREFIX
+  COPPERMINE_ALBUMS_ROOT
+)
+
+for name in "${required_env[@]}"; do
+  if [ -z "${!name:-}" ]; then
+    echo "Missing required environment variable: $name" >&2
+    exit 2
+  fi
+done
+
+report_path="${1:-var/coppermine-real-evidence-${COPPERMINE_SOURCE_ID}.md}"
+max_rounds="${COPPERMINE_VALIDATION_MAX_QUEUE_ROUNDS:-1000}"
+
+mkdir -p "$(dirname "$report_path")"
+
+tmpdir="$(mktemp -d)"
+trap 'rm -rf "$tmpdir"' EXIT
+
+inspect_file="$tmpdir/inspect.txt"
+import_file="$tmpdir/import.txt"
+reconcile_file="$tmpdir/reconcile.txt"
+summary_file="$tmpdir/summary.md"
+
+echo "== Coppermine real-gallery validation =="
+echo "Source ID: $COPPERMINE_SOURCE_ID"
+echo "Evidence file: $report_path"
+
+echo
+echo "== 1. Read-only inspect / preflight =="
+php bin/console mediarama:import:coppermine:inspect | tee "$inspect_file"
+
+echo
+echo "== 2. Verify dedicated clean target =="
+php <<'PHP'
+<?php
+require 'vendor/autoload.php';
+
+$parser = new Doctrine\DBAL\Tools\DsnParser([
+    'postgresql' => 'pdo_pgsql',
+    'postgres' => 'pdo_pgsql',
+]);
+$db = Doctrine\DBAL\DriverManager::getConnection(
+    $parser->parse((string) getenv('DATABASE_URL')),
+);
+
+$tables = [
+    'users',
+    'groups',
+    'media_assets',
+    'collections',
+    'comments',
+    'favorites',
+    'ratings',
+    'import_runs',
+    'import_mappings',
+    'import_checkpoints',
+    'messenger_messages',
+];
+
+$dirty = [];
+foreach ($tables as $table) {
+    $count = (int) $db->fetchOne('SELECT COUNT(*) FROM '.$table);
+    if ($count !== 0) {
+        $dirty[$table] = $count;
+    }
+}
+
+if ($dirty !== []) {
+    fwrite(STDERR, "Real-gallery evidence requires a dedicated clean target. Non-empty tables:\n");
+    foreach ($dirty as $table => $count) {
+        fwrite(STDERR, sprintf("  %s: %d\n", $table, $count));
+    }
+    exit(1);
+}
+
+echo "Clean target verified.".PHP_EOL;
+PHP
+
+echo
+echo "== 3. Full staged migration =="
+php bin/console mediarama:import:coppermine | tee "$import_file"
+
+queue_count() {
+  php -r '
+  require "vendor/autoload.php";
+  $parser = new Doctrine\\DBAL\\Tools\\DsnParser([
+      "postgresql" => "pdo_pgsql",
+      "postgres" => "pdo_pgsql",
+  ]);
+  $db = Doctrine\\DBAL\\DriverManager::getConnection(
+      $parser->parse((string) getenv("DATABASE_URL"))
+  );
+  echo (int) $db->fetchOne(
+      "SELECT COUNT(*) FROM messenger_messages WHERE queue_name = :queue",
+      ["queue" => "async"],
+  );
+  '
+}
+
+echo
+echo "== 4. Drain media-processing queue =="
+round=0
+previous=-1
+stalled=0
+
+while true; do
+  pending="$(queue_count)"
+  echo "Async messages remaining: $pending"
+
+  if [ "$pending" -eq 0 ]; then
+    break
+  fi
+
+  round=$((round + 1))
+  if [ "$round" -gt "$max_rounds" ]; then
+    echo "Queue did not drain within $max_rounds rounds." >&2
+    exit 1
+  fi
+
+  if [ "$pending" -eq "$previous" ]; then
+    stalled=$((stalled + 1))
+  else
+    stalled=0
+  fi
+
+  if [ "$stalled" -ge 5 ]; then
+    echo "Queue count did not decrease for five consecutive rounds." >&2
+    exit 1
+  fi
+
+  previous="$pending"
+  php bin/console messenger:consume async --limit=100 --time-limit=60 --no-interaction
+done
+
+echo
+echo "== 5. Reconcile source and target =="
+php bin/console mediarama:import:coppermine:reconcile | tee "$reconcile_file"
+
+commit_sha="$(git rev-parse HEAD 2>/dev/null || printf 'unknown')"
+generated_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+source_key="coppermine:$COPPERMINE_SOURCE_ID"
+
+export MEDIARAMA_VALIDATION_SOURCE_KEY="$source_key"
+export MEDIARAMA_VALIDATION_COMMIT_SHA="$commit_sha"
+export MEDIARAMA_VALIDATION_GENERATED_AT="$generated_at"
+
+php <<'PHP' > "$summary_file"
+<?php
+require 'vendor/autoload.php';
+
+$parser = new Doctrine\DBAL\Tools\DsnParser([
+    'postgresql' => 'pdo_pgsql',
+    'postgres' => 'pdo_pgsql',
+]);
+$db = Doctrine\DBAL\DriverManager::getConnection(
+    $parser->parse((string) getenv('DATABASE_URL')),
+);
+
+$sourceKey = (string) getenv('MEDIARAMA_VALIDATION_SOURCE_KEY');
+$commit = (string) getenv('MEDIARAMA_VALIDATION_COMMIT_SHA');
+$generatedAt = (string) getenv('MEDIARAMA_VALIDATION_GENERATED_AT');
+
+$latestRun = $db->fetchAssociative(
+    <<<'SQL'
+SELECT id, source_version, status, started_at, completed_at
+FROM import_runs
+WHERE source_key = :source_key
+ORDER BY created_at DESC
+LIMIT 1
+SQL,
+    ['source_key' => $sourceKey],
+);
+
+if ($latestRun === false || (string) $latestRun['status'] !== 'completed') {
+    fwrite(STDERR, "Latest import run is not completed.\n");
+    exit(1);
+}
+
+$processing = $db->fetchAllKeyValue(
+    <<<'SQL'
+SELECT m.processing_state, COUNT(*)
+FROM media_assets m
+JOIN import_mappings i
+  ON i.target_id = m.id
+ AND i.source_key = :source_key
+ AND i.entity_type = 'picture'
+GROUP BY m.processing_state
+ORDER BY m.processing_state
+SQL,
+    ['source_key' => $sourceKey],
+);
+
+$mapped = static function (string $entityType) use ($db, $sourceKey): int {
+    return (int) $db->fetchOne(
+        'SELECT COUNT(*) FROM import_mappings WHERE source_key = :source_key AND entity_type = :entity_type',
+        ['source_key' => $sourceKey, 'entity_type' => $entityType],
+    );
+};
+
+$targetMedia = (int) $db->fetchOne(
+    <<<'SQL'
+SELECT COUNT(*)
+FROM media_assets m
+JOIN import_mappings i
+  ON i.target_id = m.id
+ AND i.source_key = :source_key
+ AND i.entity_type = 'picture'
+SQL,
+    ['source_key' => $sourceKey],
+);
+
+$failedMedia = (int) $db->fetchOne(
+    <<<'SQL'
+SELECT COUNT(*)
+FROM media_assets m
+JOIN import_mappings i
+  ON i.target_id = m.id
+ AND i.source_key = :source_key
+ AND i.entity_type = 'picture'
+WHERE m.processing_state = 'failed'
+SQL,
+    ['source_key' => $sourceKey],
+);
+
+$comments = (int) $db->fetchOne(
+    <<<'SQL'
+SELECT COUNT(*)
+FROM comments c
+JOIN import_mappings i
+  ON i.target_id = c.media_id
+ AND i.source_key = :source_key
+ AND i.entity_type = 'picture'
+SQL,
+    ['source_key' => $sourceKey],
+);
+
+$favorites = (int) $db->fetchOne(
+    <<<'SQL'
+SELECT COUNT(*)
+FROM favorites f
+JOIN import_mappings i
+  ON i.target_id = f.media_id
+ AND i.source_key = :source_key
+ AND i.entity_type = 'picture'
+SQL,
+    ['source_key' => $sourceKey],
+);
+
+$ratings = (int) $db->fetchOne(
+    <<<'SQL'
+SELECT COUNT(*)
+FROM ratings r
+JOIN import_mappings i
+  ON i.target_id = r.media_id
+ AND i.source_key = :source_key
+ AND i.entity_type = 'picture'
+SQL,
+    ['source_key' => $sourceKey],
+);
+
+$queue = (int) $db->fetchOne(
+    "SELECT COUNT(*) FROM messenger_messages WHERE queue_name = 'async'",
+);
+
+if ($failedMedia !== 0 || $queue !== 0) {
+    fwrite(STDERR, sprintf(
+        "Validation cannot pass: failed media=%d, queued async messages=%d.\n",
+        $failedMedia,
+        $queue,
+    ));
+    exit(1);
+}
+
+echo "# Coppermine real-gallery migration evidence\n\n";
+echo "- Generated UTC: ".$generatedAt."\n";
+echo "- Mediarama commit: ".$commit."\n";
+echo "- Source key: ".$sourceKey."\n";
+echo "- Detected source version: ".(string) $latestRun['source_version']."\n";
+echo "- Import run: ".(string) $latestRun['id']."\n";
+echo "- Import status: ".(string) $latestRun['status']."\n\n";
+
+echo "## Target summary\n\n";
+echo "| Metric | Count |\n";
+echo "| --- | ---: |\n";
+echo "| mapped users | ".$mapped('user')." |\n";
+echo "| mapped groups | ".$mapped('group')." |\n";
+echo "| mapped categories | ".$mapped('category')." |\n";
+echo "| mapped albums | ".$mapped('album')." |\n";
+echo "| mapped pictures | ".$mapped('picture')." |\n";
+echo "| target media for source | ".$targetMedia." |\n";
+echo "| imported comments on source media | ".$comments." |\n";
+echo "| imported favorites on source media | ".$favorites." |\n";
+echo "| imported individual ratings on source media | ".$ratings." |\n";
+echo "| failed media processing | ".$failedMedia." |\n";
+echo "| queued async messages | ".$queue." |\n\n";
+
+echo "### Media processing states\n\n";
+if ($processing === []) {
+    echo "_No media rows._\n\n";
+} else {
+    echo "| State | Count |\n";
+    echo "| --- | ---: |\n";
+    foreach ($processing as $state => $count) {
+        echo "| ".(string) $state." | ".(int) $count." |\n";
+    }
+    echo "\n";
+}
+
+echo "## Manual provenance / installation review\n\n";
+echo "- Source ownership/permission: TODO before attaching evidence\n";
+echo "- Anonymization status: TODO before attaching evidence\n";
+echo "- Installed/custom plugins reviewed: TODO before attaching evidence\n";
+echo "- Custom code/theme behavior reviewed for migration-relevant data: TODO before attaching evidence\n";
+echo "- Evidence approved for attachment to issue #11: TODO\n";
+PHP
+
+{
+  cat "$summary_file"
+  echo
+  echo "## Source inspection"
+  echo
+  echo "~~~text"
+  cat "$inspect_file"
+  echo "~~~"
+  echo
+  echo "## Migration result"
+  echo
+  echo "~~~text"
+  cat "$import_file"
+  echo "~~~"
+  echo
+  echo "## Reconciliation"
+  echo
+  echo "~~~text"
+  cat "$reconcile_file"
+  echo "~~~"
+} > "$report_path"
+
+echo
+echo "Validation passed."
+echo "Review provenance/anonymization TODOs before attaching the report to GitHub:"
+echo "$report_path"

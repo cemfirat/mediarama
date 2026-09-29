@@ -24,14 +24,17 @@ final readonly class CoppermineSchemaInspector implements ImportSource
     {
         $source = $this->sourceFactory->create();
         $tables = $source->createSchemaManager()->listTableNames();
-        $required = ['pictures', 'albums', 'categories', 'users', 'usergroups', 'comments', 'votes', 'vote_stats', 'config'];
+        $required = array_fill_keys(CoppermineCoreSchema::REQUIRED_FOR_MIGRATION, true);
         $warnings = [];
         $counts = [];
 
-        foreach ($required as $suffix) {
+        foreach (CoppermineCoreSchema::TABLE_SUFFIXES as $suffix) {
             $table = $this->prefix->table($suffix);
             if (!in_array($table, $tables, true)) {
-                $warnings[] = sprintf('Expected table %s was not found.', $table);
+                if (isset($required[$suffix])) {
+                    $warnings[] = sprintf('Expected table %s was not found.', $table);
+                }
+
                 continue;
             }
 

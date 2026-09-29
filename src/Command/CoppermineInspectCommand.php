@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Mediarama\Command;
 
+use Mediarama\Import\Coppermine\CoppermineMigrationPreflight;
 use Mediarama\Import\Coppermine\CoppermineSchemaInspector;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
@@ -16,8 +17,10 @@ use Symfony\Component\Console\Output\OutputInterface;
 )]
 final class CoppermineInspectCommand extends Command
 {
-    public function __construct(private readonly CoppermineSchemaInspector $inspector)
-    {
+    public function __construct(
+        private readonly CoppermineSchemaInspector $inspector,
+        private readonly CoppermineMigrationPreflight $preflight,
+    ) {
         parent::__construct();
     }
 
@@ -36,6 +39,15 @@ final class CoppermineInspectCommand extends Command
             $output->writeln('<comment>Warning: '.$warning.'</comment>');
         }
 
-        return $report->warnings === [] ? Command::SUCCESS : Command::INVALID;
+        if ($report->warnings !== []) {
+            return Command::INVALID;
+        }
+
+        $preflight = $this->preflight->inspect();
+        foreach ($preflight->blockers as $blocker) {
+            $output->writeln('<error>Preflight blocker: '.$blocker.'</error>');
+        }
+
+        return $preflight->isClean() ? Command::SUCCESS : Command::INVALID;
     }
 }

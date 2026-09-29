@@ -97,11 +97,17 @@ jobs:
       UPLOAD_MAX_CHUNK_BYTES: 16777216
       UPLOAD_DEFAULT_QUOTA_BYTES: 0
       COPPERMINE_DATABASE_URL: mysql://readonly:readonly@127.0.0.1:3306/coppermine
+      COPPERMINE_SOURCE_ID: fixture-main
       COPPERMINE_TABLE_PREFIX: cpg_
       COPPERMINE_ALBUMS_ROOT: /tmp/coppermine-albums
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Audit Coppermine source provenance across Git history
+        run: bash .github/scripts/audit-coppermine-provenance-history.sh
 
       - uses: shivammathur/setup-php@v2
         with:
@@ -185,6 +191,9 @@ jobs:
       - name: Lint PHP
         run: find src tests migrations -name '*.php' -print0 | xargs -0 -n1 php -l
 
+      - name: Validate real-gallery evidence runner syntax
+        run: bash -n bin/validate-coppermine-real
+
       - name: Validate YAML syntax without booting the application
         run: |
           php -r '
@@ -195,6 +204,20 @@ jobs:
 
       - name: Validate Symfony container
         run: php bin/console lint:container
+
+      - name: Verify Coppermine command surface
+        run: |
+          commands="$(php bin/console list --raw)"
+          printf '%s\n' "$commands" | grep -E '^mediarama:import:coppermine[[:space:]]'
+          printf '%s\n' "$commands" | grep -E '^mediarama:import:coppermine:inspect[[:space:]]'
+          printf '%s\n' "$commands" | grep -E '^mediarama:import:coppermine:reconcile[[:space:]]'
+
+          for removed in identity collections media keywords acl interactions; do
+            if printf '%s\n' "$commands" | grep -q -E "^mediarama:import:coppermine:${removed}[[:space:]]"; then
+              echo "Unexpected mutating stage command remains registered: $removed"
+              exit 1
+            fi
+          done
 
       - name: Validate routes
         run: php bin/console debug:router --show-controllers
@@ -287,6 +310,70 @@ jobs:
         run: |
           mkdir -p /tmp/coppermine-albums/userpics
           convert -size 2x2 xc:white /tmp/coppermine-albums/userpics/sample.jpg
+          convert -size 2x2 xc:white /tmp/coppermine-albums/userpics/sample2.jpg
+
+          exiftool -overwrite_original \
+            '-IFD0:Make=Fixture Camera Co' \
+            '-IFD0:Model=FixtureCam 1' \
+            '-ExifIFD:DateTimeOriginal=2024:01:02 10:30:00' \
+            '-ExifIFD:LensModel=Fixture 35mm' \
+            '-ExifIFD:ISO=400' \
+            '-ExifIFD:FNumber=2.8' \
+            '-ExifIFD:ExposureTime=0.008' \
+            '-ExifIFD:FocalLength=35' \
+            '-GPS:GPSLatitude=48.2082' \
+            '-GPS:GPSLatitudeRef=N' \
+            '-GPS:GPSLongitude=16.3738' \
+            '-GPS:GPSLongitudeRef=E' \
+            '-XMP-dc:Title=Embedded fixture title' \
+            '-XMP-dc:Description=Embedded fixture description' \
+            '-XMP-dc:Creator=Fixture Photographer' \
+            '-XMP-dc:Rights=Fixture Copyright' \
+            '-XMP-dc:Subject=portrait' \
+            '-XMP-dc:Subject+=vienna' \
+            '-XMP-iptcCore:Location=Vienna Fixture' \
+            /tmp/coppermine-albums/userpics/sample.jpg
+
+          exiftool -overwrite_original \
+            '-IPTC:DateCreated=2024:03:05' \
+            '-IPTC:ObjectName=IPTC embedded title' \
+            '-IPTC:Caption-Abstract=IPTC embedded description' \
+            '-IPTC:By-line=IPTC Creator' \
+            '-IPTC:CopyrightNotice=IPTC Copyright' \
+            '-IPTC:Sub-location=IPTC Vienna' \
+            '-IPTC:Keywords=archive' \
+            '-IPTC:Keywords+=vienna' \
+            /tmp/coppermine-albums/userpics/sample2.jpg
+
+          exiftool -json -struct -G1:4 -a -n -- /tmp/coppermine-albums/userpics/sample.jpg > /tmp/coppermine-rich-metadata.json
+          php <<'PHP'
+          <?php
+          $decoded = json_decode((string) file_get_contents('/tmp/coppermine-rich-metadata.json'), true, flags: JSON_THROW_ON_ERROR);
+          $raw = $decoded[0] ?? [];
+          foreach ([
+              'IFD0:Make',
+              'IFD0:Model',
+              'ExifIFD:DateTimeOriginal',
+              'ExifIFD:ISO',
+              'ExifIFD:LensModel',
+              'XMP-dc:Title',
+              'XMP-dc:Creator',
+              'XMP-dc:Subject',
+              'XMP-iptcCore:Location',
+          ] as $key) {
+              if (!array_key_exists($key, $raw)) {
+                  fwrite(STDERR, 'Missing expected ExifTool family-1 key: '.$key.PHP_EOL);
+                  exit(1);
+              }
+          }
+          PHP
+
+          ffmpeg -loglevel error -y \
+            -f lavfi -i anullsrc=r=44100:cl=mono -t 0.25 -q:a 9 \
+            /tmp/coppermine-albums/userpics/sample.mp3
+          ffmpeg -loglevel error -y \
+            -f lavfi -i color=c=black:s=16x16:r=10:d=0.25 -an -c:v mpeg4 -q:v 5 \
+            /tmp/coppermine-albums/userpics/sample.mp4
           mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine \
             < tests/Fixtures/Coppermine/1.6-minimal.sql
           mariadb --host=127.0.0.1 --port=3306 --user=root --password=root \
@@ -296,7 +383,7 @@ jobs:
         run: php bin/console mediarama:import:coppermine
 
       - name: Process imported media asynchronously
-        run: php bin/console messenger:consume async --limit=1 --time-limit=30 --no-interaction -vv
+        run: php bin/console messenger:consume async --limit=4 --time-limit=30 --no-interaction -vv
 
       - name: Verify migrated fixture
         run: |
@@ -310,13 +397,48 @@ jobs:
           ]);
           $db = Doctrine\DBAL\DriverManager::getConnection($dsn->parse((string) getenv('DATABASE_URL')));
           $checks = [
-              'ready media' => (int) $db->fetchOne("SELECT COUNT(*) FROM media_assets WHERE processing_state = 'ready'") === 1,
+              'main source audit key' => (int) $db->fetchOne("SELECT COUNT(*) FROM import_runs WHERE source_type = 'coppermine' AND source_key = 'coppermine:fixture-main' AND status = 'completed'") === 1,
+              'main source mappings scoped' => (int) $db->fetchOne("SELECT COUNT(*) FROM import_mappings WHERE source_key = 'coppermine:fixture-main'") > 0,
+              'ready media' => (int) $db->fetchOne("SELECT COUNT(*) FROM media_assets WHERE processing_state = 'ready'") === 4,
+              'ready audio media' => (int) $db->fetchOne("SELECT COUNT(*) FROM media_assets WHERE original_filename = 'sample.mp3' AND mime_type = 'audio/mpeg' AND media_type = 'audio' AND processing_state = 'ready'") === 1,
+              'ready video media' => (int) $db->fetchOne("SELECT COUNT(*) FROM media_assets WHERE original_filename = 'sample.mp4' AND mime_type = 'video/mp4' AND media_type = 'video' AND processing_state = 'ready'") === 1,
+              'media historical view count' => (int) $db->fetchOne("SELECT COUNT(*) FROM media_assets WHERE original_filename = 'sample.jpg' AND view_count = 42") === 1,
+              'second media historical view count' => (int) $db->fetchOne("SELECT COUNT(*) FROM media_assets WHERE original_filename = 'sample2.jpg' AND view_count = 9") === 1,
+              'album historical view count' => (int) $db->fetchOne("SELECT COUNT(*) FROM collections WHERE title = 'Fixture Album' AND view_count = 17") === 1,
+              'explicit album cover' => (int) $db->fetchOne("SELECT COUNT(*) FROM collections c JOIN media_assets m ON m.id = c.cover_media_id WHERE c.title = 'Fixture Album' AND m.original_filename = 'sample.jpg'") === 1,
+              'explicit category cover' => (int) $db->fetchOne("SELECT COUNT(*) FROM collections c JOIN media_assets m ON m.id = c.cover_media_id WHERE c.title = 'Fixture Category' AND m.original_filename = 'sample2.jpg'") === 1,
+              'dynamic album cover remains unpinned' => (int) $db->fetchOne("SELECT COUNT(*) FROM collections WHERE title = 'Linked Album' AND cover_media_id IS NULL") === 1,
+              'Coppermine title and description beat embedded values' => (int) $db->fetchOne("SELECT COUNT(*) FROM media_assets WHERE original_filename = 'sample.jpg' AND title = 'Fixture Photo' AND description = 'Imported fixture caption' AND metadata_provenance->>'title' = 'coppermine_import' AND metadata_provenance->>'description' = 'coppermine_import'") === 1,
+              'embedded EXIF and XMP seed canonical metadata' => (int) $db->fetchOne("SELECT COUNT(*) FROM media_assets WHERE original_filename = 'sample.jpg' AND creator = 'Fixture Photographer' AND copyright = 'Fixture Copyright' AND camera_make = 'Fixture Camera Co' AND camera_model = 'FixtureCam 1' AND lens = 'Fixture 35mm' AND iso = 400 AND location_name = 'Vienna Fixture' AND ABS(latitude - 48.2082) < 0.000001 AND ABS(longitude - 16.3738) < 0.000001 AND captured_at IS NOT NULL") === 1,
+              'file metadata wins over stale Coppermine EXIF cache' => (int) $db->fetchOne("SELECT COUNT(*) FROM media_assets WHERE original_filename = 'sample.jpg' AND camera_make = 'Fixture Camera Co' AND metadata->'exif'->>'IFD0:Make' = 'Fixture Camera Co'") === 1,
+              'embedded metadata provenance' => (int) $db->fetchOne("SELECT COUNT(*) FROM media_assets WHERE original_filename = 'sample.jpg' AND metadata_provenance->>'creator' = 'embedded' AND metadata_provenance->>'camera_make' = 'embedded' AND metadata_provenance->>'captured_at' = 'embedded' AND metadata_provenance->>'latitude' = 'embedded'") === 1,
+              'qualified EXIF and XMP snapshot keys' => (int) $db->fetchOne("SELECT COUNT(*) FROM media_assets WHERE original_filename = 'sample.jpg' AND jsonb_exists(metadata->'exif', 'IFD0:Make') AND jsonb_exists(metadata->'exif', 'ExifIFD:ISO') AND jsonb_exists(metadata->'xmp', 'XMP-dc:Title') AND jsonb_exists(metadata->'xmp', 'XMP-dc:Subject')") === 1,
+              'embedded XMP keyword list preserved' => (int) $db->fetchOne("SELECT COUNT(*) FROM media_assets WHERE original_filename = 'sample.jpg' AND jsonb_array_length(metadata->'xmp'->'XMP-dc:Subject') = 2") === 1,
+              'IPTC fallback seeds canonical metadata' => (int) $db->fetchOne("SELECT COUNT(*) FROM media_assets WHERE original_filename = 'sample2.jpg' AND title = 'Aggregate Only Photo' AND description = 'Rating aggregate without detailed vote rows' AND creator = 'IPTC Creator' AND copyright = 'IPTC Copyright' AND location_name = 'IPTC Vienna' AND captured_at::date = DATE '2024-03-05'") === 1,
+              'qualified IPTC snapshot keys' => (int) $db->fetchOne("SELECT COUNT(*) FROM media_assets WHERE original_filename = 'sample2.jpg' AND jsonb_exists(metadata->'iptc', 'IPTC:ObjectName') AND jsonb_exists(metadata->'iptc', 'IPTC:Keywords') AND jsonb_array_length(metadata->'iptc'->'IPTC:Keywords') = 2") === 1,
+              'nested category hierarchy' => (int) $db->fetchOne("SELECT COUNT(*) FROM collections child JOIN collections parent ON parent.id = child.parent_id WHERE child.title = 'Nested Category' AND parent.title = 'Fixture Category'") === 1,
+              'nested album hierarchy' => (int) $db->fetchOne("SELECT COUNT(*) FROM collections album JOIN collections parent ON parent.id = album.parent_id WHERE album.title = 'Nested Album' AND parent.title = 'Nested Category'") === 1,
+              'user gallery root ownership' => (int) $db->fetchOne("SELECT COUNT(*) FROM collections c JOIN users u ON u.id = c.owner_id WHERE c.title = 'User Gallery Album' AND c.parent_id IS NULL AND u.username = 'fixture-user'") === 1,
               'restricted password-reset collection' => (int) $db->fetchOne("SELECT COUNT(*) FROM collections WHERE title = 'Fixture Album' AND visibility = 'restricted' AND password_protected = TRUE AND password_reset_required = TRUE") === 1,
+              'category creation ACL' => (int) $db->fetchOne("SELECT COUNT(*) FROM collection_access ca JOIN collections c ON c.id = ca.collection_id JOIN groups g ON g.id = ca.group_id WHERE c.title = 'Fixture Category' AND g.name = 'Registered' AND ca.capability = 'collection.create_child' AND ca.effect = 'allow'") === 1,
+              'group restricted ACL' => (int) $db->fetchOne("SELECT COUNT(*) FROM collection_access ca JOIN collections c ON c.id = ca.collection_id JOIN groups g ON g.id = ca.group_id WHERE c.title = 'Fixture Album' AND g.name = 'Registered' AND ca.capability = 'collection.view' AND ca.effect = 'allow'") === 1,
+              'album upload ACL' => (int) $db->fetchOne("SELECT COUNT(*) FROM collection_access ca JOIN collections c ON c.id = ca.collection_id JOIN groups g ON g.id = ca.group_id WHERE c.title = 'Fixture Album' AND g.name = 'Registered' AND ca.capability = 'collection.media.add' AND ca.effect = 'allow'") === 1,
+              'album comment ACL' => (int) $db->fetchOne("SELECT COUNT(*) FROM collection_access ca JOIN collections c ON c.id = ca.collection_id JOIN groups g ON g.id = ca.group_id WHERE c.title = 'Fixture Album' AND g.name = 'Registered' AND ca.capability = 'media.comment' AND ca.effect = 'allow'") === 1,
+              'album rating ACL' => (int) $db->fetchOne("SELECT COUNT(*) FROM collection_access ca JOIN collections c ON c.id = ca.collection_id JOIN groups g ON g.id = ca.group_id WHERE c.title = 'Fixture Album' AND g.name = 'Registered' AND ca.capability = 'media.rate' AND ca.effect = 'allow'") === 1,
+              'disabled linked-album interaction ACLs absent' => (int) $db->fetchOne("SELECT COUNT(*) FROM collection_access ca JOIN collections c ON c.id = ca.collection_id WHERE c.title = 'Linked Album' AND ca.capability IN ('collection.media.add', 'media.comment', 'media.rate')") === 0,
+              'user restricted ACL' => (int) $db->fetchOne("SELECT COUNT(*) FROM collection_access ca JOIN collections c ON c.id = ca.collection_id JOIN users u ON u.id = ca.user_id WHERE c.title = 'User Restricted Album' AND u.username = 'viewer-user' AND ca.capability = 'collection.view' AND ca.effect = 'allow'") === 1,
               'tags' => (int) $db->fetchOne('SELECT COUNT(*) FROM tags') === 2,
+              'album-keyword membership' => (int) $db->fetchOne("SELECT COUNT(*) FROM collection_media cm JOIN collections c ON c.id = cm.collection_id JOIN media_assets m ON m.id = cm.media_id WHERE c.title = 'Linked Album' AND m.original_filename = 'sample.jpg'") === 1,
               'comment' => (int) $db->fetchOne("SELECT COUNT(*) FROM comments WHERE body = 'Fixture comment'") === 1,
+              'guest comment' => (int) $db->fetchOne("SELECT COUNT(*) FROM comments WHERE body = 'Guest fixture comment' AND user_id IS NULL AND guest_name = 'Guest Alice' AND moderation_state = 'pending_review'") === 1,
+              'favorite' => (int) $db->fetchOne('SELECT COUNT(*) FROM favorites') === 1,
               'rating' => (int) $db->fetchOne('SELECT COUNT(*) FROM ratings WHERE value = 4') === 1,
+              'aggregate-only rating' => (int) $db->fetchOne("SELECT COUNT(*) FROM import_rating_aggregates a JOIN media_assets m ON m.id = a.media_id WHERE m.original_filename = 'sample2.jpg' AND a.average_5 = 3 AND a.vote_count = 2") === 1,
+              'no synthesized individual rating' => (int) $db->fetchOne("SELECT COUNT(*) FROM ratings r JOIN media_assets m ON m.id = r.media_id WHERE m.original_filename = 'sample2.jpg'") === 0,
               'reset-required user' => (int) $db->fetchOne("SELECT COUNT(*) FROM users WHERE username = 'fixture-user' AND status = 'password_reset_required'") === 1,
               'imported group quota' => (int) $db->fetchOne("SELECT COUNT(*) FROM group_storage_quotas WHERE limit_bytes = 2097152") === 1,
+              'english language id maps to locale' => (int) $db->fetchOne("SELECT COUNT(*) FROM users WHERE username = 'fixture-user' AND locale = 'en'") === 1,
+              'german language id maps to locale' => (int) $db->fetchOne("SELECT COUNT(*) FROM users WHERE username = 'viewer-user' AND locale = 'de'") === 1,
               'empty async queue' => (int) $db->fetchOne("SELECT COUNT(*) FROM messenger_messages WHERE queue_name = 'async'") === 0,
           ];
 
@@ -326,6 +448,23 @@ jobs:
                   exit(1);
               }
           }
+
+          $collectionAccess = new Mediarama\Collection\Infrastructure\Persistence\DbalCollectionAccessPolicy($db);
+          $viewerId = Symfony\Component\Uid\Uuid::fromString((string) $db->fetchOne("SELECT id FROM users WHERE username = 'viewer-user'"));
+          $fixtureAlbumId = Symfony\Component\Uid\Uuid::fromString((string) $db->fetchOne("SELECT id FROM collections WHERE title = 'Fixture Album'"));
+          $linkedAlbumId = Symfony\Component\Uid\Uuid::fromString((string) $db->fetchOne("SELECT id FROM collections WHERE title = 'Linked Album'"));
+
+          if (!$collectionAccess->canAddMedia($viewerId, $fixtureAlbumId)) {
+              fwrite(STDERR, "FAIL runtime album upload permission should allow Registered viewer on Fixture Album".PHP_EOL);
+              exit(1);
+          }
+          echo "OK runtime album upload permission allows source-enabled album".PHP_EOL;
+
+          if ($collectionAccess->canAddMedia($viewerId, $linkedAlbumId)) {
+              fwrite(STDERR, "FAIL runtime album upload permission should deny Registered viewer on Linked Album".PHP_EOL);
+              exit(1);
+          }
+          echo "OK runtime album upload permission denies source-disabled album".PHP_EOL;
           PHP
 
       - name: Verify public gallery visibility and derivative delivery
@@ -444,10 +583,10 @@ jobs:
           request_ok "http://127.0.0.1:8080/collections/$COLLECTION_ID" /tmp/collection.html
           grep -F "Fixture Photo" /tmp/collection.html
 
-          expect_search_count 1 "http://127.0.0.1:8080/api/media?q=Fixture" /tmp/public-search.json
+          expect_search_count 1 "http://127.0.0.1:8080/api/media?q=Fixture%20Photo" /tmp/public-search.json
           if ! curl --fail --silent --show-error \
             -D /tmp/public-search.headers \
-            "http://127.0.0.1:8080/api/media?q=Fixture" \
+            "http://127.0.0.1:8080/api/media?q=Fixture%20Photo" \
             -o /tmp/public-search-header-body.json; then
             cat /tmp/mediarama-http.log || true
             exit 1
@@ -491,7 +630,7 @@ jobs:
 
           expect_status 404 "http://127.0.0.1:8080/collections/$COLLECTION_ID"
           expect_status 404 "http://127.0.0.1:8080/media/$MEDIA_ID/derivatives/v$THUMBNAIL_VERSION/thumbnail"
-          expect_search_count 0 "http://127.0.0.1:8080/api/media?q=Fixture" /tmp/private-parent-search.json
+          expect_search_count 0 "http://127.0.0.1:8080/api/media?q=Fixture%20Photo" /tmp/private-parent-search.json
 
           php <<'PHP'
           <?php
@@ -512,7 +651,7 @@ jobs:
             exit 1
           fi
           expect_status 404 "http://127.0.0.1:8080/media/$MEDIA_ID/derivatives/v$THUMBNAIL_VERSION/thumbnail"
-          expect_search_count 0 "http://127.0.0.1:8080/api/media?q=Fixture" /tmp/pending-search.json
+          expect_search_count 0 "http://127.0.0.1:8080/api/media?q=Fixture%20Photo" /tmp/pending-search.json
 
           php <<'PHP'
           <?php
@@ -522,6 +661,289 @@ jobs:
           $db->executeStatement(
               "UPDATE media_assets SET moderation_state = 'published' WHERE title = 'Fixture Photo'"
           );
+          PHP
+
+      - name: Verify Coppermine migration preflight blockers
+        run: |
+          assert_inspect_blocked() {
+            label="$1"
+            expected="$2"
+            output="/tmp/coppermine-preflight-${label}.txt"
+
+            set +e
+            php bin/console mediarama:import:coppermine:inspect >"$output" 2>&1
+            status=$?
+            set -e
+
+            cat "$output"
+
+            if [ "$status" -eq 0 ]; then
+              echo "Expected preflight inspection to fail for: $label"
+              exit 1
+            fi
+
+            grep -F "$expected" "$output"
+          }
+
+          assert_inspect_clean() {
+            label="$1"
+            output="/tmp/coppermine-preflight-${label}.txt"
+
+            if ! php bin/console mediarama:import:coppermine:inspect >"$output" 2>&1; then
+              cat "$output"
+              echo "Expected preflight inspection to succeed for: $label"
+              exit 1
+            fi
+
+            cat "$output"
+          }
+
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine \
+            -e "UPDATE cpg_users SET user_language = 'missing-language' WHERE user_id = 1;"
+          assert_inspect_blocked missing-user-language 'User 1 language "missing-language" does not resolve through the Coppermine languages table.'
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine \
+            -e "UPDATE cpg_users SET user_language = 'english' WHERE user_id = 1;"
+
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine \
+            -e "UPDATE cpg_config SET value = '' WHERE name = 'keyword_separator';"
+          assert_inspect_blocked empty-keyword-separator 'Coppermine keyword_separator is empty; picture keywords cannot be split safely.'
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine \
+            -e "UPDATE cpg_config SET value = ';' WHERE name = 'keyword_separator';"
+
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine \
+            -e "UPDATE cpg_config SET value = '21' WHERE name = 'rating_stars_amount';"
+          assert_inspect_blocked invalid-rating-stars 'Coppermine rating_stars_amount=21 is outside the supported source range 1..20.'
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine \
+            -e "UPDATE cpg_config SET value = '5' WHERE name = 'rating_stars_amount';"
+
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine \
+            -e "UPDATE cpg_config SET value = 'missing-language' WHERE name = 'lang';"
+          assert_inspect_blocked missing-default-language 'Coppermine default language "missing-language" does not resolve through the languages table.'
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine \
+            -e "UPDATE cpg_config SET value = 'english' WHERE name = 'lang';"
+
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine \
+            -e "INSERT INTO cpg_users (user_id, user_group, user_active, user_name, user_lastvisit, user_regdate, user_email, user_profile6) VALUES (99, 3, 'YES', 'duplicate-user', '2024-02-03 10:00:00', '2024-01-03 10:00:00', 'fixture@example.test', '');"
+          assert_inspect_blocked duplicate-email 'Duplicate normalized email address "fixture@example.test" is used by 2 source users'
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine \
+            -e "DELETE FROM cpg_users WHERE user_id = 99;"
+
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine \
+            -e "UPDATE cpg_usergroups SET group_quota = 1024 WHERE group_id = 3;"
+          assert_inspect_clean effective-group-quota
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine \
+            -e "UPDATE cpg_usergroups SET group_quota = 2048 WHERE group_id = 3;"
+
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine \
+            -e "UPDATE cpg_usergroups SET pub_upl_need_approval = 1 WHERE group_id = 3;"
+          assert_inspect_blocked public-upload-approval 'User 1 requires Coppermine approval for public-album uploads; Mediarama has no equivalent migrated upload-approval policy yet.'
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine \
+            -e "UPDATE cpg_usergroups SET pub_upl_need_approval = 0 WHERE group_id = 3;"
+
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine \
+            -e "UPDATE cpg_usergroups SET priv_upl_need_approval = 1 WHERE group_id = 3;"
+          assert_inspect_blocked private-upload-approval 'User 1 requires Coppermine approval for private/user-gallery uploads; Mediarama has no equivalent migrated upload-approval policy yet.'
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine \
+            -e "UPDATE cpg_usergroups SET priv_upl_need_approval = 0 WHERE group_id = 3;"
+
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine \
+            -e "UPDATE cpg_usergroups SET access_level = 2 WHERE group_id = 3;"
+          assert_inspect_blocked derivative-access-tier 'User 1 has effective Coppermine access_level=2; Mediarama does not yet preserve thumbnail/intermediate/full-size access tiers.'
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine \
+            -e "UPDATE cpg_usergroups SET access_level = 3 WHERE group_id = 3;"
+
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine \
+            -e "UPDATE cpg_users SET user_group = 999 WHERE user_id = 1;"
+          assert_inspect_blocked missing-user-group 'User 1 references missing Coppermine group 999; effective permissions and policies cannot be migrated safely.'
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine \
+            -e "UPDATE cpg_users SET user_group = 3 WHERE user_id = 1;"
+
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine \
+            -e "INSERT INTO cpg_usergroups (group_id, group_name, group_quota, can_upload_pictures, can_create_albums, pub_upl_need_approval, priv_upl_need_approval, access_level) VALUES (4, 'Liberal Supplement', 0, 0, 0, 0, 0, 3), (5, 'Restrictive Primary', 1024, 1, 1, 1, 1, 2); UPDATE cpg_users SET user_group = 5, user_group_list = '4' WHERE user_id = 1;"
+          php bin/console mediarama:import:coppermine:inspect > /tmp/coppermine-effective-groups.txt
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine \
+            -e "UPDATE cpg_users SET user_group = 3, user_group_list = '' WHERE user_id = 1; DELETE FROM cpg_usergroups WHERE group_id IN (4, 5);"
+
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine \
+            -e "UPDATE cpg_pictures SET user1 = 'fixture custom value' WHERE pid = 100;"
+          assert_inspect_blocked media-custom-field 'Picture 100 has populated Coppermine custom media field(s): user1; no explicit Mediarama field mapping exists yet.'
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine \
+            -e "UPDATE cpg_pictures SET user1 = '' WHERE pid = 100;"
+
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine \
+            -e "UPDATE cpg_users SET user_profile1 = 'fixture profile value' WHERE user_id = 1;"
+          assert_inspect_blocked user-profile-field 'User 1 has populated Coppermine profile field(s): user_profile1; no explicit Mediarama profile-field mapping exists yet.'
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine \
+            -e "UPDATE cpg_users SET user_profile1 = '' WHERE user_id = 1;"
+
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine \
+            -e "UPDATE cpg_pictures SET url_prefix = 1 WHERE pid = 100;"
+          assert_inspect_blocked multi-server-source 'Picture 100 uses Coppermine url_prefix=1; the current importer supports only the primary local source root and must not guess a multi-server path.'
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine \
+            -e "UPDATE cpg_pictures SET url_prefix = 0 WHERE pid = 100;"
+
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine \
+            -e "UPDATE cpg_pictures SET galleryicon = 100 WHERE pid = 100;"
+          assert_inspect_blocked user-gallery-icon 'Picture 100 is marked as a Coppermine user-gallery icon; Mediarama has no equivalent user-gallery representation mapping yet.'
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine \
+            -e "UPDATE cpg_pictures SET galleryicon = 0 WHERE pid = 100;"
+
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine \
+            -e "UPDATE cpg_config SET value = '1' WHERE name = 'bridge_enable';"
+          assert_inspect_blocked bridge-enabled 'Coppermine bridging is enabled'
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine \
+            -e "UPDATE cpg_config SET value = '0' WHERE name = 'bridge_enable';"
+
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine \
+            -e "INSERT INTO cpg_banned (user_id, user_name, expiry, brute_force) VALUES (1, 'fixture-user', NULL, 0);"
+          assert_inspect_blocked ban-records 'Coppermine contains 1 ban record(s) (1 manual, 0 brute-force); Mediarama does not yet migrate ban/expiry semantics, so identity migration is blocked until these records are explicitly resolved.'
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine \
+            -e "DELETE FROM cpg_banned;"
+
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine \
+            -e "CREATE TABLE cpg_orphan_plugin_data (id INT NOT NULL PRIMARY KEY);"
+          assert_inspect_blocked unknown-prefixed-table 'Unknown Coppermine-prefixed table "cpg_orphan_plugin_data" is not part of the audited 1.6/1.7 core schema; it may contain plugin/custom data and must be audited and resolved before migration.'
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine \
+            -e "DROP TABLE cpg_orphan_plugin_data;"
+
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine \
+            -e "INSERT INTO cpg_plugins (name, enabled, path, priority) VALUES ('Fixture Plugin', 0, 'fixture_plugin', 1);"
+          assert_inspect_blocked installed-plugin 'Coppermine plugin "Fixture Plugin" at "fixture_plugin" is installed (disabled); plugin-owned files/tables/configuration must be audited or explicitly waived before core migration.'
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine \
+            -e "DELETE FROM cpg_plugins;"
+
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine \
+            -e "UPDATE cpg_config SET value = '0' WHERE name = 'allow_private_albums';"
+          assert_inspect_blocked private-albums-disabled 'Album 10 retains private access metadata (visibility=3, password-protected) while allow_private_albums=0 made Coppermine treat private-album enforcement as disabled; an explicit target visibility decision is required.'
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine \
+            -e "UPDATE cpg_config SET value = '1' WHERE name = 'allow_private_albums';"
+
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine \
+            -e "UPDATE cpg_albums SET moderator_group = 3 WHERE aid = 10;"
+          assert_inspect_blocked moderator-group 'Album 10 has legacy moderator_group=3'
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine \
+            -e "UPDATE cpg_albums SET moderator_group = 0 WHERE aid = 10;"
+
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine \
+            -e "UPDATE cpg_categories SET parent = 999 WHERE cid = 3;"
+          assert_inspect_blocked orphan-category-parent 'Category 3 references missing parent category 999; hierarchy cannot be migrated safely.'
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine \
+            -e "UPDATE cpg_categories SET parent = 2 WHERE cid = 3;"
+
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine \
+            -e "UPDATE cpg_categories SET parent = 3 WHERE cid = 2;"
+          assert_inspect_blocked category-cycle 'Category hierarchy contains a cycle: 2 -> 3 -> 2.'
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine \
+            -e "UPDATE cpg_categories SET parent = 0 WHERE cid = 2;"
+
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine \
+            -e "UPDATE cpg_albums SET thumb = 9999 WHERE aid = 10;"
+          assert_inspect_blocked missing-album-cover 'Album 10 explicit thumbnail references missing picture 9999.'
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine \
+            -e "UPDATE cpg_albums SET thumb = 100 WHERE aid = 10;"
+
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine \
+            -e "UPDATE cpg_categories SET thumb = 9999 WHERE cid = 2;"
+          assert_inspect_blocked missing-category-cover 'Category 2 explicit thumbnail references missing picture 9999.'
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine \
+            -e "UPDATE cpg_categories SET thumb = 101 WHERE cid = 2;"
+
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine \
+            -e "UPDATE cpg_pictures SET hits = -1 WHERE pid = 100;"
+          assert_inspect_blocked negative-picture-hits 'Picture 100 has invalid negative hits=-1; historical view_count cannot be migrated safely.'
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine \
+            -e "UPDATE cpg_pictures SET hits = 42 WHERE pid = 100;"
+
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine \
+            -e "UPDATE cpg_albums SET alb_hits = -1 WHERE aid = 10;"
+          assert_inspect_blocked negative-album-hits 'Album 10 has invalid negative alb_hits=-1; historical view_count cannot be migrated safely.'
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine \
+            -e "UPDATE cpg_albums SET alb_hits = 17 WHERE aid = 10;"
+
+          mv /tmp/coppermine-albums/userpics/sample.jpg /tmp/coppermine-albums/userpics/sample.jpg.missing
+          assert_inspect_blocked missing-original 'Picture 100 original file is missing or unreadable.'
+          mv /tmp/coppermine-albums/userpics/sample.jpg.missing /tmp/coppermine-albums/userpics/sample.jpg
+
+          cp /tmp/coppermine-albums/userpics/sample2.jpg /tmp/coppermine-albums/userpics/sample.foo
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine \
+            -e "INSERT INTO cpg_filetypes (extension, mime, content, player) VALUES ('foo', 'application/x-fixture', 'document', ''); UPDATE cpg_pictures SET filename = 'sample.foo' WHERE pid = 101;"
+          assert_inspect_clean custom-extension-safe-content
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine \
+            -e "UPDATE cpg_pictures SET filename = 'sample2.jpg' WHERE pid = 101; DELETE FROM cpg_filetypes WHERE extension = 'foo';"
+          rm /tmp/coppermine-albums/userpics/sample.foo
+
+          cp /tmp/coppermine-albums/userpics/sample.jpg /tmp/coppermine-albums/userpics/sample.jpg.good
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine \
+            -e "UPDATE cpg_filetypes SET mime = 'image/jpeg', content = 'image', player = 'HTMLV' WHERE extension = 'jpg';"
+          printf 'not a jpeg\n' > /tmp/coppermine-albums/userpics/sample.jpg
+          assert_inspect_blocked deceptive-extension 'Picture 100 source media is not importable: MIME type "text/plain" is not allowed for upload.'
+          mv /tmp/coppermine-albums/userpics/sample.jpg.good /tmp/coppermine-albums/userpics/sample.jpg
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine \
+            -e "UPDATE cpg_filetypes SET mime = 'image/jpg', content = 'image', player = '' WHERE extension = 'jpg';"
+
+          cp /tmp/coppermine-albums/userpics/sample.jpg /tmp/coppermine-albums/userpics/sample.jpg.good
+          head -c 100 /tmp/coppermine-albums/userpics/sample.jpg.good > /tmp/coppermine-albums/userpics/sample.jpg
+          php -r '$mime=(new finfo(FILEINFO_MIME_TYPE))->file($argv[1]); if ($mime !== "image/jpeg") { fwrite(STDERR, "Expected truncated fixture to remain image/jpeg, got ".$mime.PHP_EOL); exit(1); }' /tmp/coppermine-albums/userpics/sample.jpg
+          assert_inspect_blocked corrupt-image 'Picture 100 source media is not importable:'
+          mv /tmp/coppermine-albums/userpics/sample.jpg.good /tmp/coppermine-albums/userpics/sample.jpg
+
+      - name: Verify unusual Coppermine prefix and configuration
+        run: |
+          php -r '
+          $pdo = new PDO("pgsql:host=127.0.0.1;port=5432;dbname=postgres", "mediarama", "mediarama", [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+          $pdo->exec("DROP DATABASE IF EXISTS mediarama_prefix");
+          $pdo->exec("CREATE DATABASE mediarama_prefix");
+          '
+
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root             -e "DROP DATABASE IF EXISTS coppermine_prefix; CREATE DATABASE coppermine_prefix CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+          sed 's/cpg_/odd42__/g' tests/Fixtures/Coppermine/1.6-minimal.sql             | mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine_prefix
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine_prefix             -e "UPDATE odd42__config SET value = '%20' WHERE name = 'keyword_separator'; UPDATE odd42__config SET value = '10' WHERE name = 'rating_stars_amount'; UPDATE odd42__pictures SET keywords = 'summer vacation' WHERE pid = 100; UPDATE odd42__vote_stats SET rating = 8 WHERE sid = 300;"
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root             -e "GRANT SELECT ON coppermine_prefix.* TO 'readonly'@'%'; FLUSH PRIVILEGES;"
+
+          export DATABASE_URL="postgresql://mediarama:mediarama@127.0.0.1:5432/mediarama_prefix?serverVersion=18&charset=utf8"
+          export MEDIA_STORAGE_PATH="/tmp/mediarama-prefix-media"
+          export COPPERMINE_DATABASE_URL="mysql://readonly:readonly@127.0.0.1:3306/coppermine_prefix"
+          export COPPERMINE_SOURCE_ID="fixture-prefix"
+          export COPPERMINE_TABLE_PREFIX="odd42__"
+
+          php bin/console doctrine:migrations:migrate --no-interaction --allow-no-migration
+          php bin/console mediarama:import:coppermine:inspect | tee /tmp/coppermine-prefix-inspect.txt
+          grep -F "Detected: 1.6.x-compatible" /tmp/coppermine-prefix-inspect.txt
+          grep -F "pictures: 4" /tmp/coppermine-prefix-inspect.txt
+          grep -F "categorymap: 1" /tmp/coppermine-prefix-inspect.txt
+          grep -F "exif: 1" /tmp/coppermine-prefix-inspect.txt
+          grep -F "filetypes: 4" /tmp/coppermine-prefix-inspect.txt
+          grep -F "plugins: 0" /tmp/coppermine-prefix-inspect.txt
+          grep -F "banned: 0" /tmp/coppermine-prefix-inspect.txt
+
+          php bin/console mediarama:import:coppermine
+          php bin/console messenger:consume async --limit=4 --time-limit=30 --no-interaction -vv
+
+          php <<'PHP'
+          <?php
+          require 'vendor/autoload.php';
+
+          $dsn = new Doctrine\DBAL\Tools\DsnParser([
+              'postgresql' => 'pdo_pgsql',
+              'postgres' => 'pdo_pgsql',
+          ]);
+          $db = Doctrine\DBAL\DriverManager::getConnection($dsn->parse((string) getenv('DATABASE_URL')));
+          $checks = [
+              'completed prefixed import' => (int) $db->fetchOne("SELECT COUNT(*) FROM import_runs WHERE source_type = 'coppermine' AND source_key = 'coppermine:fixture-prefix' AND status = 'completed'") === 1,
+              'prefixed source mappings scoped' => (int) $db->fetchOne("SELECT COUNT(*) FROM import_mappings WHERE source_key = 'coppermine:fixture-prefix'") > 0,
+              'prefixed media' => (int) $db->fetchOne('SELECT COUNT(*) FROM media_assets') === 4,
+              'encoded space keyword separator' => (int) $db->fetchOne("SELECT COUNT(*) FROM tags WHERE slug IN ('summer', 'vacation')") === 2,
+              'custom keyword links' => (int) $db->fetchOne("SELECT COUNT(*) FROM media_tags mt JOIN media_assets m ON m.id = mt.media_id JOIN tags t ON t.id = mt.tag_id WHERE m.original_filename = 'sample.jpg' AND t.slug IN ('summer', 'vacation')") === 2,
+              'ten-star rating normalization' => (int) $db->fetchOne('SELECT COUNT(*) FROM ratings WHERE value = 4') === 1,
+              'prefixed async queue drained' => (int) $db->fetchOne("SELECT COUNT(*) FROM messenger_messages WHERE queue_name = 'async'") === 0,
+          ];
+
+          foreach ($checks as $name => $ok) {
+              echo ($ok ? 'OK ' : 'FAIL ').$name.PHP_EOL;
+              if (!$ok) {
+                  exit(1);
+              }
+          }
           PHP
 
       - name: Verify public Collection canonical/social/structured metadata
@@ -539,9 +961,70 @@ jobs:
       - name: Verify sitemap discovery and privacy boundary
         run: bash tests/Integration/Seo/http-sitemap-discovery.sh
 
-      - name: Verify Coppermine 1.7 capability detection
+      - name: Verify meaningful Coppermine 1.7 migration sample
         run: |
-          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine \
-            < tests/Fixtures/Coppermine/1.7-variation.sql
-          php bin/console mediarama:import:coppermine:inspect | tee /tmp/coppermine-inspect.txt
-          grep -F "Detected: 1.7.x-compatible" /tmp/coppermine-inspect.txt
+          php -r '
+          $pdo = new PDO("pgsql:host=127.0.0.1;port=5432;dbname=postgres", "mediarama", "mediarama", [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+          $pdo->exec("DROP DATABASE IF EXISTS mediarama17");
+          $pdo->exec("CREATE DATABASE mediarama17");
+          '
+
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root             -e "DROP DATABASE IF EXISTS coppermine17; CREATE DATABASE coppermine17 CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine17             < tests/Fixtures/Coppermine/1.6-minimal.sql
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root coppermine17             < tests/Fixtures/Coppermine/1.7-variation.sql
+          mariadb --host=127.0.0.1 --port=3306 --user=root --password=root             -e "GRANT SELECT ON coppermine17.* TO 'readonly'@'%'; FLUSH PRIVILEGES;"
+
+          mkdir -p /tmp/coppermine17-albums/userpics
+          cp /tmp/coppermine-albums/userpics/sample.jpg /tmp/coppermine17-albums/userpics/sample.jpg
+          cp /tmp/coppermine-albums/userpics/sample2.jpg /tmp/coppermine17-albums/userpics/sample2.jpg
+          cp /tmp/coppermine-albums/userpics/sample.mp3 /tmp/coppermine17-albums/userpics/sample.mp3
+          cp /tmp/coppermine-albums/userpics/sample.mp4 /tmp/coppermine17-albums/userpics/sample.mp4
+          convert -size 2x2 xc:white /tmp/coppermine17-albums/userpics/sample.webp
+
+          export DATABASE_URL="postgresql://mediarama:mediarama@127.0.0.1:5432/mediarama17?serverVersion=18&charset=utf8"
+          export MEDIA_STORAGE_PATH="/tmp/mediarama17-media"
+          export COPPERMINE_DATABASE_URL="mysql://readonly:readonly@127.0.0.1:3306/coppermine17"
+          export COPPERMINE_SOURCE_ID="fixture-17"
+          export COPPERMINE_TABLE_PREFIX="cpg_"
+          export COPPERMINE_ALBUMS_ROOT="/tmp/coppermine17-albums"
+
+          php bin/console doctrine:migrations:migrate --no-interaction --allow-no-migration
+          php bin/console mediarama:import:coppermine:inspect | tee /tmp/coppermine17-inspect.txt
+          grep -F "Detected: 1.7.x-compatible" /tmp/coppermine17-inspect.txt
+          grep -F "pictures: 5" /tmp/coppermine17-inspect.txt
+          grep -F "categorymap: 1" /tmp/coppermine17-inspect.txt
+          grep -F "exif: 1" /tmp/coppermine17-inspect.txt
+          grep -F "filetypes: 4" /tmp/coppermine17-inspect.txt
+
+          php bin/console mediarama:import:coppermine
+          php bin/console messenger:consume async --limit=5 --time-limit=30 --no-interaction -vv
+
+          php <<'PHP'
+          <?php
+          require 'vendor/autoload.php';
+
+          $dsn = new Doctrine\DBAL\Tools\DsnParser([
+              'postgresql' => 'pdo_pgsql',
+              'postgres' => 'pdo_pgsql',
+          ]);
+          $db = Doctrine\DBAL\DriverManager::getConnection($dsn->parse((string) getenv('DATABASE_URL')));
+          $checks = [
+              'completed 1.7 import' => (int) $db->fetchOne("SELECT COUNT(*) FROM import_runs WHERE source_type = 'coppermine' AND source_key = 'coppermine:fixture-17' AND source_version = '1.7.x-compatible' AND status = 'completed'") === 1,
+              '1.7 source mappings scoped' => (int) $db->fetchOne("SELECT COUNT(*) FROM import_mappings WHERE source_key = 'coppermine:fixture-17'") > 0,
+              'five migrated 1.7 media' => (int) $db->fetchOne('SELECT COUNT(*) FROM media_assets') === 5,
+              '1.7 WebP ready' => (int) $db->fetchOne("SELECT COUNT(*) FROM media_assets WHERE original_filename = 'sample.webp' AND mime_type = 'image/webp' AND media_type = 'image' AND processing_state = 'ready'") === 1,
+              '1.7 audio ready' => (int) $db->fetchOne("SELECT COUNT(*) FROM media_assets WHERE original_filename = 'sample.mp3' AND mime_type = 'audio/mpeg' AND media_type = 'audio' AND processing_state = 'ready'") === 1,
+              '1.7 video ready' => (int) $db->fetchOne("SELECT COUNT(*) FROM media_assets WHERE original_filename = 'sample.mp4' AND mime_type = 'video/mp4' AND media_type = 'video' AND processing_state = 'ready'") === 1,
+              '1.7 async queue drained' => (int) $db->fetchOne("SELECT COUNT(*) FROM messenger_messages WHERE queue_name = 'async'") === 0,
+          ];
+
+          foreach ($checks as $name => $ok) {
+              echo ($ok ? 'OK ' : 'FAIL ').$name.PHP_EOL;
+              if (!$ok) {
+                  exit(1);
+              }
+          }
+          PHP
+
+      - name: Verify large Coppermine batching and resume
+        run: bash tests/Integration/Coppermine/large-resume.sh

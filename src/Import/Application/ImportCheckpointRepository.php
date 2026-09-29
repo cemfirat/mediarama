@@ -6,9 +6,9 @@ namespace Mediarama\Import\Application;
 
 interface ImportCheckpointRepository
 {
-    public function get(string $source, string $stage): ?string;
+    public function get(string $sourceKey, string $stage): ?string;
 
-    public function save(string $source, string $stage, string $cursor): void;
+    public function save(string $sourceKey, string $stage, string $cursor): void;
 
-    public function clear(string $source, string $stage): void;
+    public function clear(string $sourceKey, string $stage): void;
 }

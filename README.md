@@ -264,3 +264,8 @@ The current working hypothesis is to build a new Mediarama core, use the activel
 The immediate task is a **deep technical comparison of Coppermine 1.6.x and 1.7.x**.
 
 The findings will determine Mediarama's architecture and will be converted into professional GitHub milestones, issues and architecture decisions before substantial implementation begins.
+
+
+## License
+
+Mediarama Gallery is licensed under **GPL-3.0-or-later**. See `LICENSE` for the complete GPLv3 text and [Licensing and provenance policy](docs/governance/licensing.md) for the project policy and Coppermine reuse rules.
