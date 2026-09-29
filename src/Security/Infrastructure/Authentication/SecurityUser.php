@@ -49,10 +49,6 @@ final class SecurityUser implements UserInterface, PasswordAuthenticatedUserInte
         $this->passwordHash = $newHashedPassword;
     }
 
-    public function eraseCredentials(): void
-    {
-    }
-
     public function isEqualTo(UserInterface $user): bool
     {
         if (!$user instanceof self) {

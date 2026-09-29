@@ -5,7 +5,7 @@
   "license": "GPL-3.0-or-later",
   "require": {
     "doctrine/doctrine-bundle": "^3.1",
-    "doctrine/doctrine-migrations-bundle": "^3.7",
+    "doctrine/doctrine-migrations-bundle": "^4.0",
     "doctrine/orm": "^3.5",
     "ext-ctype": "*",
     "ext-fileinfo": "*",
@@ -17,27 +17,27 @@
     "league/flysystem": "^3.30",
     "league/flysystem-aws-s3-v3": "^3.30",
     "php": "^8.5",
-    "symfony/asset": "^7.4",
-    "symfony/console": "^7.4",
-    "symfony/doctrine-messenger": "^7.4",
-    "symfony/dotenv": "^7.4",
+    "symfony/asset": "^8.1",
+    "symfony/console": "^8.1",
+    "symfony/doctrine-messenger": "^8.1",
+    "symfony/dotenv": "^8.1",
     "symfony/flex": "^2.8",
-    "symfony/framework-bundle": "^7.4",
-    "symfony/messenger": "^7.4",
-    "symfony/process": "^7.4",
-    "symfony/rate-limiter": "^7.4",
-    "symfony/runtime": "^7.4",
-    "symfony/security-bundle": "^7.4",
-    "symfony/twig-bundle": "^7.4",
-    "symfony/uid": "^7.4",
-    "symfony/validator": "^7.4",
-    "symfony/yaml": "^7.4"
+    "symfony/framework-bundle": "^8.1",
+    "symfony/messenger": "^8.1",
+    "symfony/process": "^8.1",
+    "symfony/rate-limiter": "^8.1",
+    "symfony/runtime": "^8.1",
+    "symfony/security-bundle": "^8.1",
+    "symfony/twig-bundle": "^8.1",
+    "symfony/uid": "^8.1",
+    "symfony/validator": "^8.1",
+    "symfony/yaml": "^8.1"
   },
   "require-dev": {
     "phpunit/phpunit": "^12.0",
-    "symfony/browser-kit": "^7.4",
-    "symfony/css-selector": "^7.4",
-    "symfony/phpunit-bridge": "^7.4"
+    "symfony/browser-kit": "^8.1",
+    "symfony/css-selector": "^8.1",
+    "symfony/phpunit-bridge": "^8.1"
   },
   "autoload": {
     "psr-4": {
@@ -58,7 +58,7 @@
   },
   "extra": {
     "symfony": {
-      "require": "7.4.*"
+      "require": "8.1.*"
     }
   }
 }

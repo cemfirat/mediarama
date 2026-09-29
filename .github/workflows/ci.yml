@@ -122,8 +122,31 @@ jobs:
       - name: Validate Composer metadata
         run: composer validate --strict
 
+      - name: Resolve Symfony 8.1 upgrade dependencies
+        if: github.ref == 'refs/heads/upgrade/symfony-8.1'
+        run: composer update "symfony/*" doctrine/doctrine-migrations-bundle --with-all-dependencies --no-interaction --prefer-dist --no-progress
+
       - name: Install dependencies
+        if: github.ref != 'refs/heads/upgrade/symfony-8.1'
         run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Capture Symfony 8.1 resolver patch
+        if: github.ref == 'refs/heads/upgrade/symfony-8.1'
+        run: |
+          git diff --binary > .ci-symfony-8.1-resolved.patch
+          git status --short
+
+      - name: Upload Symfony 8.1 resolved dependency state
+        if: github.ref == 'refs/heads/upgrade/symfony-8.1'
+        uses: actions/upload-artifact@v4
+        with:
+          name: symfony-8.1-resolved-state
+          if-no-files-found: error
+          retention-days: 3
+          path: |
+            composer.lock
+            symfony.lock
+            .ci-symfony-8.1-resolved.patch
 
       - name: Verify PHP exposes real environment variables
         run: |
@@ -173,6 +196,7 @@ jobs:
           test -s public/build/uikit-icons.min.js
 
       - name: Verify dependency install is reproducible
+        if: github.ref != 'refs/heads/upgrade/symfony-8.1'
         run: |
           STATUS="$(git status --porcelain -- composer.lock symfony.lock package-lock.json package.json .env config)"
           if [ -n "$STATUS" ]; then

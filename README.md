@@ -16,6 +16,18 @@ The project is **not intended to be a visual reskin of Coppermine**. The goal is
 
 The initial research phase is complete enough to establish the architecture baseline: Mediarama will be a clean implementation rather than a permanent Coppermine fork, PostgreSQL is the primary database, media storage is abstracted, originals are immutable by default, heavy media processing is asynchronous, and UIkit is the presentation foundation. Detailed decisions are recorded as ADRs.
 
+## Runtime baseline
+
+Current development baseline:
+
+- PHP **8.5+**
+- Symfony **8.1.x**
+- Doctrine ORM **3.x** / DBAL **4.x**
+- Doctrine Migrations Bundle **4.x**
+- PostgreSQL
+
+Framework/runtime upgrades are reviewed in small increments and require fully green branch CI before a pull request is opened. The production/LTS support policy for Mediarama 1.0 will be defined deliberately before release freeze.
+
 ## First-run setup
 
 A new installation starts in a persisted **pending** setup state and defaults to **Private workspace**. The first administrator is created deliberately through `/setup` or the server-side `mediarama:setup:bootstrap-admin` command.
@@ -253,7 +265,7 @@ Architecture:
 - [ADR-0003 — Storage and immutable originals](docs/adr/0003-storage-and-originals.md)
 - [ADR-0004 — Processing and moderation states](docs/adr/0004-processing-and-moderation.md)
 - [ADR-0005 — UIkit presentation boundary](docs/adr/0005-uikit-presentation.md)
-- [ADR-0006 — Symfony 7.4 LTS, PHP 8.5 and Doctrine](docs/adr/0006-symfony-php-doctrine.md)
+- [ADR-0006 — Symfony 8.1, PHP 8.5 and Doctrine](docs/adr/0006-symfony-php-doctrine.md)
 - [Initial PostgreSQL Schema](docs/architecture/database-schema.md)
 - [Media Storage Contract](docs/architecture/media-storage.md)
 

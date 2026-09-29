@@ -1,105 +1,77 @@
-# ADR-0006: Symfony 7.4 LTS, PHP 8.5 and Doctrine
+# ADR-0006: Symfony 8.1, PHP 8.5 and Doctrine
 
 - Status: Accepted
 - Date: 2026-09-25
+- Amended: 2026-09-29
 
 ## Context
 
-Mediarama needs a long-lived self-hostable foundation for a modular monolith with:
+Mediarama needs a long-lived self-hostable foundation for a modular monolith with server-rendered UIkit presentation, PostgreSQL, background workers, robust authorization, CLI/import tooling, storage abstraction and testable module boundaries.
 
-- server-rendered UIkit presentation;
-- PostgreSQL;
-- background workers;
-- robust authorization;
-- CLI/import tooling;
-- storage abstraction;
-- testable module boundaries.
+The initial architecture decision selected Symfony 7.4 LTS. During active pre-1.0 development, remaining on an older framework line would create avoidable version debt while the product architecture is still evolving.
 
-As of 2026-09-25:
-
-- PHP 8.5 is the current stable PHP line and receives active support through 2027 and security support through 2029.
-- Symfony 8.1 is the current feature release but reaches end of support in January 2027.
-- Symfony 7.4 is the current LTS release, with bug fixes through November 2028 and security fixes through November 2029.
-- Laravel 13 is current and supported, but follows a yearly major-release cadence with a shorter framework security window than Symfony 7.4 LTS.
+As of 2026-09-29, PHP 8.5 is Mediarama's runtime baseline and Symfony 8.1 is the current stable Symfony line. Symfony 8.1 requires PHP 8.4 or newer. Symfony 8.2 is scheduled for November 2026 and must be reviewed separately rather than assumed.
 
 ## Decision
 
-Mediarama will use:
+During active pre-1.0 development, Mediarama uses:
 
-- **PHP 8.5** as the initial production/runtime baseline;
-- **Symfony 7.4 LTS** as the application framework;
+- **PHP 8.5** as the production/runtime baseline;
+- **Symfony 8.1.x** as the application-framework baseline;
 - **Twig** for server-rendered presentation;
 - **Doctrine ORM 3.x / DBAL 4.x** for persistence;
-- **Doctrine Migrations** for schema versioning;
+- **Doctrine Migrations Bundle 4.x** for schema versioning;
 - **Symfony Messenger** for commands/events/background jobs;
-- **Doctrine/PostgreSQL Messenger transport initially**, avoiding a mandatory Redis service in the first deployment profile;
-- **Flysystem 3** behind Mediarama's own storage interface for local and S3-compatible adapters;
-- **Symfony Security** for authentication/authorization infrastructure.
+- **Doctrine/PostgreSQL Messenger transport initially**;
+- **Flysystem 3** behind Mediarama's own storage interface;
+- **Symfony Security** for authentication and authorization infrastructure.
 
-## Why Symfony 7.4 instead of Symfony 8.1
+Framework upgrades are not automatic. Each stable Symfony line is reviewed against direct and transitive dependency compatibility, deprecations, Flex recipes, Mediarama's code and the complete CI suite before adoption.
 
-Mediarama is starting a new long-lived product, but Symfony 8.1 is a short support release. Beginning on 7.4 LTS gives the foundation a substantially longer maintenance window while remaining compatible with PHP 8.5 and current Doctrine packages.
+Before Mediarama 1.0, the project will explicitly define the production support/LTS policy instead of inheriting one accidentally from the development phase.
 
-We can upgrade to a future Symfony LTS intentionally rather than forcing an early 8.1 → 8.2/8.x cadence during foundational development.
+## Why the active stable Symfony line
 
-## Why Symfony instead of Laravel
+Pre-1.0 is the least expensive phase in which to keep the framework current. Small, researched upgrades reduce the risk of a later multi-year major-version jump and expose deprecated framework coupling while the architecture is still easy to adjust.
 
-Laravel 13 is capable of implementing the product and has excellent first-party developer ergonomics.
-
-Symfony is selected because Mediarama benefits more from:
-
-- explicit component boundaries;
-- a strong DI/service model;
-- framework-neutral domain code;
-- mature Messenger abstraction with multiple transports;
-- long LTS window;
-- less pressure toward framework-specific Active Record-style application patterns;
-- good fit for a modular-monolith architecture where infrastructure adapters remain replaceable.
-
-This is not a claim that Laravel is technically incapable; it is a fit decision for this architecture.
+This does not mean upgrading on release day or ignoring support windows. Compatibility and fully green CI remain hard gates.
 
 ## Persistence
 
-Doctrine entities/repositories are infrastructure concerns. Domain behavior should not depend on Doctrine APIs where avoidable.
+Doctrine entities and repositories are infrastructure concerns. Domain behavior should not depend on Doctrine APIs where avoidable.
 
-Use Doctrine for:
-
-- mapping/persistence;
-- transactions;
-- DBAL access for specialized PostgreSQL queries;
-- migrations.
-
-Do not force every query through ORM entities. Read-heavy/search/report queries may use DBAL/query services when that is clearer and more efficient.
+Use Doctrine for mapping/persistence, transactions, specialized DBAL queries and migrations. Read-heavy/search/report queries may use DBAL/query services when that is clearer and more efficient.
 
 ## Queue
 
-Initial queue transport:
+Initial queue transport remains `doctrine://default`.
 
-`doctrine://default`
-
-Reasons:
-
-- no mandatory extra broker for the first self-hosted deployment;
-- PostgreSQL is already required;
-- Symfony Messenger's Doctrine transport supports PostgreSQL LISTEN/NOTIFY;
-- failed-message handling and retry tooling are built in.
-
-The transport is an infrastructure choice. Redis, AMQP or SQS may be introduced later without changing application messages/handlers.
+PostgreSQL is already required, so the first production profile does not need a mandatory extra broker. Redis, AMQP or SQS may be introduced later without changing application messages and handlers.
 
 ## Storage
 
-Flysystem is used inside infrastructure adapters, but Mediarama code depends on its own `MediaStorage` contract rather than directly spreading Flysystem calls through the application.
+Flysystem is used inside infrastructure adapters, but Mediarama code depends on its own `MediaStorage` contract rather than spreading Flysystem calls through the application.
 
 ## Frontend
 
 Twig renders UIkit-based templates. Focused JavaScript handles upload queues, lightbox/viewer interactions and other progressive enhancements.
 
-A large SPA framework is not part of the foundation.
+## Upgrade gate
+
+A Symfony baseline change may merge only when:
+
+1. direct and transitive constraints are understood before the version change;
+2. actionable deprecations and removed APIs are addressed;
+3. Flex and recipe changes are reviewed explicitly;
+4. the committed lock/configuration state is reproducible;
+5. the complete Mediarama branch CI is green before the PR is opened;
+6. the complete PR CI is green on the exact proposed head before merge.
 
 ## Consequences
 
-- PHP 8.5 becomes a minimum requirement.
-- Symfony 7.4 LTS becomes the supported framework line.
+- PHP 8.5 remains the minimum runtime requirement.
+- Symfony 8.1.x becomes the supported framework line for current development.
 - PostgreSQL remains the database requirement.
-- The first production profile can run with application + worker + PostgreSQL + storage, without Redis.
-- Framework upgrade work is planned around LTS lifecycle rather than feature-release churn.
+- Doctrine Migrations Bundle moves to 4.x because the 3.7 lock state does not allow Symfony 8 HttpKernel.
+- Framework/runtime maintenance becomes continuous explicit work.
+- Symfony 8.2 requires a separate compatibility review.
