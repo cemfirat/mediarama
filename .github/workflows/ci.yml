@@ -120,7 +120,12 @@ jobs:
           sudo apt-get install -y exiftool ffmpeg imagemagick webp icc-profiles-free mariadb-client libheif-examples libheif-plugin-aomdec libheif-plugin-aomenc libheif-plugin-libde265 libheif-plugin-x265
 
       - name: Validate Composer metadata
+        if: github.ref != 'refs/heads/upgrade/symfony-8.1'
         run: composer validate --strict
+
+      - name: Validate Composer metadata before Symfony 8.1 resolution
+        if: github.ref == 'refs/heads/upgrade/symfony-8.1'
+        run: composer validate --strict --no-check-lock
 
       - name: Resolve Symfony 8.1 upgrade dependencies
         if: github.ref == 'refs/heads/upgrade/symfony-8.1'
