@@ -99,3 +99,31 @@ To avoid hand-editing `composer.lock`:
 8. only then open a pull request.
 
 The resolver path is branch-local scaffolding and must not remain in the final merge.
+
+
+## Resolved dependency state
+
+The researched resolver run completed successfully against the real Symfony 8 dependency graph:
+
+- Symfony FrameworkBundle and core packages resolved to the current 8.1 patch line, including **8.1.8** where published;
+- Doctrine Migrations Bundle resolved to **4.0.1**;
+- Doctrine DBAL remained on **4.5.0**;
+- DoctrineBundle remained on **3.3.2**;
+- Doctrine ORM remained on **3.7.2**.
+
+Resolver CI run `36610770776` passed the complete Mediarama suite. Its post-Composer `git status` showed only `composer.lock` changed: Symfony Flex did not modify project configuration or recipes.
+
+The generated dependency state was then committed in `d073a7c699aa8c73f65f10221e71a3e06852ce0b`, all temporary resolver logic was removed, and normal reproducible CI run `36611385318` passed using plain `composer validate --strict` plus `composer install`.
+
+## Symfony 8.1 request-input behavior
+
+HttpFoundation 8.1 `InputBag::getInt()` and `getBoolean()` throw an `UnexpectedValueException` for malformed scalar values.
+
+Mediarama therefore keeps request parsing explicit:
+
+- authoritative search/form integers and booleans are normalized to Mediarama's `InvalidArgumentException` 400 paths;
+- non-authoritative UI status and pagination hints fall back to explicit defaults;
+- public and authenticated search HTTP coverage proves malformed pagination does not become a 500 response;
+- unit coverage pins strict and tolerant parsing semantics independently from future HttpFoundation changes.
+
+CI also compiles the debug container and requires Symfony's own no-deprecations result before the branch can be considered green.
