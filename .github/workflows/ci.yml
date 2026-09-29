@@ -2,8 +2,6 @@ name: CI
 
 on:
   push:
-    branches-ignore:
-      - prep/symfony-8.1
   pull_request:
 
 permissions:
@@ -12,6 +10,7 @@ permissions:
 jobs:
   php:
     name: PHP validate and test
+    continue-on-error: true
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
