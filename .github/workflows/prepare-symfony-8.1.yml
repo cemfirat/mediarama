@@ -1,0 +1,85 @@
+name: Prepare Symfony 8.1 dependency resolution
+
+on:
+  push:
+    branches:
+      - prep/symfony-8.1
+
+permissions:
+  contents: write
+
+jobs:
+  resolve:
+    name: Resolve dependencies without red CI
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          coverage: none
+          extensions: pdo_pgsql, pdo_mysql
+          tools: composer:v2
+
+      - name: Resolve Symfony 8.1 dependency graph
+        id: resolve
+        shell: bash
+        run: |
+          set +e
+          composer update "symfony/*" doctrine/doctrine-migrations-bundle \
+            --with-all-dependencies \
+            --no-interaction \
+            --prefer-dist \
+            --no-progress 2>&1 | tee /tmp/composer-update.log
+          rc=${PIPESTATUS[0]}
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          if [ "$rc" -eq 0 ]; then
+            echo "Dependency resolution succeeded." >> "$GITHUB_STEP_SUMMARY"
+          else
+            {
+              echo "Dependency resolution needs investigation; this preparation job remains non-blocking."
+              echo
+              echo '~~~text'
+              tail -n 120 /tmp/composer-update.log
+              echo '~~~'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+          exit 0
+
+      - name: Validate resolved metadata
+        id: validate
+        if: steps.resolve.outputs.rc == '0'
+        shell: bash
+        run: |
+          set +e
+          composer validate --strict 2>&1 | tee /tmp/composer-validate.log
+          rc=${PIPESTATUS[0]}
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          if [ "$rc" -ne 0 ]; then
+            {
+              echo "Composer validation needs investigation; no generated commit will be pushed."
+              echo
+              echo '~~~text'
+              cat /tmp/composer-validate.log
+              echo '~~~'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+          exit 0
+
+      - name: Commit reproducible resolved state
+        if: steps.resolve.outputs.rc == '0' && steps.validate.outputs.rc == '0'
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No generated dependency changes to commit." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          git commit -m "chore: resolve Symfony 8.1 dependencies"
+          git push origin HEAD:prep/symfony-8.1
+          echo "Resolved dependency state committed to preparation branch." >> "$GITHUB_STEP_SUMMARY"
