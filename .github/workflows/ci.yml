@@ -245,6 +245,9 @@ jobs:
       - name: Verify authenticated library media search
         run: php tests/Integration/Media/library-search.php
 
+      - name: Verify owner-only metadata workspace
+        run: bash tests/Integration/Metadata/http-metadata-workspace.sh
+
       - name: Verify organization proposal foundation
         run: php tests/Integration/Organization/organization-proposals.php
 

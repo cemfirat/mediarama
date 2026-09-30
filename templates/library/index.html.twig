@@ -126,7 +126,7 @@
     {% else %}
         <div class="uk-overflow-auto">
             <table class="uk-table uk-table-divider uk-table-small uk-table-middle">
-                <thead><tr><th>Analyze</th><th>Title</th><th>File</th><th>Captured</th><th>Creator</th><th>Camera</th><th>Location</th></tr></thead>
+                <thead><tr><th>Analyze</th><th>Title</th><th>File</th><th>Captured</th><th>Creator</th><th>Camera</th><th>Location</th><th>Metadata</th></tr></thead>
                 <tbody>
                 {% for item in items %}
                     <tr>
@@ -144,6 +144,13 @@
                         <td>{{ item.creator ?: '—' }}</td>
                         <td>{{ item.cameraModel ?: item.cameraMake ?: '—' }}</td>
                         <td>{{ item.locationName ?: '—' }}</td>
+                        <td>
+                            {% if item.metadataWorkspaceAvailable %}
+                                <a class="uk-button uk-button-text" href="{{ path('library_media_metadata_workspace', {id: item.id.toRfc4122()}) }}">Inspect</a>
+                            {% else %}
+                                <span class="uk-text-muted">Owner only</span>
+                            {% endif %}
+                        </td>
                     </tr>
                 {% endfor %}
                 </tbody>

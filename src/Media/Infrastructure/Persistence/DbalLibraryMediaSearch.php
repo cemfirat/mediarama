@@ -123,6 +123,7 @@ final readonly class DbalLibraryMediaSearch implements LibraryMediaSearch
             CollectionAccessSql::authenticatedVisibleCollectionsCte().'
 SELECT
     m.id,
+    CASE WHEN m.owner_id = :user THEN 1 ELSE 0 END AS metadata_workspace_available,
     m.original_filename,
     m.mime_type,
     m.title,
@@ -155,6 +156,7 @@ LIMIT :limit OFFSET :offset',
             $row['lens'] !== null ? (string) $row['lens'] : null,
             $row['iso'] !== null ? (int) $row['iso'] : null,
             $row['location_name'] !== null ? (string) $row['location_name'] : null,
+            (int) $row['metadata_workspace_available'] === 1,
         ), $rows);
     }
 }
