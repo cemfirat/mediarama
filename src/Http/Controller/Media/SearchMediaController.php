@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace Mediarama\Http\Controller\Media;
 
+use Mediarama\Http\Support\InputBagValue;
 use Mediarama\Media\Application\PublicMediaSearch;
 use Mediarama\Media\Application\PublicMediaSearchCriteria;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 
 final readonly class SearchMediaController
@@ -21,11 +23,21 @@ final readonly class SearchMediaController
     {
         $q = $request->query;
 
-        $results = $this->search->search(new PublicMediaSearchCriteria(
-            text: $q->getString('q') ?: null,
-            limit: min(max($q->getInt('limit', 50), 1), 200),
-            offset: max($q->getInt('offset', 0), 0),
-        ));
+        try {
+            $criteria = new PublicMediaSearchCriteria(
+                text: $q->getString('q') ?: null,
+                limit: min(max(InputBagValue::integer($q, 'limit', 50), 1), 200),
+                offset: max(InputBagValue::integer($q, 'offset', 0), 0),
+            );
+        } catch (\InvalidArgumentException) {
+            return new JsonResponse(
+                ['error' => 'invalid_search_query'],
+                Response::HTTP_BAD_REQUEST,
+                ['X-Robots-Tag' => 'noindex, nofollow'],
+            );
+        }
+
+        $results = $this->search->search($criteria);
 
         return new JsonResponse([
             'items' => array_map(static fn ($item): array => [

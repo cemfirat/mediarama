@@ -28,8 +28,8 @@ final class LibraryMediaSearchCriteriaFactory
             capturedFrom: $this->date($input, 'captured_from'),
             capturedUntil: $this->date($input, 'captured_until'),
             hasLocation: $this->boolean($input, 'has_location'),
-            limit: min(max($input->getInt('limit', 50), 1), 200),
-            offset: max($input->getInt('offset', 0), 0),
+            limit: min(max(InputBagValue::integer($input, 'limit', 50), 1), 200),
+            offset: max(InputBagValue::integer($input, 'offset', 0), 0),
         );
     }
 

@@ -159,6 +159,17 @@ expect_status 200 "$PUBLIC_COLLECTIONS_STATUS" "public collections remain anonym
 PUBLIC_SEARCH_STATUS="$(curl --silent --show-error --output /tmp/auth-public-search.json --write-out '%{http_code}' "$BASE_URL/api/media?q=auth-ci")"
 expect_status 200 "$PUBLIC_SEARCH_STATUS" "public media search remains anonymously readable in prod"
 
+INVALID_PUBLIC_SEARCH_STATUS="$(curl --silent --show-error --output /tmp/auth-public-search-invalid.json --write-out '%{http_code}' "$BASE_URL/api/media?limit=not-a-number")"
+expect_status 400 "$INVALID_PUBLIC_SEARCH_STATUS" "invalid public search pagination returns stable client error"
+php -r '
+  $decoded = json_decode((string) file_get_contents("/tmp/auth-public-search-invalid.json"), true, flags: JSON_THROW_ON_ERROR);
+  if ($decoded !== ["error" => "invalid_search_query"]) {
+      fwrite(STDERR, "Unexpected invalid public-search payload: ".json_encode($decoded).PHP_EOL);
+      exit(1);
+  }
+  echo "OK invalid public search pagination is a stable client error".PHP_EOL;
+'
+
 ANON_STATUS="$(upload_status)"
 expect_status 401 "$ANON_STATUS" "anonymous upload create is rejected"
 
@@ -295,6 +306,12 @@ php -r '
   }
   echo "OK invalid library search payload is stable".PHP_EOL;
 '
+
+INVALID_LIBRARY_PAGINATION_STATUS="$(curl --silent --show-error     --cookie "$ACTIVE_JAR"     --cookie-jar "$ACTIVE_JAR"     --output /tmp/auth-library-pagination-invalid.json     --write-out '%{http_code}'     "$BASE_URL/api/library/media?limit=not-a-number")"
+expect_status 400 "$INVALID_LIBRARY_PAGINATION_STATUS" "invalid library pagination returns stable client error"
+
+INVALID_LIBRARY_PAGE_STATUS="$(curl --silent --show-error     --cookie "$ACTIVE_JAR"     --cookie-jar "$ACTIVE_JAR"     --output /tmp/auth-library-page-invalid.html     --write-out '%{http_code}'     "$BASE_URL/library?limit=not-a-number")"
+expect_status 400 "$INVALID_LIBRARY_PAGE_STATUS" "invalid library page pagination renders a client error instead of a server error"
 
 UPLOAD_CSRF="$(api_csrf_token "$ACTIVE_JAR" /tmp/auth-upload-csrf.json)"
 expect_status 403 "$(upload_status "$ACTIVE_JAR")" "authenticated upload without CSRF token is rejected"

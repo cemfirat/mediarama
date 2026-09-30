@@ -195,6 +195,13 @@ jobs:
       - name: Validate Symfony container
         run: php bin/console lint:container
 
+      - name: Verify Symfony container is deprecation-free
+        run: |
+          rm -rf var/cache/test
+          DEPRECATIONS="$(APP_ENV=test APP_DEBUG=1 php bin/console debug:container --deprecations --no-interaction 2>&1)"
+          printf '%s\n' "$DEPRECATIONS"
+          printf '%s\n' "$DEPRECATIONS" | grep -F "There are no deprecations in the logs!"
+
       - name: Validate routes
         run: php bin/console debug:router --show-controllers
 

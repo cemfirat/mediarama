@@ -12,6 +12,7 @@ use Mediarama\Collection\Application\SmartCollectionPublication;
 use Mediarama\Collection\Application\SmartCollectionResolver;
 use Mediarama\Collection\Application\SmartCollectionRuleFormFactory;
 use Mediarama\Collection\Application\SmartCollectionUnavailableException;
+use Mediarama\Http\Support\InputBagValue;
 use Mediarama\Http\Support\LibraryMediaSearchCriteriaFactory;
 use Mediarama\Platform\Domain\SearchIndexPolicy;
 use Mediarama\Security\Application\CurrentUser;
@@ -49,8 +50,8 @@ final class SmartCollectionController extends AbstractController
             '@Mediarama/library/smart_collections/index.html.twig',
             [
                 'collections' => $this->management->owned($user->id),
-                'created' => $request->query->getBoolean('created'),
-                'deleted' => $request->query->getBoolean('deleted'),
+                'created' => InputBagValue::booleanOrDefault($request->query, 'created'),
+                'deleted' => InputBagValue::booleanOrDefault($request->query, 'deleted'),
             ],
         ));
     }
@@ -365,7 +366,7 @@ final class SmartCollectionController extends AbstractController
         ?array $overrideRows = null,
         int $status = Response::HTTP_OK,
     ): Response {
-        $page = max($request->query->getInt('page', 1), 1);
+        $page = max(InputBagValue::integerOrDefault($request->query, 'page', 1), 1);
         $offset = ($page - 1) * self::PAGE_SIZE;
         $count = $this->resolver->count($actorId, $collection->id);
         $items = $this->resolver->resolve(
@@ -389,10 +390,10 @@ final class SmartCollectionController extends AbstractController
                 'page' => $page,
                 'page_size' => self::PAGE_SIZE,
                 'error' => $error,
-                'saved' => $request->query->getBoolean('saved'),
-                'created' => $request->query->getBoolean('created'),
-                'published' => $request->query->getBoolean('published'),
-                'unpublished' => $request->query->getBoolean('unpublished'),
+                'saved' => InputBagValue::booleanOrDefault($request->query, 'saved'),
+                'created' => InputBagValue::booleanOrDefault($request->query, 'created'),
+                'published' => InputBagValue::booleanOrDefault($request->query, 'published'),
+                'unpublished' => InputBagValue::booleanOrDefault($request->query, 'unpublished'),
                 'edit_csrf_token' => $this->csrf
                     ->getToken('smart_collection_edit_'.$collection->id->toRfc4122())
                     ->getValue(),

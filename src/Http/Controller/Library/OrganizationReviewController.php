@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Mediarama\Http\Controller\Library;
 
+use Mediarama\Http\Support\InputBagValue;
 use Mediarama\Organization\Application\DeterministicOrganizationAnalyzer;
 use Mediarama\Organization\Application\OrganizationAiPreflightStore;
 use Mediarama\Organization\Application\OrganizationMetadataSnapshotQuery;
@@ -124,18 +125,18 @@ final class OrganizationReviewController extends AbstractController
                 'proposals' => $proposals,
                 'previews' => $previews,
                 'preflight' => $this->preflights->forRun($user->id, $runId),
-                'created' => $request->query->getBoolean('created'),
-                'edited' => $request->query->getBoolean('edited'),
-                'applied' => $request->query->getBoolean('applied'),
-                'already_applied' => $request->query->getBoolean('already'),
-                'rejected' => $request->query->getBoolean('rejected'),
-                'stale' => $request->query->getBoolean('stale'),
-                'edit_error' => $request->query->getBoolean('edit_error'),
-                'apply_error' => $request->query->getBoolean('apply_error'),
-                'bulk_applied' => $request->query->getInt('bulk_applied'),
-                'bulk_rejected' => $request->query->getInt('bulk_rejected'),
-                'bulk_invalidated' => $request->query->getInt('bulk_invalidated'),
-                'bulk_failed' => $request->query->getInt('bulk_failed'),
+                'created' => InputBagValue::booleanOrDefault($request->query, 'created'),
+                'edited' => InputBagValue::booleanOrDefault($request->query, 'edited'),
+                'applied' => InputBagValue::booleanOrDefault($request->query, 'applied'),
+                'already_applied' => InputBagValue::booleanOrDefault($request->query, 'already'),
+                'rejected' => InputBagValue::booleanOrDefault($request->query, 'rejected'),
+                'stale' => InputBagValue::booleanOrDefault($request->query, 'stale'),
+                'edit_error' => InputBagValue::booleanOrDefault($request->query, 'edit_error'),
+                'apply_error' => InputBagValue::booleanOrDefault($request->query, 'apply_error'),
+                'bulk_applied' => InputBagValue::integerOrDefault($request->query, 'bulk_applied'),
+                'bulk_rejected' => InputBagValue::integerOrDefault($request->query, 'bulk_rejected'),
+                'bulk_invalidated' => InputBagValue::integerOrDefault($request->query, 'bulk_invalidated'),
+                'bulk_failed' => InputBagValue::integerOrDefault($request->query, 'bulk_failed'),
                 'bulk_error' => $request->query->getString('bulk_error'),
             ],
         ));

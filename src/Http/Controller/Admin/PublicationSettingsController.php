@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Mediarama\Http\Controller\Admin;
 
+use Mediarama\Http\Support\InputBagValue;
 use Mediarama\Platform\Application\PlatformSettingsRepository;
 use Mediarama\Platform\Domain\DeploymentProfile;
 use Mediarama\Platform\Domain\PlatformSettings;
@@ -85,9 +86,20 @@ final class PublicationSettingsController extends AbstractController
                     );
                 }
 
+                try {
+                    $publicPublishingEnabled = InputBagValue::boolean(
+                        $request->request,
+                        'public_publishing_enabled',
+                    );
+                } catch (\InvalidArgumentException) {
+                    return $this->invalidRequest(
+                        'Public publishing setting must be a boolean.',
+                    );
+                }
+
                 $this->settings->save(new PlatformSettings(
                     $current->deploymentProfile,
-                    $request->request->getBoolean('public_publishing_enabled'),
+                    $publicPublishingEnabled,
                     $indexDefault,
                 ));
             } else {
@@ -100,7 +112,7 @@ final class PublicationSettingsController extends AbstractController
         }
 
         return $this->renderSettings(
-            saved: $request->query->getBoolean('saved'),
+            saved: InputBagValue::booleanOrDefault($request->query, 'saved'),
         );
     }
 
