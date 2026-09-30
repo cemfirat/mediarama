@@ -26,7 +26,7 @@ Current development baseline:
 - Doctrine Migrations Bundle **4.x**
 - PostgreSQL
 
-Framework/runtime upgrades are reviewed in small increments and require fully green branch CI before a pull request is opened. The production/LTS support policy for Mediarama 1.0 will be defined deliberately before release freeze.
+Framework/runtime upgrades are reviewed in small increments and require fully green branch CI before a pull request is opened. See [Runtime and dependency maintenance](docs/architecture/runtime-dependency-maintenance.md) for the authoritative maintenance policy, tested runtime baseline and dependency-update workflow. The production/LTS support policy for Mediarama 1.0 will be defined deliberately before release freeze.
 
 ## First-run setup
 
@@ -268,6 +268,7 @@ Architecture:
 - [ADR-0006 — Symfony 8.1, PHP 8.5 and Doctrine](docs/adr/0006-symfony-php-doctrine.md)
 - [Initial PostgreSQL Schema](docs/architecture/database-schema.md)
 - [Media Storage Contract](docs/architecture/media-storage.md)
+- [Runtime and dependency maintenance](docs/architecture/runtime-dependency-maintenance.md)
 
 The current working hypothesis is to build a new Mediarama core, use the actively maintained Coppermine 1.6.x line as the primary functional and migration reference, and use selected 1.7.x Theme2/responsive work as additional UX research. This remains subject to the remaining discovery work and formal architecture decisions.
 

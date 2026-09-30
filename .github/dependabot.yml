@@ -1,0 +1,59 @@
+version: 2
+
+updates:
+  - package-ecosystem: "composer"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:30"
+      timezone: "Europe/Vienna"
+    open-pull-requests-limit: 6
+    groups:
+      symfony:
+        patterns:
+          - "symfony/*"
+        update-types:
+          - "minor"
+          - "patch"
+      doctrine:
+        patterns:
+          - "doctrine/*"
+        update-types:
+          - "minor"
+          - "patch"
+      flysystem:
+        patterns:
+          - "league/flysystem*"
+        update-types:
+          - "minor"
+          - "patch"
+      phpunit:
+        patterns:
+          - "phpunit/*"
+        update-types:
+          - "minor"
+          - "patch"
+
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:45"
+      timezone: "Europe/Vienna"
+    open-pull-requests-limit: 4
+    groups:
+      frontend-runtime:
+        patterns:
+          - "uikit"
+        update-types:
+          - "minor"
+          - "patch"
+      frontend-tooling:
+        patterns:
+          - "less"
+          - "less-plugin-*"
+        update-types:
+          - "minor"
+          - "patch"
