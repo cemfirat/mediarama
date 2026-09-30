@@ -190,6 +190,7 @@ jobs:
           require "vendor/autoload.php";
           foreach (glob("config/*.yaml") as $file) { Symfony\Component\Yaml\Yaml::parseFile($file, Symfony\Component\Yaml\Yaml::PARSE_CUSTOM_TAGS); echo "OK $file\n"; }
           foreach (glob("config/packages/*.yaml") as $file) { Symfony\Component\Yaml\Yaml::parseFile($file, Symfony\Component\Yaml\Yaml::PARSE_CUSTOM_TAGS); echo "OK $file\n"; }
+          if (is_file(".github/dependabot.yml")) { Symfony\Component\Yaml\Yaml::parseFile(".github/dependabot.yml"); echo "OK .github/dependabot.yml\n"; }
           '
 
       - name: Validate Symfony container
