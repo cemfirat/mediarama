@@ -7,6 +7,7 @@ set -euo pipefail
 BASE_URL="http://127.0.0.1:8097"
 OWNER_ID="99999999-9999-4999-8999-999999999981"
 OTHER_ID="99999999-9999-4999-8999-999999999982"
+PASSWORD="mediarama-organization-ai-browser-ci"
 MEDIA_ONE="99999999-9999-4999-8999-999999999991"
 MEDIA_TWO="99999999-9999-4999-8999-999999999992"
 MEDIA_OTHER="99999999-9999-4999-8999-999999999993"
@@ -87,6 +88,7 @@ $db = DriverManager::getConnection(
 $owner = Uuid::fromString('99999999-9999-4999-8999-999999999981');
 $other = Uuid::fromString('99999999-9999-4999-8999-999999999982');
 $now = '2026-09-28T17:00:00+00:00';
+$password = password_hash('mediarama-organization-ai-browser-ci', PASSWORD_DEFAULT);
 
 foreach ([
     [$owner, 'ai-browser-owner'],
@@ -96,7 +98,7 @@ foreach ([
         'id' => $id->toRfc4122(),
         'username' => $username,
         'email' => null,
-        'password_hash' => null,
+        'password_hash' => $password,
         'display_name' => $username,
         'status' => 'active',
         'locale' => 'en',
@@ -185,7 +187,7 @@ APP_ENV=test APP_DEBUG=0 php -S 127.0.0.1:8097 -t public public/index.php >/tmp/
 SERVER_PID=$!
 
 for _ in $(seq 1 50); do
-    if curl --silent --show-error --header "X-Mediarama-User: $OWNER_ID" "$BASE_URL/library" >/dev/null 2>&1; then
+    if curl --silent --show-error "$BASE_URL/login" >/dev/null 2>&1; then
         break
     fi
     sleep 0.2
@@ -203,6 +205,35 @@ expect_status() {
     fi
 
     echo "OK $label"
+}
+
+login() {
+    local username="$1"
+    local jar="$2"
+    local page="/tmp/ai-browser-login-$username.html"
+
+    rm -f "$jar"
+    curl --fail --silent --show-error --cookie "$jar" --cookie-jar "$jar" "$BASE_URL/login" -o "$page"
+
+    local token
+    token="$(php -r '
+        $html = (string) file_get_contents($argv[1]);
+        if (!preg_match("/name=\"_csrf_token\" value=\"([^\"]+)\"/", $html, $match)) {
+            fwrite(STDERR, "Login CSRF token missing.\n");
+            exit(1);
+        }
+        echo html_entity_decode($match[1], ENT_QUOTES | ENT_HTML5);
+    ' "$page")"
+
+    curl --silent --show-error \
+        --cookie "$jar" \
+        --cookie-jar "$jar" \
+        --output /tmp/ai-browser-login-post.html \
+        --write-out '%{http_code}' \
+        --data-urlencode "_username=$username" \
+        --data-urlencode "_password=$PASSWORD" \
+        --data-urlencode "_csrf_token=$token" \
+        "$BASE_URL/login"
 }
 
 form_token() {
@@ -224,8 +255,9 @@ form_token() {
     ' "$page" "$action_fragment"
 }
 
+expect_status 302 "$(login ai-browser-owner "$COOKIE_JAR")" "AI browser owner can authenticate"
+
 curl --fail --silent --show-error \
-    --header "X-Mediarama-User: $OWNER_ID" \
     --cookie "$COOKIE_JAR" --cookie-jar "$COOKIE_JAR" \
     "$BASE_URL/library" \
     -o /tmp/ai-browser-library.html
@@ -234,7 +266,6 @@ grep -F 'AI-assisted analysis' /tmp/ai-browser-library.html >/dev/null
 ANALYZE_TOKEN="$(form_token /tmp/ai-browser-library.html '/library/organization/analyze')"
 
 NO_CSRF_STATUS="$(curl --silent --show-error \
-    --header "X-Mediarama-User: $OWNER_ID" \
     --cookie "$COOKIE_JAR" --cookie-jar "$COOKIE_JAR" \
     --output /tmp/ai-browser-no-csrf.html \
     --write-out '%{http_code}' \
@@ -244,7 +275,6 @@ NO_CSRF_STATUS="$(curl --silent --show-error \
 expect_status 403 "$NO_CSRF_STATUS" "AI setup rejects missing CSRF"
 
 FOREIGN_SCOPE_STATUS="$(curl --silent --show-error \
-    --header "X-Mediarama-User: $OWNER_ID" \
     --cookie "$COOKIE_JAR" --cookie-jar "$COOKIE_JAR" \
     --output /tmp/ai-browser-foreign.html \
     --write-out '%{http_code}' \
@@ -256,7 +286,6 @@ FOREIGN_SCOPE_STATUS="$(curl --silent --show-error \
 expect_status 302 "$FOREIGN_SCOPE_STATUS" "AI setup fails closed for inaccessible selected media"
 
 SETUP_STATUS="$(curl --silent --show-error \
-    --header "X-Mediarama-User: $OWNER_ID" \
     --cookie "$COOKIE_JAR" --cookie-jar "$COOKIE_JAR" \
     --dump-header /tmp/ai-browser-setup.headers \
     --output /tmp/ai-browser-setup.html \
@@ -282,7 +311,6 @@ test ! -e "$CALL_LOG"
 PREPARE_TOKEN="$(form_token /tmp/ai-browser-setup.html '/library/organization/ai/preflight')"
 
 INVALID_VISUAL_STATUS="$(curl --silent --show-error \
-    --header "X-Mediarama-User: $OWNER_ID" \
     --cookie "$COOKIE_JAR" --cookie-jar "$COOKIE_JAR" \
     --output /tmp/ai-browser-invalid-visual.html \
     --write-out '%{http_code}' \
@@ -297,7 +325,6 @@ expect_status 400 "$INVALID_VISUAL_STATUS" "image understanding fails closed wit
 test ! -e "$CALL_LOG"
 
 PREPARE_STATUS="$(curl --silent --show-error \
-    --header "X-Mediarama-User: $OWNER_ID" \
     --cookie "$COOKIE_JAR" --cookie-jar "$COOKIE_JAR" \
     --dump-header /tmp/ai-browser-prepare.headers \
     --output /tmp/ai-browser-prepare.html \
@@ -322,7 +349,6 @@ PREFLIGHT_ID="${PREFLIGHT_LOCATION##*/}"
 test ! -e "$CALL_LOG"
 
 curl --fail --silent --show-error \
-    --header "X-Mediarama-User: $OWNER_ID" \
     --cookie "$COOKIE_JAR" --cookie-jar "$COOKIE_JAR" \
     --dump-header /tmp/ai-browser-preflight.headers \
     "$BASE_URL$PREFLIGHT_LOCATION" \
@@ -345,7 +371,6 @@ grep -F '>Excluded<' /tmp/ai-browser-preflight.html >/dev/null
 test ! -e "$CALL_LOG"
 
 NO_APPROVE_CSRF="$(curl --silent --show-error \
-    --header "X-Mediarama-User: $OWNER_ID" \
     --cookie "$COOKIE_JAR" --cookie-jar "$COOKIE_JAR" \
     --output /tmp/ai-browser-no-approve-csrf.html \
     --write-out '%{http_code}' \
@@ -356,7 +381,6 @@ test ! -e "$CALL_LOG"
 
 APPROVE_TOKEN="$(form_token /tmp/ai-browser-preflight.html "/library/organization/ai/preflights/$PREFLIGHT_ID/approve")"
 APPROVE_STATUS="$(curl --silent --show-error \
-    --header "X-Mediarama-User: $OWNER_ID" \
     --cookie "$COOKIE_JAR" --cookie-jar "$COOKIE_JAR" \
     --output /tmp/ai-browser-approve.html \
     --write-out '%{http_code}' \
@@ -366,7 +390,6 @@ expect_status 302 "$APPROVE_STATUS" "user can deliberately approve exact preflig
 test ! -e "$CALL_LOG"
 
 curl --fail --silent --show-error \
-    --header "X-Mediarama-User: $OWNER_ID" \
     --cookie "$COOKIE_JAR" --cookie-jar "$COOKIE_JAR" \
     "$BASE_URL/library/organization/ai/preflights/$PREFLIGHT_ID?approved=1" \
     -o /tmp/ai-browser-approved.html
@@ -375,7 +398,6 @@ test ! -e "$CALL_LOG"
 
 EXECUTE_TOKEN="$(form_token /tmp/ai-browser-approved.html "/library/organization/ai/preflights/$PREFLIGHT_ID/execute")"
 EXECUTE_STATUS="$(curl --silent --show-error \
-    --header "X-Mediarama-User: $OWNER_ID" \
     --cookie "$COOKIE_JAR" --cookie-jar "$COOKIE_JAR" \
     --dump-header /tmp/ai-browser-execute.headers \
     --output /tmp/ai-browser-execute.html \
@@ -398,7 +420,6 @@ if [[ "$RUN_LOCATION" != /library/organization/runs/* ]]; then
 fi
 
 curl --fail --silent --show-error \
-    --header "X-Mediarama-User: $OWNER_ID" \
     --cookie "$COOKIE_JAR" --cookie-jar "$COOKIE_JAR" \
     "$BASE_URL$RUN_LOCATION" \
     -o /tmp/ai-browser-run.html
@@ -441,7 +462,6 @@ PHP
 # Build and approve a second identical preflight, then invalidate one approved
 # presentation file before execution. The provider must not be called again.
 SECOND_PREPARE_STATUS="$(curl --silent --show-error \
-    --header "X-Mediarama-User: $OWNER_ID" \
     --cookie "$COOKIE_JAR" --cookie-jar "$COOKIE_JAR" \
     --dump-header /tmp/ai-browser-second-prepare.headers \
     --output /tmp/ai-browser-second-prepare.html \
@@ -459,13 +479,11 @@ SECOND_LOCATION="$(awk 'BEGIN {IGNORECASE=1} /^location:/ {gsub("\r", ""); print
 SECOND_ID="${SECOND_LOCATION##*/}"
 
 curl --fail --silent --show-error \
-    --header "X-Mediarama-User: $OWNER_ID" \
     --cookie "$COOKIE_JAR" --cookie-jar "$COOKIE_JAR" \
     "$BASE_URL$SECOND_LOCATION" \
     -o /tmp/ai-browser-second.html
 SECOND_APPROVE="$(form_token /tmp/ai-browser-second.html "/library/organization/ai/preflights/$SECOND_ID/approve")"
 expect_status 302 "$(curl --silent --show-error \
-    --header "X-Mediarama-User: $OWNER_ID" \
     --cookie "$COOKIE_JAR" --cookie-jar "$COOKIE_JAR" \
     --output /tmp/ai-browser-second-approved-post.html \
     --write-out '%{http_code}' \
@@ -474,7 +492,6 @@ expect_status 302 "$(curl --silent --show-error \
     "second preflight approval succeeds"
 
 curl --fail --silent --show-error \
-    --header "X-Mediarama-User: $OWNER_ID" \
     --cookie "$COOKIE_JAR" --cookie-jar "$COOKIE_JAR" \
     "$BASE_URL/library/organization/ai/preflights/$SECOND_ID" \
     -o /tmp/ai-browser-second-approved.html
@@ -483,7 +500,6 @@ SECOND_EXECUTE="$(form_token /tmp/ai-browser-second-approved.html "/library/orga
 rm -f "$MEDIA_STORAGE_PATH/ai-browser/$MEDIA_TWO/preview.webp"
 
 SECOND_EXECUTE_STATUS="$(curl --silent --show-error \
-    --header "X-Mediarama-User: $OWNER_ID" \
     --cookie "$COOKIE_JAR" --cookie-jar "$COOKIE_JAR" \
     --output /tmp/ai-browser-second-execute.html \
     --write-out '%{http_code}' \
