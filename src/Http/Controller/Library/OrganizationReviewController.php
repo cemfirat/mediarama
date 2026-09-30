@@ -7,6 +7,7 @@ namespace Mediarama\Http\Controller\Library;
 use Mediarama\Http\Support\InputBagValue;
 use Mediarama\Organization\Application\DeterministicOrganizationAnalyzer;
 use Mediarama\Organization\Application\OrganizationAiPreflightStore;
+use Mediarama\Organization\Application\OrganizationAiProviderRegistry;
 use Mediarama\Organization\Application\OrganizationMetadataSnapshotQuery;
 use Mediarama\Organization\Application\OrganizationProposalApplication;
 use Mediarama\Organization\Application\OrganizationProposalPayloadEditor;
@@ -35,6 +36,7 @@ final class OrganizationReviewController extends AbstractController
         private readonly OrganizationProposalPayloadEditor $editor,
         private readonly OrganizationMetadataSnapshotQuery $metadata,
         private readonly OrganizationAiPreflightStore $preflights,
+        private readonly OrganizationAiProviderRegistry $aiProviders,
         private readonly CurrentUser $currentUser,
         private readonly CsrfTokenManagerInterface $csrf,
     ) {
@@ -65,6 +67,44 @@ final class OrganizationReviewController extends AbstractController
                 $request->request->all('media_ids'),
                 self::MAX_BROWSER_ANALYSIS_MEDIA,
             );
+        } catch (\InvalidArgumentException) {
+            return $this->redirectToRoute('library_home', [
+                'organization_error' => 'invalid_scope',
+            ]);
+        }
+
+        if ($request->request->getString('analysis_mode') === 'ai') {
+            $providers = $this->aiProviders->available();
+            if ($providers === []) {
+                return $this->redirectToRoute('library_home', [
+                    'organization_error' => 'no_ai_provider',
+                ]);
+            }
+
+            try {
+                // Validate the complete requester scope before exposing provider
+                // choices. The setup page itself contains no media metadata.
+                $this->metadata->snapshot($user->id, $mediaIds);
+            } catch (\Throwable) {
+                return $this->redirectToRoute('library_home', [
+                    'organization_error' => 'invalid_scope',
+                ]);
+            }
+
+            return $this->privateResponse($this->render(
+                '@Mediarama/library/organization/ai_setup.html.twig',
+                [
+                    'providers' => $providers,
+                    'selected_media_ids' => $mediaIds,
+                    'prepare_csrf_token' => $this->csrf
+                        ->getToken('organization_ai_prepare')
+                        ->getValue(),
+                    'error' => null,
+                ],
+            ));
+        }
+
+        try {
             $runId = $this->analyzer->analyze(
                 $user->id,
                 $mediaIds,
