@@ -29,6 +29,11 @@ final class MetadataWorkspaceController extends AbstractController
     {
         try {
             $user = $this->currentUser->requireUser();
+        } catch (\DomainException) {
+            throw $this->createAccessDeniedException('Authentication is required.');
+        }
+
+        try {
             $mediaId = Uuid::fromString($id);
             $workspace = $this->workspace->read($user->id, $mediaId);
         } catch (\InvalidArgumentException|\DomainException) {
