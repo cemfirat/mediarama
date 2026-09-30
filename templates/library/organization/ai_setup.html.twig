@@ -1,0 +1,90 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}AI organization setup · Mediarama{% endblock %}
+
+{% block body %}
+<div class="uk-flex uk-flex-between uk-flex-middle uk-flex-wrap">
+    <div>
+        <p class="uk-text-meta uk-margin-remove-bottom">Optional AI organization</p>
+        <h1 class="uk-heading-small uk-margin-small-top">Choose provider and approved input</h1>
+        <p class="uk-text-lead">{{ selected_media_ids|length }} selected MediaAssets. Nothing is sent to a provider on this page.</p>
+    </div>
+    <a class="uk-button uk-button-text" href="{{ path('library_home') }}">Back to Library</a>
+</div>
+
+{% if error %}
+    <div class="uk-alert-danger" uk-alert><p>{{ error }}</p></div>
+{% endif %}
+
+<div class="uk-alert-primary" uk-alert>
+    <p>
+        Originals, source storage, raw metadata/provenance and exact GPS are excluded.
+        Creator and coarse location remain excluded unless you explicitly opt them in.
+        The next step creates a persisted privacy/cost preflight only; provider inference still does not run.
+    </p>
+</div>
+
+<div class="uk-child-width-1-2@l uk-grid-match" uk-grid>
+{% for provider in providers %}
+    <div>
+        <section class="uk-card uk-card-default uk-card-body">
+            <p class="uk-text-meta uk-margin-remove-bottom">{{ provider.producerKind.value|replace({'_':' '}) }}</p>
+            <h2 class="uk-card-title uk-margin-small-top">{{ provider.providerName }}</h2>
+            <p>{{ provider.modelName }}{% if provider.modelVersion %} · {{ provider.modelVersion }}{% endif %}</p>
+
+            {% if provider.privacyNote %}
+                <p><strong>Privacy</strong><br>{{ provider.privacyNote }}</p>
+            {% endif %}
+            {% if provider.retentionNote %}
+                <p><strong>Retention</strong><br>{{ provider.retentionNote }}</p>
+            {% endif %}
+
+            <form method="post" action="{{ path('library_organization_ai_preflight_prepare') }}" class="uk-form-stacked">
+                <input type="hidden" name="_csrf_token" value="{{ prepare_csrf_token }}">
+                <input type="hidden" name="provider_key" value="{{ provider.key }}">
+                {% for media_id in selected_media_ids %}
+                    <input type="hidden" name="media_ids[]" value="{{ media_id.toRfc4122() }}">
+                {% endfor %}
+
+                <div class="uk-margin">
+                    <div class="uk-form-label">Requested capabilities</div>
+                    <div class="uk-form-controls">
+                    {% for capability in provider.capabilities %}
+                        <label class="uk-display-block uk-margin-small-bottom">
+                            <input class="uk-checkbox" type="checkbox" name="capabilities[]" value="{{ capability.value }}"
+                                   {% if capability.value == 'text_reasoning' %}checked{% endif %}>
+                            {{ capability.value|replace({'_':' '})|title }}
+                        </label>
+                    {% endfor %}
+                    </div>
+                </div>
+
+                <div class="uk-margin">
+                    <label class="uk-form-label" for="input-mode-{{ loop.index }}">Provider input</label>
+                    <select class="uk-select" id="input-mode-{{ loop.index }}" name="input_mode">
+                        <option value="metadata_only" selected>Metadata only</option>
+                        <option value="metadata_and_presentation">Metadata + bounded presentation derivatives</option>
+                    </select>
+                    <div class="uk-text-meta uk-margin-small-top">
+                        Image understanding requires the second option. Mediarama never falls back to immutable originals.
+                    </div>
+                </div>
+
+                <div class="uk-margin">
+                    <label class="uk-display-block uk-margin-small-bottom">
+                        <input class="uk-checkbox" type="checkbox" name="include_creator" value="1">
+                        Include creator field
+                    </label>
+                    <label class="uk-display-block">
+                        <input class="uk-checkbox" type="checkbox" name="include_location_name" value="1">
+                        Include coarse location name
+                    </label>
+                </div>
+
+                <button class="uk-button uk-button-primary" type="submit">Preview privacy & cost</button>
+            </form>
+        </section>
+    </div>
+{% endfor %}
+</div>
+{% endblock %}

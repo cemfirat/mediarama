@@ -275,6 +275,9 @@ jobs:
       - name: Verify authenticated organization review HTTP workflow
         run: bash tests/Integration/Organization/http-organization-review.sh
 
+      - name: Verify authenticated Organization AI browser workflow
+        run: bash tests/Integration/Organization/http-organization-ai-browser.sh
+
       - name: Verify upload failure lifecycle
         run: tests/Integration/Upload/http-failure-lifecycle.sh
 
