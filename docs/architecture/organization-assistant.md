@@ -1,6 +1,6 @@
 # Organization Assistant
 
-Status: proposal foundation + deterministic metadata producer + approval-gated AI provider boundary + authenticated review/application
+Status: proposal foundation + deterministic metadata producer + approval-gated AI browser workflow + authenticated review/application
 Date: 2026-09-28
 
 Mediarama's organization assistant is a review layer over the normal media,
@@ -97,6 +97,41 @@ Provider adapters return ordinary Mediarama proposal candidates. Raw provider
 request/response bodies and credentials are not stored. Failures record a
 stable sanitized failure code and do not create partial Collections, tags or
 proposal runs.
+
+### Authenticated AI browser workflow
+
+When one or more provider services are configured, the authenticated Library
+adds an optional AI-assisted path beside the deterministic **Analyze selected**
+action. An installation with zero providers renders no AI control and has no
+degraded/error state.
+
+The browser workflow is:
+
+1. select an authorized MediaAsset scope;
+2. choose one configured provider and only capabilities advertised by it;
+3. choose metadata-only or metadata + bounded presentation input;
+4. explicitly opt in to creator and/or coarse location when wanted;
+5. prepare a persisted privacy/cost preflight without provider inference;
+6. review provider/model/version, capability scope, exact media/type counts,
+   presentation count, exclusions and configured cost/privacy/retention notes;
+7. approve that exact preflight through CSRF-protected requester-only action;
+8. execute provider inference once;
+9. continue in the normal proposal review UI.
+
+Prepare, approve and execute are separate authenticated POST boundaries. The
+preflight review itself is private/no-store/noindex.
+
+Browser scope is deliberately bounded to 200 selected MediaAssets per request
+even though the lower-level organization domain can represent larger runs. This
+keeps interactive requests predictable; larger/batch provider workflows can be
+added later without weakening the same approval contract.
+
+Provider execution reuses the #135 application boundary rather than moving
+privacy logic into Twig/controllers. Authorization, provider identity,
+capabilities and presentation availability are revalidated at execution time.
+A failed/changed approved scope enters sanitized failed state and cannot be
+silently resent; the user prepares a new preflight deliberately.
+
 
 ## Proposal model
 
@@ -262,9 +297,13 @@ Provider configuration is not consulted.
 
 ## Next slices
 
-Provider-specific adapters can now be added behind the #135 capability/preflight
-contract without changing Mediarama's proposal or review domain.
+Provider-specific production adapters can be added behind the provider-neutral
+capability/preflight contract without changing Mediarama's proposal, browser
+approval or review domain.
 
-The remaining #16 work should be evaluated as concrete provider/product
-integration rather than by weakening the proposal-first boundary. Hybrid
-Collection pins/exclusions remain #18.
+The first #16 organization-assistant milestone is complete at the generic
+product layer: deterministic analysis, optional provider execution and human
+review all converge on the same Mediarama proposal/application model. Vendor
+adapters, embeddings and richer batch UX are follow-on integrations rather than
+reasons to weaken the proposal-first boundary. Hybrid Collection pins/exclusions
+remain #18.

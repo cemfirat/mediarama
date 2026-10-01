@@ -1,0 +1,4 @@
+services:
+    Mediarama\Tests\Fixtures\Organization\BrowserOrganizationAiProvider:
+        tags:
+            - 'mediarama.organization_ai_provider'

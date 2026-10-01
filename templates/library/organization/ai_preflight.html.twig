@@ -1,0 +1,86 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}AI privacy & cost preflight · Mediarama{% endblock %}
+
+{% block body %}
+<div class="uk-flex uk-flex-between uk-flex-middle uk-flex-wrap">
+    <div>
+        <p class="uk-text-meta uk-margin-remove-bottom">Optional AI organization · {{ preflight.status.value|replace({'_':' '}) }}</p>
+        <h1 class="uk-heading-small uk-margin-small-top">Privacy & cost preflight</h1>
+    </div>
+    <a class="uk-button uk-button-text" href="{{ path('library_home') }}">Library</a>
+</div>
+
+{% if approval_error %}
+    <div class="uk-alert-danger" uk-alert><p>This preflight cannot be approved in its current state.</p></div>
+{% endif %}
+{% if execution_error %}
+    <div class="uk-alert-danger" uk-alert>
+        <p>The approved provider analysis failed safely. No normal library state was changed. Create a new preflight before retrying.</p>
+    </div>
+{% endif %}
+{% if approved %}
+    <div class="uk-alert-success" uk-alert><p>Scope approved. Provider inference has still not run.</p></div>
+{% endif %}
+
+<section class="uk-card uk-card-default uk-card-body uk-margin">
+    <h2 class="uk-card-title">{{ preflight.producer.providerName }} · {{ preflight.producer.modelName }}</h2>
+    {% if preflight.producer.modelVersion %}<p class="uk-text-meta">Model version {{ preflight.producer.modelVersion }}</p>{% endif %}
+
+    <dl class="uk-description-list">
+        <dt>MediaAssets</dt>
+        <dd>{{ preflight.mediaCount }}</dd>
+        <dt>Media types</dt>
+        <dd>
+            {% for type, count in preflight.mediaTypeCounts %}
+                {{ type }}: {{ count }}{% if not loop.last %}, {% endif %}
+            {% endfor %}
+        </dd>
+        <dt>Capabilities</dt>
+        <dd>{% for capability in preflight.capabilities %}{{ capability.value|replace({'_':' '}) }}{% if not loop.last %}, {% endif %}{% endfor %}</dd>
+        <dt>Input mode</dt>
+        <dd>{{ preflight.inputMode.value|replace({'_':' '}) }} · {{ preflight.presentationMediaCount }} approved presentation derivatives</dd>
+        <dt>Originals</dt>
+        <dd>Never sent</dd>
+        <dt>Creator</dt>
+        <dd>{{ preflight.includeCreator ? 'Included by explicit opt-in' : 'Excluded' }}</dd>
+        <dt>Coarse location</dt>
+        <dd>{{ preflight.includeLocationName ? 'Included by explicit opt-in' : 'Excluded' }}</dd>
+        <dt>Always excluded</dt>
+        <dd>{{ preflight.excludedFields|join(', ') }}</dd>
+        <dt>Cost estimate</dt>
+        <dd>{{ preflight.costEstimate ?: 'Provider did not supply a local estimate.' }}</dd>
+        {% if preflight.privacyNote %}<dt>Provider privacy note</dt><dd>{{ preflight.privacyNote }}</dd>{% endif %}
+        {% if preflight.retentionNote %}<dt>Provider retention note</dt><dd>{{ preflight.retentionNote }}</dd>{% endif %}
+    </dl>
+</section>
+
+{% if preflight.status.value == 'pending_approval' %}
+    <div class="uk-alert-warning" uk-alert>
+        <p>No provider inference has run. Approving freezes this exact provider/model/capability/media/presentation scope for execution-time revalidation.</p>
+    </div>
+    <form method="post" action="{{ path('library_organization_ai_preflight_approve', {id: preflight.id.toRfc4122()}) }}">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token('organization_ai_approve_' ~ preflight.id.toRfc4122()) }}">
+        <button class="uk-button uk-button-primary" type="submit">Approve this exact scope</button>
+    </form>
+{% elseif preflight.status.value == 'approved' %}
+    <div class="uk-alert-success" uk-alert>
+        <p>This scope is approved. Provider inference still has not run. Execution will revalidate authorization, provider identity and presentation availability.</p>
+    </div>
+    <form method="post" action="{{ path('library_organization_ai_preflight_execute', {id: preflight.id.toRfc4122()}) }}">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token('organization_ai_execute_' ~ preflight.id.toRfc4122()) }}">
+        <button class="uk-button uk-button-primary" type="submit">Run approved analysis</button>
+    </form>
+{% elseif preflight.status.value == 'completed' and preflight.runId %}
+    <div class="uk-alert-success" uk-alert>
+        <p>Provider analysis completed and produced an ordinary Mediarama organization run.</p>
+    </div>
+    <a class="uk-button uk-button-primary" href="{{ path('library_organization_run', {id: preflight.runId.toRfc4122()}) }}">Review proposals</a>
+{% elseif preflight.status.value == 'failed' %}
+    <div class="uk-alert-danger" uk-alert>
+        <p>Provider execution failed safely{% if preflight.failureCode %} ({{ preflight.failureCode }}){% endif %}. No automatic library mutation occurred.</p>
+    </div>
+{% elseif preflight.status.value == 'executing' %}
+    <div class="uk-alert-primary" uk-alert><p>This preflight is currently executing.</p></div>
+{% endif %}
+{% endblock %}
