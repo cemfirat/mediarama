@@ -22,6 +22,7 @@ final readonly class LibraryMediaSearchResult
         public ?string $lens,
         public ?int $iso,
         public ?string $locationName,
+        public bool $metadataWorkspaceAvailable,
     ) {
     }
 }

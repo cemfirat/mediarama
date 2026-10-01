@@ -1,0 +1,79 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Metadata · {{ workspace.title ?: workspace.originalFilename }} · Mediarama{% endblock %}
+
+{% block body %}
+<div class="uk-flex uk-flex-between uk-flex-middle uk-flex-wrap">
+    <div>
+        <a class="uk-text-meta" href="{{ path('library_home') }}">← Back to Library</a>
+        <h1 class="uk-heading-small uk-margin-small-top uk-margin-remove-bottom">Metadata workspace</h1>
+        <p class="uk-text-lead uk-margin-small-top">{{ workspace.title ?: workspace.originalFilename }}</p>
+    </div>
+    <span class="uk-label">Read-only foundation</span>
+</div>
+
+<div class="uk-alert-warning" uk-alert>
+    <p><strong>Owner-only source inspection.</strong> Embedded metadata can contain exact GPS, creator identity, device serials and other private values. This page is private, non-indexable and does not change the immutable original.</p>
+</div>
+
+<section class="uk-card uk-card-default uk-card-body uk-margin" aria-labelledby="metadata-summary-heading">
+    <h2 id="metadata-summary-heading" class="uk-card-title">File summary</h2>
+    <dl class="uk-description-list uk-description-list-divider">
+        <dt>Original filename</dt><dd>{{ workspace.originalFilename }}</dd>
+        <dt>Media type</dt><dd>{{ workspace.mediaType }} · {{ workspace.mimeType }}</dd>
+        <dt>Size</dt><dd>{{ workspace.byteSize|number_format(0, '.', ',') }} bytes</dd>
+        <dt>Dimensions</dt><dd>{{ workspace.width and workspace.height ? workspace.width ~ ' × ' ~ workspace.height : '—' }}</dd>
+        {% if workspace.durationMs is not null %}<dt>Duration</dt><dd>{{ workspace.durationMs }} ms</dd>{% endif %}
+        <dt>Workspace last changed</dt><dd>{{ workspace.updatedAt|date('Y-m-d H:i:s T') }}</dd>
+    </dl>
+</section>
+
+<section class="uk-card uk-card-default uk-card-body uk-margin" aria-labelledby="current-metadata-heading">
+    <h2 id="current-metadata-heading" class="uk-card-title">Current Mediarama values</h2>
+    <p class="uk-text-meta">These are the current canonical/project values. Provenance records where each current value came from; it does not rewrite source metadata.</p>
+    <div class="uk-overflow-auto">
+        <table class="uk-table uk-table-divider uk-table-small uk-table-middle">
+            <thead><tr><th>Field</th><th>Current Mediarama value</th><th>Provenance</th><th>Privacy</th></tr></thead>
+            <tbody>
+            {% for field in workspace.currentFields %}
+                <tr>
+                    <td><strong>{{ field.label }}</strong><div class="uk-text-meta">{{ field.key }}</div></td>
+                    <td class="uk-text-break">{{ field.value is not null ? field.value : '—' }}</td>
+                    <td>{{ field.provenance ?: '—' }}</td>
+                    <td>{% if field.sensitive %}<span class="uk-label uk-label-warning">Privacy-sensitive</span>{% else %}—{% endif %}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section class="uk-card uk-card-default uk-card-body uk-margin" aria-labelledby="source-metadata-heading">
+    <h2 id="source-metadata-heading" class="uk-card-title">Source snapshot</h2>
+    <p class="uk-text-meta">Read-only metadata captured from the immutable original. Unknown tags remain inspectable instead of being discarded.</p>
+
+    {% for key, group in workspace.sourceGroups %}
+        <details class="uk-card uk-card-small uk-card-muted uk-card-body uk-margin-small" {% if key in ['exif', 'iptc', 'xmp'] %}open{% endif %}>
+            <summary class="uk-text-bold">{{ group.label }} <span class="uk-text-meta">({{ group.tags|length }} tags)</span></summary>
+            {% if group.tags is empty %}
+                <p class="uk-text-muted uk-margin-small-top">No source tags in this section.</p>
+            {% else %}
+                <div class="uk-overflow-auto uk-margin-small-top">
+                    <table class="uk-table uk-table-divider uk-table-small uk-table-middle">
+                        <thead><tr><th>Source tag</th><th>Source value</th><th>Privacy</th></tr></thead>
+                        <tbody>
+                        {% for tag in group.tags %}
+                            <tr>
+                                <td><code>{{ tag.name }}</code></td>
+                                <td><pre class="uk-margin-remove uk-text-small uk-text-break">{{ tag.value }}</pre></td>
+                                <td>{% if tag.sensitive %}<span class="uk-label uk-label-warning">Privacy-sensitive</span>{% else %}—{% endif %}</td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% endif %}
+        </details>
+    {% endfor %}
+</section>
+{% endblock %}
