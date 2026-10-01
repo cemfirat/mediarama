@@ -9,12 +9,56 @@
         <h1 class="uk-heading-small uk-margin-small-top uk-margin-remove-bottom">Metadata workspace</h1>
         <p class="uk-text-lead uk-margin-small-top">{{ workspace.title ?: workspace.originalFilename }}</p>
     </div>
-    <span class="uk-label">Read-only foundation</span>
+    <span class="uk-label">Canonical editing · source read-only</span>
 </div>
 
 <div class="uk-alert-warning" uk-alert>
-    <p><strong>Owner-only source inspection.</strong> Embedded metadata can contain exact GPS, creator identity, device serials and other private values. This page is private, non-indexable and does not change the immutable original.</p>
+    <p><strong>Owner-only source inspection.</strong> Embedded metadata can contain exact GPS, creator identity, device serials and other private values. This page is private, non-indexable and never rewrites the immutable original or source snapshot.</p>
 </div>
+
+{% if saved %}
+    <div class="uk-alert-success" uk-alert><p>Canonical metadata changes were saved. Source metadata remains unchanged.</p></div>
+{% elseif edit_error %}
+    <div class="uk-alert-danger" uk-alert><p>The metadata change was not applied. Choose Set or Clear deliberately and provide a valid non-blank value for every Set field.</p></div>
+{% endif %}
+
+<section class="uk-card uk-card-default uk-card-body uk-margin" aria-labelledby="metadata-edit-heading">
+    <h2 id="metadata-edit-heading" class="uk-card-title">Edit descriptive metadata</h2>
+    <p class="uk-text-meta">Each field defaults to <strong>Keep</strong>. Choose <strong>Set</strong> to replace the current canonical value or <strong>Clear</strong> to deliberately remove it. Blank Set values are rejected.</p>
+    <form method="post" action="{{ path('library_media_metadata_workspace_update', {id: workspace.id.toRfc4122()}) }}" class="uk-form-stacked">
+        <input type="hidden" name="_csrf_token" value="{{ edit_csrf_token }}">
+        {% for field in workspace.currentFields %}
+            {% if field.key in ['title', 'description', 'creator', 'copyright', 'location_name'] %}
+                <div class="uk-grid-small uk-margin-small" uk-grid>
+                    <div class="uk-width-1-4@m">
+                        <label class="uk-form-label" for="metadata-action-{{ field.key }}">{{ field.label }}</label>
+                        <select id="metadata-action-{{ field.key }}" class="uk-select" name="actions[{{ field.key }}]">
+                            <option value="keep" selected>Keep</option>
+                            <option value="set">Set</option>
+                            <option value="clear">Clear</option>
+                        </select>
+                        {% if field.sensitive %}<div class="uk-text-meta uk-text-warning">Privacy-sensitive</div>{% endif %}
+                    </div>
+                    <div class="uk-width-expand@m">
+                        <label class="uk-form-label" for="metadata-value-{{ field.key }}">Value</label>
+                        {% if field.key == 'description' %}
+                            <textarea id="metadata-value-{{ field.key }}" class="uk-textarea" rows="4" maxlength="5000" name="values[{{ field.key }}]">{{ field.value ?: '' }}</textarea>
+                        {% else %}
+                            <input id="metadata-value-{{ field.key }}"
+                                   class="uk-input"
+                                   type="text"
+                                   {% if field.key == 'title' %}maxlength="200"{% elseif field.key == 'creator' %}maxlength="500"{% else %}maxlength="1000"{% endif %}
+                                   name="values[{{ field.key }}]"
+                                   value="{{ field.value ?: '' }}">
+                        {% endif %}
+                        <div class="uk-text-meta">Current provenance: {{ field.provenance ?: '—' }}</div>
+                    </div>
+                </div>
+            {% endif %}
+        {% endfor %}
+        <button class="uk-button uk-button-primary" type="submit">Save selected changes</button>
+    </form>
+</section>
 
 <section class="uk-card uk-card-default uk-card-body uk-margin" aria-labelledby="metadata-summary-heading">
     <h2 id="metadata-summary-heading" class="uk-card-title">File summary</h2>
