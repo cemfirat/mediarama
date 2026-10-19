@@ -6,6 +6,7 @@ namespace Mediarama\Media\Infrastructure\Metadata;
 
 use DateTimeImmutable;
 use Mediarama\Media\Application\InspectedMetadata;
+use Mediarama\Media\Domain\CanonicalSourceMetadata;
 
 final class ExifToolMetadataParser
 {
@@ -30,28 +31,10 @@ final class ExifToolMetadataParser
                 'XMP:DateCreated',
                 'IPTC:DateCreated',
             ])),
-            title: $this->string($this->first($raw, ['XMP-dc:Title', 'XMP:Title', 'IPTC:ObjectName'])),
-            description: $this->string($this->first($raw, [
-                'XMP-dc:Description',
-                'XMP:Description',
-                'IPTC:Caption-Abstract',
-                'IFD0:ImageDescription',
-                'EXIF:ImageDescription',
-            ])),
-            creator: $this->string($this->first($raw, [
-                'XMP-dc:Creator',
-                'XMP:Creator',
-                'IPTC:By-line',
-                'IFD0:Artist',
-                'EXIF:Artist',
-            ])),
-            copyright: $this->string($this->first($raw, [
-                'XMP-dc:Rights',
-                'XMP:Rights',
-                'IPTC:CopyrightNotice',
-                'IFD0:Copyright',
-                'EXIF:Copyright',
-            ])),
+            title: $this->canonical($raw, 'title'),
+            description: $this->canonical($raw, 'description'),
+            creator: $this->canonical($raw, 'creator'),
+            copyright: $this->canonical($raw, 'copyright'),
             cameraMake: $this->string($this->first($raw, ['IFD0:Make', 'EXIF:Make'])),
             cameraModel: $this->string($this->first($raw, ['IFD0:Model', 'EXIF:Model'])),
             lens: $this->string($this->first($raw, ['ExifIFD:LensModel', 'EXIF:LensModel', 'Composite:LensID'])),
@@ -71,11 +54,7 @@ final class ExifToolMetadataParser
                 'XMP-exif:GPSLongitude',
                 'EXIF:GPSLongitude',
             ])),
-            locationName: $this->string($this->first($raw, [
-                'XMP-iptcCore:Location',
-                'XMP:Location',
-                'IPTC:Sub-location',
-            ])),
+            locationName: $this->canonical($raw, 'location_name'),
             keywords: $this->strings($this->first($raw, ['XMP-dc:Subject', 'XMP:Subject', 'IPTC:Keywords'])),
         );
     }
@@ -117,6 +96,12 @@ final class ExifToolMetadataParser
         }
 
         return null;
+    }
+
+    /** @param array<string,mixed> $raw */
+    private function canonical(array $raw, string $field): ?string
+    {
+        return CanonicalSourceMetadata::fromExifTool($raw, $field)['value'] ?? null;
     }
 
     private function string(mixed $value): ?string

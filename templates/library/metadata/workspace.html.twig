@@ -19,12 +19,12 @@
 {% if saved %}
     <div class="uk-alert-success" uk-alert><p>Canonical metadata changes were saved. Source metadata remains unchanged.</p></div>
 {% elseif edit_error %}
-    <div class="uk-alert-danger" uk-alert><p>The metadata change was not applied. Choose Set or Clear deliberately and provide a valid non-blank value for every Set field.</p></div>
+    <div class="uk-alert-danger" uk-alert><p>The metadata change was not applied. Choose Set, Clear or an available Revert deliberately. Blank Set values and ambiguous/missing source values are rejected.</p></div>
 {% endif %}
 
 <section class="uk-card uk-card-default uk-card-body uk-margin" aria-labelledby="metadata-edit-heading">
     <h2 id="metadata-edit-heading" class="uk-card-title">Edit descriptive metadata</h2>
-    <p class="uk-text-meta">Each field defaults to <strong>Keep</strong>. Choose <strong>Set</strong> to replace the current canonical value or <strong>Clear</strong> to deliberately remove it. Blank Set values are rejected.</p>
+    <p class="uk-text-meta">Each field defaults to <strong>Keep</strong>. Choose <strong>Set</strong> to replace the current canonical value, <strong>Clear</strong> to deliberately remove it, or <strong>Revert</strong> to restore the explicitly mapped source value shown below. Blank Set values are rejected.</p>
     <form method="post" action="{{ path('library_media_metadata_workspace_update', {id: workspace.id.toRfc4122()}) }}" class="uk-form-stacked">
         <input type="hidden" name="_csrf_token" value="{{ edit_csrf_token }}">
         {% for field in workspace.currentFields %}
@@ -36,6 +36,7 @@
                             <option value="keep" selected>Keep</option>
                             <option value="set">Set</option>
                             <option value="clear">Clear</option>
+                            {% if field.canRevert %}<option value="revert">Revert to source</option>{% endif %}
                         </select>
                         {% if field.sensitive %}<div class="uk-text-meta uk-text-warning">Privacy-sensitive</div>{% endif %}
                     </div>
@@ -52,6 +53,15 @@
                                    value="{{ field.value ?: '' }}">
                         {% endif %}
                         <div class="uk-text-meta">Current provenance: {{ field.provenance ?: '—' }}</div>
+                        {% if field.canRevert %}
+                            <div class="uk-alert-primary uk-padding-small uk-margin-small-top">
+                                <strong>Source candidate:</strong>
+                                <span class="uk-text-break">{{ field.sourceValue }}</span>
+                                <div class="uk-text-meta">Mapped from <code>{{ field.sourceTag }}</code>. Revert restores this value with provenance <code>embedded</code>.</div>
+                            </div>
+                        {% else %}
+                            <div class="uk-text-meta uk-margin-small-top">No unambiguous mapped source value is available; Revert is disabled.</div>
+                        {% endif %}
                     </div>
                 </div>
             {% endif %}

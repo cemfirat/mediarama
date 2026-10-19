@@ -10,7 +10,16 @@ use Symfony\Component\Uid\Uuid;
 final readonly class MetadataWorkspaceView
 {
     /**
-     * @param list<array{key:string,label:string,value:?string,provenance:?string,sensitive:bool}> $currentFields
+     * @param list<array{
+     *     key:string,
+     *     label:string,
+     *     value:?string,
+     *     provenance:?string,
+     *     sensitive:bool,
+     *     sourceValue:?string,
+     *     sourceTag:?string,
+     *     canRevert:bool
+     * }> $currentFields
      * @param array<string,array{label:string,tags:list<array{name:string,value:string,sensitive:bool}>}> $sourceGroups
      */
     public function __construct(
