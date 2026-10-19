@@ -22,6 +22,12 @@
     <div class="uk-alert-danger" uk-alert><p>The metadata change was not applied. Choose Set, Clear or an available Revert deliberately. Blank Set values and ambiguous/missing source values are rejected.</p></div>
 {% endif %}
 
+{% if keywords_saved %}
+    <div class="uk-alert-success" uk-alert><p>Keyword changes were saved. The immutable source keyword snapshot remains unchanged.</p></div>
+{% elseif keywords_error %}
+    <div class="uk-alert-danger" uk-alert><p>The keyword change was not applied. Supply one valid keyword per line, choose an operation deliberately and use Clear rather than a blank replacement.</p></div>
+{% endif %}
+
 <section class="uk-card uk-card-default uk-card-body uk-margin" aria-labelledby="metadata-edit-heading">
     <h2 id="metadata-edit-heading" class="uk-card-title">Edit descriptive metadata</h2>
     <p class="uk-text-meta">Each field defaults to <strong>Keep</strong>. Choose <strong>Set</strong> to replace the current canonical value, <strong>Clear</strong> to deliberately remove it, or <strong>Revert</strong> to restore the explicitly mapped source value shown below. Blank Set values are rejected.</p>
@@ -67,6 +73,63 @@
             {% endif %}
         {% endfor %}
         <button class="uk-button uk-button-primary" type="submit">Save selected changes</button>
+    </form>
+</section>
+
+<section class="uk-card uk-card-default uk-card-body uk-margin" aria-labelledby="metadata-keywords-heading">
+    <h2 id="metadata-keywords-heading" class="uk-card-title">Edit keywords</h2>
+    <p class="uk-text-meta">Keywords use Mediarama's relational tag model. Choose <strong>Replace</strong>, <strong>Append</strong>, <strong>Remove</strong>, <strong>Clear all</strong> or an available <strong>Revert to source</strong>. Blank input never means deletion.</p>
+
+    <h3 class="uk-heading-bullet uk-margin-small-bottom">Current keywords</h3>
+    {% if workspace.keywords.current is empty %}
+        <p class="uk-text-muted">No current keywords.</p>
+    {% else %}
+        <div class="uk-flex uk-flex-wrap uk-grid-small" uk-grid>
+            {% for keyword in workspace.keywords.current %}
+                <div><span class="uk-label">{{ keyword.name }}</span> <span class="uk-text-meta">{{ keyword.source }}</span></div>
+            {% endfor %}
+        </div>
+    {% endif %}
+
+    {% if workspace.keywords.canRevert %}
+        <div class="uk-alert-primary uk-padding-small uk-margin">
+            <strong>Source keyword candidate:</strong>
+            <div class="uk-margin-small-top">
+                {% for keyword in workspace.keywords.sourceValues %}
+                    <span class="uk-label uk-margin-small-right">{{ keyword }}</span>
+                {% endfor %}
+            </div>
+            <div class="uk-text-meta uk-margin-small-top">Mapped from <code>{{ workspace.keywords.sourceTag }}</code>. Revert replaces the current keyword set and records each membership as <code>embedded</code>.</div>
+        </div>
+    {% else %}
+        <p class="uk-text-meta">No unambiguous mapped source keyword list is available; Revert is disabled.</p>
+    {% endif %}
+
+    <form method="post" action="{{ path('library_media_metadata_workspace_keywords', {id: workspace.id.toRfc4122()}) }}" class="uk-form-stacked uk-margin-top">
+        <input type="hidden" name="_csrf_token" value="{{ keyword_csrf_token }}">
+        <div class="uk-grid-small" uk-grid>
+            <div class="uk-width-1-4@m">
+                <label class="uk-form-label" for="metadata-keyword-action">Operation</label>
+                <select id="metadata-keyword-action" class="uk-select" name="keyword_action">
+                    <option value="append" selected>Append</option>
+                    <option value="replace">Replace</option>
+                    <option value="remove">Remove</option>
+                    <option value="clear">Clear all</option>
+                    {% if workspace.keywords.canRevert %}<option value="revert">Revert to source</option>{% endif %}
+                </select>
+            </div>
+            <div class="uk-width-expand@m">
+                <label class="uk-form-label" for="metadata-keyword-values">Keywords</label>
+                <textarea id="metadata-keyword-values"
+                          class="uk-textarea"
+                          rows="6"
+                          maxlength="32200"
+                          name="keyword_values"
+                          placeholder="One keyword per line"></textarea>
+                <div class="uk-text-meta">Up to 200 keywords, each 1–160 printable characters. Values are matched case-insensitively and de-duplicated.</div>
+            </div>
+        </div>
+        <button class="uk-button uk-button-primary uk-margin-small-top" type="submit">Apply keyword operation</button>
     </form>
 </section>
 

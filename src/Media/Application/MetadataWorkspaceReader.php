@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Mediarama\Media\Application;
 
 use DateTimeInterface;
+use Mediarama\Media\Domain\CanonicalSourceKeywords;
 use Mediarama\Media\Domain\CanonicalSourceMetadata;
 use Mediarama\Media\Domain\MediaAsset;
 use Symfony\Component\Uid\Uuid;
@@ -20,8 +21,10 @@ final readonly class MetadataWorkspaceReader
         'technical' => 'File / Technical',
     ];
 
-    public function __construct(private MediaAssetRepository $media)
-    {
+    public function __construct(
+        private MediaAssetRepository $media,
+        private MetadataWorkspaceKeywords $keywords,
+    ) {
     }
 
     public function read(Uuid $requesterId, Uuid $mediaId): MetadataWorkspaceView
@@ -31,6 +34,10 @@ final readonly class MetadataWorkspaceReader
         if ($media->ownerId === null || !$media->ownerId->equals($requesterId)) {
             throw new \DomainException('Metadata workspace is available to the MediaAsset owner only.');
         }
+
+        $sourceKeywords = CanonicalSourceKeywords::fromStoredSnapshot(
+            $media->metadata,
+        );
 
         return new MetadataWorkspaceView(
             id: $media->id,
@@ -45,6 +52,12 @@ final readonly class MetadataWorkspaceReader
             createdAt: $media->createdAt,
             updatedAt: $media->updatedAt,
             currentFields: $this->currentFields($media),
+            keywords: [
+                'current' => $this->keywords->read($requesterId, $mediaId),
+                'sourceValues' => $sourceKeywords['values'] ?? [],
+                'sourceTag' => $sourceKeywords['tag'] ?? null,
+                'canRevert' => $sourceKeywords !== null,
+            ],
             sourceGroups: $this->sourceGroups($media->metadata),
         );
     }

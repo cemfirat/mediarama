@@ -6,6 +6,7 @@ namespace Mediarama\Tests\Unit\Media;
 
 use DateTimeImmutable;
 use Mediarama\Media\Application\MediaAssetRepository;
+use Mediarama\Media\Application\MetadataWorkspaceKeywords;
 use Mediarama\Media\Application\MetadataWorkspaceReader;
 use Mediarama\Media\Domain\MediaAsset;
 use Mediarama\Media\Domain\MediaType;
@@ -17,11 +18,22 @@ use Symfony\Component\Uid\Uuid;
 
 final class MetadataWorkspaceReaderTest extends TestCase
 {
-    public function testOwnerSeesSeparatedCurrentProvenanceSourcePreviewAndCompleteGroups(): void
+    public function testOwnerSeesSeparatedCurrentProvenanceSourcePreviewKeywordsAndCompleteGroups(): void
     {
         $owner = Uuid::fromString('77777777-7777-4777-8777-777777777771');
         $media = $this->media($owner);
-        $reader = new MetadataWorkspaceReader($this->repository($media));
+        $keywords = $this->createMock(MetadataWorkspaceKeywords::class);
+        $keywords->expects(self::once())
+            ->method('read')
+            ->with($owner, $media->id)
+            ->willReturn([
+                ['name' => 'current-one', 'source' => 'manual'],
+                ['name' => 'current-two', 'source' => 'coppermine'],
+            ]);
+        $reader = new MetadataWorkspaceReader(
+            $this->repository($media),
+            $keywords,
+        );
 
         $view = $reader->read($owner, $media->id);
 
@@ -45,6 +57,14 @@ final class MetadataWorkspaceReaderTest extends TestCase
         self::assertTrue($current['latitude']['sensitive']);
         self::assertSame('48.123456', $current['latitude']['value']);
         self::assertFalse($current['latitude']['canRevert']);
+
+        self::assertSame([
+            ['name' => 'current-one', 'source' => 'manual'],
+            ['name' => 'current-two', 'source' => 'coppermine'],
+        ], $view->keywords['current']);
+        self::assertSame(['one', 'two'], $view->keywords['sourceValues']);
+        self::assertSame('IPTC:Keywords', $view->keywords['sourceTag']);
+        self::assertTrue($view->keywords['canRevert']);
 
         self::assertArrayHasKey('exif', $view->sourceGroups);
         self::assertArrayHasKey('iptc', $view->sourceGroups);
@@ -71,12 +91,16 @@ final class MetadataWorkspaceReaderTest extends TestCase
         );
     }
 
-    public function testConflictingMappedSourceValuesDisableRevertPreview(): void
+    public function testConflictingMappedSourceValuesDisableRevertPreviews(): void
     {
         $owner = Uuid::fromString('77777777-7777-4777-8777-777777777771');
         $media = $this->media($owner);
         $media->metadata['iptc']['ObjectName'] = 'Conflicting source title';
-        $reader = new MetadataWorkspaceReader($this->repository($media));
+        $media->metadata['xmp']['Subject'] = ['conflicting-keyword'];
+        $reader = new MetadataWorkspaceReader(
+            $this->repository($media),
+            $this->keywords([]),
+        );
 
         $view = $reader->read($owner, $media->id);
         $title = array_values(array_filter(
@@ -87,12 +111,20 @@ final class MetadataWorkspaceReaderTest extends TestCase
         self::assertFalse($title['canRevert']);
         self::assertNull($title['sourceValue']);
         self::assertNull($title['sourceTag']);
+        self::assertFalse($view->keywords['canRevert']);
+        self::assertSame([], $view->keywords['sourceValues']);
+        self::assertNull($view->keywords['sourceTag']);
     }
 
     public function testNonOwnerCannotReadRawMetadataWorkspace(): void
     {
         $owner = Uuid::fromString('77777777-7777-4777-8777-777777777771');
-        $reader = new MetadataWorkspaceReader($this->repository($this->media($owner)));
+        $keywords = $this->createMock(MetadataWorkspaceKeywords::class);
+        $keywords->expects(self::never())->method('read');
+        $reader = new MetadataWorkspaceReader(
+            $this->repository($this->media($owner)),
+            $keywords,
+        );
 
         $this->expectException(\DomainException::class);
         $reader->read(
@@ -137,6 +169,15 @@ final class MetadataWorkspaceReaderTest extends TestCase
             ],
             latitude: 48.123456,
         );
+    }
+
+    /** @param list<array{name:string,source:string}> $values */
+    private function keywords(array $values): MetadataWorkspaceKeywords
+    {
+        $keywords = $this->createMock(MetadataWorkspaceKeywords::class);
+        $keywords->method('read')->willReturn($values);
+
+        return $keywords;
     }
 
     private function repository(MediaAsset $media): MediaAssetRepository

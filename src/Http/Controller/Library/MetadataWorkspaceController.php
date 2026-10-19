@@ -6,6 +6,7 @@ namespace Mediarama\Http\Controller\Library;
 
 use Mediarama\Http\Support\InputBagValue;
 use Mediarama\Media\Application\MetadataWorkspaceEditor;
+use Mediarama\Media\Application\MetadataWorkspaceKeywords;
 use Mediarama\Media\Application\MetadataWorkspaceReader;
 use Mediarama\Security\Application\AuthenticatedUser;
 use Mediarama\Security\Application\CurrentUser;
@@ -31,6 +32,7 @@ final class MetadataWorkspaceController extends AbstractController
     public function __construct(
         private readonly MetadataWorkspaceReader $workspace,
         private readonly MetadataWorkspaceEditor $editor,
+        private readonly MetadataWorkspaceKeywords $keywords,
         private readonly CurrentUser $currentUser,
         private readonly CsrfTokenManagerInterface $csrf,
     ) {
@@ -57,6 +59,11 @@ final class MetadataWorkspaceController extends AbstractController
                         'metadata_workspace_update_'.$mediaId->toRfc4122(),
                     )
                     ->getValue(),
+                'keyword_csrf_token' => $this->csrf
+                    ->getToken(
+                        'metadata_workspace_keywords_'.$mediaId->toRfc4122(),
+                    )
+                    ->getValue(),
                 'saved' => InputBagValue::booleanOrDefault(
                     $request->query,
                     'saved',
@@ -64,6 +71,14 @@ final class MetadataWorkspaceController extends AbstractController
                 'edit_error' => InputBagValue::booleanOrDefault(
                     $request->query,
                     'edit_error',
+                ),
+                'keywords_saved' => InputBagValue::booleanOrDefault(
+                    $request->query,
+                    'keywords_saved',
+                ),
+                'keywords_error' => InputBagValue::booleanOrDefault(
+                    $request->query,
+                    'keywords_error',
                 ),
             ],
         ));
@@ -114,6 +129,55 @@ final class MetadataWorkspaceController extends AbstractController
             [
                 'id' => $mediaId->toRfc4122(),
                 'saved' => 1,
+            ],
+        );
+    }
+
+    #[Route(
+        '/library/media/{id}/metadata/keywords',
+        name: 'library_media_metadata_workspace_keywords',
+        requirements: ['id' => '[0-9a-fA-F-]{36}'],
+        methods: ['POST'],
+    )]
+    public function updateKeywords(string $id, Request $request): Response
+    {
+        $user = $this->user();
+        $mediaId = $this->id($id);
+
+        $this->read($user, $mediaId);
+
+        $payload = $request->request->all();
+        $token = $payload['_csrf_token'] ?? '';
+        $this->requireCsrf(
+            'metadata_workspace_keywords_'.$mediaId->toRfc4122(),
+            is_string($token) ? $token : '',
+        );
+
+        try {
+            $change = $this->keywordChange($payload);
+            $this->keywords->update(
+                $user->id,
+                $mediaId,
+                $change['action'],
+                $change['values'],
+            );
+        } catch (\InvalidArgumentException) {
+            return $this->redirectToRoute(
+                'library_media_metadata_workspace',
+                [
+                    'id' => $mediaId->toRfc4122(),
+                    'keywords_error' => 1,
+                ],
+            );
+        } catch (\DomainException) {
+            throw $this->createNotFoundException();
+        }
+
+        return $this->redirectToRoute(
+            'library_media_metadata_workspace',
+            [
+                'id' => $mediaId->toRfc4122(),
+                'keywords_saved' => 1,
             ],
         );
     }
@@ -180,6 +244,57 @@ final class MetadataWorkspaceController extends AbstractController
         }
 
         return $changes;
+    }
+
+    /**
+     * @param array<string,mixed> $payload
+     * @return array{action:string,values:list<string>}
+     */
+    private function keywordChange(array $payload): array
+    {
+        $action = $payload['keyword_action'] ?? null;
+        if (
+            !is_string($action)
+            || !in_array($action, ['replace', 'append', 'remove', 'clear', 'revert'], true)
+        ) {
+            throw new \InvalidArgumentException(
+                'Metadata keyword operation is invalid.',
+            );
+        }
+
+        if ($action === 'clear' || $action === 'revert') {
+            return ['action' => $action, 'values' => []];
+        }
+
+        $raw = $payload['keyword_values'] ?? null;
+        if (!is_string($raw)) {
+            throw new \InvalidArgumentException(
+                'Metadata keyword values are invalid.',
+            );
+        }
+
+        $parts = preg_split('/\R/u', $raw);
+        if ($parts === false) {
+            throw new \InvalidArgumentException(
+                'Metadata keyword values are invalid.',
+            );
+        }
+
+        $values = array_values(array_filter(
+            array_map(
+                static fn (string $value): string => trim($value),
+                $parts,
+            ),
+            static fn (string $value): bool => $value !== '',
+        ));
+
+        if ($values === []) {
+            throw new \InvalidArgumentException(
+                'Keyword operation requires at least one non-blank keyword.',
+            );
+        }
+
+        return ['action' => $action, 'values' => $values];
     }
 
     private function read(
