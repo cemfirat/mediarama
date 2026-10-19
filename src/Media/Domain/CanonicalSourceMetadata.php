@@ -142,7 +142,9 @@ final class CanonicalSourceMetadata
 
             $matches[] = [
                 'value' => $value,
-                'tag' => strtoupper($group).':'.$tag,
+                'tag' => str_contains($tag, ':')
+                    ? $tag
+                    : strtoupper($group).':'.$tag,
             ];
         }
 
