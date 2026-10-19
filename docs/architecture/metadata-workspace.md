@@ -1,11 +1,11 @@
 # Metadata Workspace
 
-Status: read-only inspection foundation  
+Status: inspection foundation + explicit single-asset descriptive editing  
 Tracking: #91
 
 The Metadata Workspace is the authenticated professional surface over Mediarama's existing complete source metadata snapshot, normalized canonical fields and per-field provenance.
 
-The first slice is deliberately read-only. It establishes information architecture, authorization and privacy semantics before batch or single-asset editing is added.
+The source-inspection layer remains deliberately read-only. The first write slice adds explicit owner-only editing for a bounded set of canonical descriptive fields without changing the immutable source snapshot.
 
 ## Information architecture
 
@@ -38,7 +38,17 @@ The first workspace surface shows Mediarama's existing normalized fields, includ
 
 Missing provenance is shown explicitly as not recorded rather than guessed.
 
-Editing semantics are intentionally not part of this first slice. A later editing slice must define validation and clear/revert behavior per canonical field rather than writing arbitrary raw tags.
+The first editing slice supports the canonical descriptive fields `title`, `description`, `creator`, `copyright` and `location_name`.
+
+Every field uses an explicit **Keep / Set / Clear** operation:
+
+- **Keep** leaves the canonical field and provenance untouched;
+- **Set** validates a bounded non-blank value, writes the canonical field and records provenance `user`;
+- **Clear** deliberately writes `null` and records provenance `user`.
+
+A blank Set value is rejected rather than being interpreted as Clear. This is the same semantic boundary required for future batch editing.
+
+Source JSON, original bytes and arbitrary raw tags remain read-only. Revert-to-source is not guessed from raw tag names; it requires a separate typed canonical-to-source mapping slice.
 
 ## Authorization and privacy
 
@@ -60,11 +70,11 @@ It does not:
 
 - rewrite the uploaded original;
 - alter source snapshot JSON;
-- alter canonical values or provenance;
+- write arbitrary raw/vendor tags;
 - change ACL, visibility or publication state;
 - trigger metadata export.
 
-Focused HTTP coverage verifies that opening the page leaves persisted metadata unchanged.
+Opening the page remains non-mutating. Explicit edit POSTs may change only the bounded canonical fields above. Title/description changes advance the truthful public-content timeline only when the MediaAsset is currently publicly reachable; private creator/copyright/location edits do not fabricate public SEO timestamps.
 
 ## Editing and batch direction
 

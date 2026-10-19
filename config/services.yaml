@@ -55,6 +55,9 @@ services:
     Mediarama\Media\Application\MediaAssetRepository:
         alias: Mediarama\Media\Infrastructure\Persistence\DbalMediaAssetRepository
 
+    Mediarama\Media\Application\MetadataWorkspaceEditor:
+        alias: Mediarama\Media\Infrastructure\Persistence\DbalMetadataWorkspaceEditor
+
     Mediarama\Platform\Application\PlatformSettingsRepository:
         alias: Mediarama\Platform\Infrastructure\Persistence\DbalPlatformSettingsRepository
 

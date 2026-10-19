@@ -32,6 +32,8 @@ final class MetadataWorkspaceReaderTest extends TestCase
 
         self::assertSame('Current title', $current['title']['value']);
         self::assertSame('user', $current['title']['provenance']);
+        self::assertNull($current['description']['value']);
+        self::assertSame('user', $current['description']['provenance']);
         self::assertTrue($current['latitude']['sensitive']);
         self::assertSame('48.123456', $current['latitude']['value']);
 
@@ -103,6 +105,7 @@ final class MetadataWorkspaceReaderTest extends TestCase
             ],
             metadataProvenance: [
                 'title' => 'user',
+                'description' => 'user',
                 'latitude' => 'embedded',
             ],
             latitude: 48.123456,

@@ -78,11 +78,9 @@ final readonly class MetadataWorkspaceReader
                 'key' => $key,
                 'label' => $label,
                 'value' => $formatted,
-                'provenance' => $formatted === null
-                    ? null
-                    : (isset($media->metadataProvenance[$key])
-                        ? (string) $media->metadataProvenance[$key]
-                        : 'not_recorded'),
+                'provenance' => isset($media->metadataProvenance[$key])
+                    ? (string) $media->metadataProvenance[$key]
+                    : ($formatted === null ? null : 'not_recorded'),
                 'sensitive' => $sensitive,
             ];
         }
