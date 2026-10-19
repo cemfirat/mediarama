@@ -9,7 +9,7 @@
     "watch:css": "lessc assets/less/app.less public/build/app.css --source-map --watch"
   },
   "dependencies": {
-    "uikit": "^3.25.12"
+    "uikit": "^3.25.26"
   },
   "devDependencies": {
     "less": "^4.2.2",
