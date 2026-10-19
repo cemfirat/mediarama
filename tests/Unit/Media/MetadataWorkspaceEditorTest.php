@@ -42,9 +42,9 @@ final class MetadataWorkspaceEditorTest extends TestCase
             $owner,
             $asset->id,
             [
-                'creator' => null,
-                'copyright' => '  Updated rights  ',
-                'location_name' => '  Vienna  ',
+                'creator' => ['action' => 'clear', 'value' => null],
+                'copyright' => ['action' => 'set', 'value' => '  Updated rights  '],
+                'location_name' => ['action' => 'set', 'value' => '  Vienna  '],
             ],
         );
 
@@ -56,6 +56,91 @@ final class MetadataWorkspaceEditorTest extends TestCase
         self::assertSame('user', $asset->metadataProvenance['location_name']);
         self::assertSame($source, $asset->metadata);
         self::assertSame(1, $repository->saveCalls);
+    }
+
+    public function testOwnerCanRevertToUnambiguousMappedSourceValue(): void
+    {
+        $owner = Uuid::fromString('75555555-5555-4555-8555-555555555551');
+        $asset = $this->media($owner);
+        $source = $asset->metadata;
+        $repository = $this->repository($asset);
+
+        $connection = $this->createMock(Connection::class);
+        $connection->expects(self::never())->method('fetchOne');
+        $timeline = $this->createMock(PublicPublicationTimelineStore::class);
+        $timeline->expects(self::never())->method('touchMediaPublicContent');
+
+        $editor = new DbalMetadataWorkspaceEditor(
+            $connection,
+            $repository,
+            $timeline,
+        );
+
+        $editor->update(
+            $owner,
+            $asset->id,
+            ['creator' => ['action' => 'revert', 'value' => null]],
+        );
+
+        self::assertSame('Immutable source creator', $asset->creator);
+        self::assertSame('embedded', $asset->metadataProvenance['creator']);
+        self::assertSame($source, $asset->metadata);
+        self::assertSame(1, $repository->saveCalls);
+    }
+
+    public function testRevertCanRestoreEmbeddedProvenanceWithoutChangingValue(): void
+    {
+        $owner = Uuid::fromString('75555555-5555-4555-8555-555555555551');
+        $asset = $this->media($owner);
+        $asset->creator = 'Immutable source creator';
+        $asset->metadataProvenance['creator'] = 'user';
+        $repository = $this->repository($asset);
+
+        $connection = $this->createMock(Connection::class);
+        $connection->expects(self::never())->method('fetchOne');
+        $timeline = $this->createMock(PublicPublicationTimelineStore::class);
+        $timeline->expects(self::never())->method('touchMediaPublicContent');
+
+        (new DbalMetadataWorkspaceEditor(
+            $connection,
+            $repository,
+            $timeline,
+        ))->update(
+            $owner,
+            $asset->id,
+            ['creator' => ['action' => 'revert', 'value' => null]],
+        );
+
+        self::assertSame('Immutable source creator', $asset->creator);
+        self::assertSame('embedded', $asset->metadataProvenance['creator']);
+        self::assertSame(1, $repository->saveCalls);
+    }
+
+    public function testConflictingSourceValuesFailClosedBeforeMutation(): void
+    {
+        $owner = Uuid::fromString('75555555-5555-4555-8555-555555555551');
+        $asset = $this->media($owner);
+        $asset->metadata['iptc'] = ['ObjectName' => 'Conflicting IPTC title'];
+        $repository = $this->repository($asset);
+
+        $editor = new DbalMetadataWorkspaceEditor(
+            $this->createMock(Connection::class),
+            $repository,
+            $this->createMock(PublicPublicationTimelineStore::class),
+        );
+
+        try {
+            $editor->update(
+                $owner,
+                $asset->id,
+                ['title' => ['action' => 'revert', 'value' => null]],
+            );
+            self::fail('Conflicting source values must fail closed.');
+        } catch (\InvalidArgumentException) {
+            self::assertSame('Current title', $asset->title);
+            self::assertSame('embedded', $asset->metadataProvenance['title']);
+            self::assertSame(0, $repository->saveCalls);
+        }
     }
 
     public function testPublicPresentationEditTouchesTruthfulPublicTimeline(): void
@@ -84,7 +169,7 @@ final class MetadataWorkspaceEditorTest extends TestCase
         $editor->update(
             $owner,
             $asset->id,
-            ['title' => 'Updated public title'],
+            ['title' => ['action' => 'set', 'value' => 'Updated public title']],
         );
 
         self::assertSame('Updated public title', $asset->title);
@@ -107,7 +192,7 @@ final class MetadataWorkspaceEditorTest extends TestCase
         $editor->update(
             $owner,
             $asset->id,
-            ['creator' => '   '],
+            ['creator' => ['action' => 'set', 'value' => '   ']],
         );
     }
 
@@ -126,7 +211,7 @@ final class MetadataWorkspaceEditorTest extends TestCase
         $editor->update(
             Uuid::fromString('75555555-5555-4555-8555-555555555552'),
             $asset->id,
-            ['title' => 'Forbidden edit'],
+            ['title' => ['action' => 'set', 'value' => 'Forbidden edit']],
         );
     }
 

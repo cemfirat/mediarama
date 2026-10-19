@@ -17,7 +17,7 @@ use Symfony\Component\Uid\Uuid;
 
 final class MetadataWorkspaceReaderTest extends TestCase
 {
-    public function testOwnerSeesSeparatedCurrentProvenanceAndCompleteSourceGroups(): void
+    public function testOwnerSeesSeparatedCurrentProvenanceSourcePreviewAndCompleteGroups(): void
     {
         $owner = Uuid::fromString('77777777-7777-4777-8777-777777777771');
         $media = $this->media($owner);
@@ -32,10 +32,19 @@ final class MetadataWorkspaceReaderTest extends TestCase
 
         self::assertSame('Current title', $current['title']['value']);
         self::assertSame('user', $current['title']['provenance']);
+        self::assertTrue($current['title']['canRevert']);
+        self::assertSame('Source title', $current['title']['sourceValue']);
+        self::assertSame('XMP:Title', $current['title']['sourceTag']);
+
         self::assertNull($current['description']['value']);
         self::assertSame('user', $current['description']['provenance']);
+        self::assertFalse($current['description']['canRevert']);
+        self::assertNull($current['description']['sourceValue']);
+        self::assertNull($current['description']['sourceTag']);
+
         self::assertTrue($current['latitude']['sensitive']);
         self::assertSame('48.123456', $current['latitude']['value']);
+        self::assertFalse($current['latitude']['canRevert']);
 
         self::assertArrayHasKey('exif', $view->sourceGroups);
         self::assertArrayHasKey('iptc', $view->sourceGroups);
@@ -60,6 +69,24 @@ final class MetadataWorkspaceReaderTest extends TestCase
             'RAW_UNKNOWN_SENTINEL',
             $view->sourceGroups['other']['tags'][0]['value'],
         );
+    }
+
+    public function testConflictingMappedSourceValuesDisableRevertPreview(): void
+    {
+        $owner = Uuid::fromString('77777777-7777-4777-8777-777777777771');
+        $media = $this->media($owner);
+        $media->metadata['iptc']['ObjectName'] = 'Conflicting source title';
+        $reader = new MetadataWorkspaceReader($this->repository($media));
+
+        $view = $reader->read($owner, $media->id);
+        $title = array_values(array_filter(
+            $view->currentFields,
+            static fn (array $field): bool => $field['key'] === 'title',
+        ))[0];
+
+        self::assertFalse($title['canRevert']);
+        self::assertNull($title['sourceValue']);
+        self::assertNull($title['sourceTag']);
     }
 
     public function testNonOwnerCannotReadRawMetadataWorkspace(): void

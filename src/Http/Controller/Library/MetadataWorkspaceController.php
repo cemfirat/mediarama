@@ -120,7 +120,7 @@ final class MetadataWorkspaceController extends AbstractController
 
     /**
      * @param array<string,mixed> $payload
-     * @return array<string,?string>
+     * @return array<string,array{action:string,value:?string}>
      */
     private function changes(array $payload): array
     {
@@ -146,8 +146,11 @@ final class MetadataWorkspaceController extends AbstractController
                 continue;
             }
 
-            if ($action === 'clear') {
-                $changes[$field] = null;
+            if ($action === 'clear' || $action === 'revert') {
+                $changes[$field] = [
+                    'action' => $action,
+                    'value' => null,
+                ];
                 continue;
             }
 
@@ -164,12 +167,15 @@ final class MetadataWorkspaceController extends AbstractController
                 );
             }
 
-            $changes[$field] = $value;
+            $changes[$field] = [
+                'action' => 'set',
+                'value' => $value,
+            ];
         }
 
         if ($changes === []) {
             throw new \InvalidArgumentException(
-                'Choose at least one metadata field to set or clear.',
+                'Choose at least one metadata field to set, clear or revert.',
             );
         }
 

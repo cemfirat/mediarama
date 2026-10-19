@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Mediarama\Media\Application;
 
 use DateTimeInterface;
+use Mediarama\Media\Domain\CanonicalSourceMetadata;
 use Mediarama\Media\Domain\MediaAsset;
 use Symfony\Component\Uid\Uuid;
 
@@ -49,7 +50,16 @@ final readonly class MetadataWorkspaceReader
     }
 
     /**
-     * @return list<array{key:string,label:string,value:?string,provenance:?string,sensitive:bool}>
+     * @return list<array{
+     *     key:string,
+     *     label:string,
+     *     value:?string,
+     *     provenance:?string,
+     *     sensitive:bool,
+     *     sourceValue:?string,
+     *     sourceTag:?string,
+     *     canRevert:bool
+     * }>
      */
     private function currentFields(MediaAsset $media): array
     {
@@ -74,6 +84,10 @@ final readonly class MetadataWorkspaceReader
         $result = [];
         foreach ($fields as [$key, $label, $value, $sensitive]) {
             $formatted = $this->currentValue($value);
+            $source = CanonicalSourceMetadata::fromStoredSnapshot(
+                $media->metadata,
+                $key,
+            );
             $result[] = [
                 'key' => $key,
                 'label' => $label,
@@ -82,6 +96,9 @@ final readonly class MetadataWorkspaceReader
                     ? (string) $media->metadataProvenance[$key]
                     : ($formatted === null ? null : 'not_recorded'),
                 'sensitive' => $sensitive,
+                'sourceValue' => $source['value'] ?? null,
+                'sourceTag' => $source['tag'] ?? null,
+                'canRevert' => $source !== null,
             ];
         }
 

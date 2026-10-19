@@ -8,7 +8,9 @@ use DateTimeImmutable;
 use Doctrine\DBAL\Connection;
 use Mediarama\Media\Application\MediaAssetRepository;
 use Mediarama\Media\Application\MetadataWorkspaceEditor;
+use Mediarama\Media\Domain\CanonicalSourceMetadata;
 use Mediarama\Media\Domain\MediaAsset;
+use Mediarama\Media\Domain\MetadataProvenance;
 use Mediarama\Publishing\Application\PublicPublicationTimelineStore;
 use Symfony\Component\Uid\Uuid;
 
@@ -35,32 +37,7 @@ final readonly class DbalMetadataWorkspaceEditor implements MetadataWorkspaceEdi
         Uuid $mediaId,
         array $changes,
     ): void {
-        if ($changes === []) {
-            throw new \InvalidArgumentException(
-                'Choose at least one metadata field to set or clear.',
-            );
-        }
-
-        $normalized = [];
-        foreach ($changes as $field => $value) {
-            if (!is_string($field) || !array_key_exists($field, self::FIELD_LIMITS)) {
-                throw new \InvalidArgumentException(
-                    'Metadata workspace contains an unsupported editable field.',
-                );
-            }
-
-            if ($value !== null && !is_string($value)) {
-                throw new \InvalidArgumentException(
-                    'Metadata workspace field value is invalid.',
-                );
-            }
-
-            $normalized[$field] = $this->value(
-                $field,
-                $value,
-                self::FIELD_LIMITS[$field],
-            );
-        }
+        $prepared = $this->prepare($changes);
 
         $asset = $this->media->get($mediaId);
         if ($asset->ownerId === null || !$asset->ownerId->equals($ownerId)) {
@@ -69,18 +46,67 @@ final readonly class DbalMetadataWorkspaceEditor implements MetadataWorkspaceEdi
             );
         }
 
+        $resolved = [];
+        foreach ($prepared as $field => $change) {
+            $action = $change['action'];
+            $value = $change['value'];
+            $provenance = MetadataProvenance::User;
+
+            if ($action === 'revert') {
+                $source = CanonicalSourceMetadata::fromStoredSnapshot(
+                    $asset->metadata,
+                    $field,
+                );
+                if ($source === null) {
+                    throw new \InvalidArgumentException(sprintf(
+                        'Metadata field "%s" has no unambiguous source value to restore.',
+                        $field,
+                    ));
+                }
+
+                $value = $this->value(
+                    $field,
+                    $source['value'],
+                    self::FIELD_LIMITS[$field],
+                );
+                $provenance = MetadataProvenance::Embedded;
+            }
+
+            $resolved[$field] = [
+                'action' => $action,
+                'value' => $value,
+                'provenance' => $provenance,
+            ];
+        }
+
         $changed = false;
         $publicPresentationChanged = false;
 
-        foreach ($normalized as $field => $value) {
-            if ($this->current($asset, $field) === $value) {
+        foreach ($resolved as $field => $change) {
+            $current = $this->current($asset, $field);
+            $valueChanged = $current !== $change['value'];
+            $currentProvenance = isset($asset->metadataProvenance[$field])
+                ? (string) $asset->metadataProvenance[$field]
+                : null;
+            $provenanceChanged = $currentProvenance !== $change['provenance']->value;
+
+            if (
+                !$valueChanged
+                && ($change['action'] !== 'revert' || !$provenanceChanged)
+            ) {
                 continue;
             }
 
-            $asset->editMetadata($field, $value);
+            $asset->editMetadata($field, $change['value']);
+            if ($change['action'] === 'revert') {
+                $asset->metadataProvenance[$field] = MetadataProvenance::Embedded->value;
+            }
             $changed = true;
 
-            if ($field === 'title' || $field === 'description') {
+            if (
+                $valueChanged
+                && ($field === 'title' || $field === 'description')
+            ) {
                 $publicPresentationChanged = true;
             }
         }
@@ -99,6 +125,67 @@ final readonly class DbalMetadataWorkspaceEditor implements MetadataWorkspaceEdi
                 new DateTimeImmutable(),
             );
         }
+    }
+
+    /**
+     * @param array<string,array{action:string,value:?string}> $changes
+     * @return array<string,array{action:string,value:?string}>
+     */
+    private function prepare(array $changes): array
+    {
+        if ($changes === []) {
+            throw new \InvalidArgumentException(
+                'Choose at least one metadata field to set, clear or revert.',
+            );
+        }
+
+        $prepared = [];
+        foreach ($changes as $field => $change) {
+            if (!is_string($field) || !array_key_exists($field, self::FIELD_LIMITS)) {
+                throw new \InvalidArgumentException(
+                    'Metadata workspace contains an unsupported editable field.',
+                );
+            }
+
+            if (!is_array($change)) {
+                throw new \InvalidArgumentException(
+                    'Metadata workspace field operation is invalid.',
+                );
+            }
+
+            $action = $change['action'] ?? null;
+            if (!is_string($action) || !in_array($action, ['set', 'clear', 'revert'], true)) {
+                throw new \InvalidArgumentException(
+                    'Metadata workspace field operation is invalid.',
+                );
+            }
+
+            $value = $change['value'] ?? null;
+            if ($action === 'set') {
+                if (!is_string($value)) {
+                    throw new \InvalidArgumentException(
+                        'Metadata workspace field value is invalid.',
+                    );
+                }
+
+                $value = $this->value(
+                    $field,
+                    $value,
+                    self::FIELD_LIMITS[$field],
+                );
+            } elseif ($value !== null) {
+                throw new \InvalidArgumentException(
+                    'Clear and revert operations must not carry a field value.',
+                );
+            }
+
+            $prepared[$field] = [
+                'action' => $action,
+                'value' => $action === 'clear' ? null : $value,
+            ];
+        }
+
+        return $prepared;
     }
 
     private function value(
