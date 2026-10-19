@@ -46,9 +46,7 @@ final class CanonicalSourceMetadataTest extends TestCase
 
         self::assertNotNull($source);
         self::assertSame('Source title', $source['value']);
-        self::assertStringContainsString('XMP:Title', $source['tag']);
-        self::assertStringContainsString('IPTC:ObjectName', $source['tag']);
-        self::assertStringNotContainsString('TitleLikeButUnmapped', $source['tag']);
+        self::assertSame('XMP:Title + IPTC:ObjectName', $source['tag']);
     }
 
     public function testStoredSnapshotFailsClosedWhenMappedNamespacesDisagree(): void
