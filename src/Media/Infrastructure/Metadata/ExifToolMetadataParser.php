@@ -6,6 +6,7 @@ namespace Mediarama\Media\Infrastructure\Metadata;
 
 use DateTimeImmutable;
 use Mediarama\Media\Application\InspectedMetadata;
+use Mediarama\Media\Domain\CanonicalSourceKeywords;
 use Mediarama\Media\Domain\CanonicalSourceMetadata;
 
 final class ExifToolMetadataParser
@@ -55,7 +56,7 @@ final class ExifToolMetadataParser
                 'EXIF:GPSLongitude',
             ])),
             locationName: $this->canonical($raw, 'location_name'),
-            keywords: $this->strings($this->first($raw, ['XMP-dc:Subject', 'XMP:Subject', 'IPTC:Keywords'])),
+            keywords: CanonicalSourceKeywords::fromExifTool($raw)['values'] ?? [],
         );
     }
 
@@ -121,21 +122,6 @@ final class ExifToolMetadataParser
     private function float(mixed $value): ?float
     {
         return is_numeric($value) ? (float) $value : null;
-    }
-
-    /** @return list<string> */
-    private function strings(mixed $value): array
-    {
-        if ($value === null) {
-            return [];
-        }
-
-        $values = is_array($value) ? $value : [$value];
-
-        return array_values(array_filter(array_map(
-            static fn (mixed $item): string => trim((string) $item),
-            $values,
-        ), static fn (string $item): bool => $item !== ''));
     }
 
     private function date(mixed $value): ?DateTimeImmutable

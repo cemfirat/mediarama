@@ -20,6 +20,12 @@ final readonly class MetadataWorkspaceView
      *     sourceTag:?string,
      *     canRevert:bool
      * }> $currentFields
+     * @param array{
+     *     current:list<array{name:string,source:string}>,
+     *     sourceValues:list<string>,
+     *     sourceTag:?string,
+     *     canRevert:bool
+     * } $keywords
      * @param array<string,array{label:string,tags:list<array{name:string,value:string,sensitive:bool}>}> $sourceGroups
      */
     public function __construct(
@@ -35,6 +41,7 @@ final readonly class MetadataWorkspaceView
         public DateTimeImmutable $createdAt,
         public DateTimeImmutable $updatedAt,
         public array $currentFields,
+        public array $keywords,
         public array $sourceGroups,
     ) {
     }
