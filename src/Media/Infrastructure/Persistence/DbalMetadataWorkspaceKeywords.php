@@ -290,7 +290,7 @@ final readonly class DbalMetadataWorkspaceKeywords implements MetadataWorkspaceK
         string $action,
         array $values,
     ): array {
-        if (!in_array($action, ['replace', 'append', 'remove', 'clear'], true)) {
+        if (!in_array($action, ['keep', 'replace', 'append', 'remove', 'clear'], true)) {
             throw new \InvalidArgumentException(
                 'Metadata keyword batch operation is invalid.',
             );
@@ -322,10 +322,10 @@ final readonly class DbalMetadataWorkspaceKeywords implements MetadataWorkspaceK
             );
         }
 
-        if ($action === 'clear') {
+        if ($action === 'keep' || $action === 'clear') {
             if ($values !== []) {
                 throw new \InvalidArgumentException(
-                    'Clear keyword operation must not carry values.',
+                    'Keep and clear keyword operations must not carry values.',
                 );
             }
 
@@ -443,7 +443,12 @@ final readonly class DbalMetadataWorkspaceKeywords implements MetadataWorkspaceK
         }
         $currentByName = $this->namesByKey($currentNames);
 
-        if ($action === 'append') {
+        if ($action === 'keep') {
+            $addedByName = [];
+            $removedByName = [];
+            $resultByName = $currentByName;
+            $changed = false;
+        } elseif ($action === 'append') {
             $addedByName = array_diff_key($requested, $currentByName);
             $resultByName = $currentByName + $addedByName;
             $removedByName = [];

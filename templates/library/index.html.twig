@@ -135,7 +135,8 @@
                 <div class="uk-width-1-4@m">
                     <label class="uk-form-label" for="metadata-keyword-batch-action">Operation</label>
                     <select id="metadata-keyword-batch-action" class="uk-select" name="keyword_action">
-                        <option value="append" selected>Append</option>
+                        <option value="keep" selected>Leave unchanged</option>
+                        <option value="append">Append</option>
                         <option value="replace">Replace</option>
                         <option value="remove">Remove</option>
                         <option value="clear">Clear all</option>
@@ -144,7 +145,7 @@
                 <div class="uk-width-expand@m">
                     <label class="uk-form-label" for="metadata-keyword-batch-values">Keywords</label>
                     <textarea id="metadata-keyword-batch-values" class="uk-textarea" rows="3" maxlength="32200" name="keyword_values" placeholder="One keyword per line"></textarea>
-                    <div class="uk-text-meta">Blank input is rejected for Append, Replace and Remove; use Clear all to remove keywords.</div>
+                    <div class="uk-text-meta">Blank input is rejected for Append, Replace and Remove; use Clear all to remove keywords. Leave unchanged is the safe default.</div>
                 </div>
                 <div class="uk-width-auto">
                     <button class="uk-button uk-button-secondary" type="submit">Preview selected</button>

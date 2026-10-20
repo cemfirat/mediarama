@@ -158,14 +158,14 @@ final class MetadataKeywordBatchController extends AbstractController
         $action = $payload['keyword_action'] ?? null;
         if (
             !is_string($action)
-            || !in_array($action, ['replace', 'append', 'remove', 'clear'], true)
+            || !in_array($action, ['keep', 'replace', 'append', 'remove', 'clear'], true)
         ) {
             throw new \InvalidArgumentException(
                 'Metadata keyword operation is invalid.',
             );
         }
 
-        if ($action === 'clear') {
+        if ($action === 'keep' || $action === 'clear') {
             return ['action' => $action, 'values' => []];
         }
 

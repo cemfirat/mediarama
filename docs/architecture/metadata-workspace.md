@@ -75,7 +75,7 @@ Keyword mutations update the MediaAsset's private workspace timestamp but do not
 
 The Library can select up to 200 requester-owned MediaAssets for one keyword operation. Assets not owned by the requester cannot be selected for this workflow, and the server independently verifies ownership for every submitted ID.
 
-The batch editor supports explicit **Replace**, **Append**, **Remove** and **Clear all** operations. Append, Replace and Remove require one or more non-blank keywords; blank input never means deletion. Keyword input retains the single-asset limits of 200 values, 1–160 printable characters per value, case-insensitive matching and de-duplication.
+The batch editor supports explicit **Leave unchanged**, **Replace**, **Append**, **Remove** and **Clear all** operations. Leave unchanged is the safe default. Append, Replace and Remove require one or more non-blank keywords; blank input never means deletion. Keyword input retains the single-asset limits of 200 values, 1–160 printable characters per value, case-insensitive matching and de-duplication.
 
 Before writing, the owner reviews each selected asset's current keyword set, resulting set and additions/removals. Confirmation revalidates the entire selection and applies changes in one transaction; if any asset is missing, deleted or not owned by the requester, none are changed. Assets with no effective change are skipped, and an all-no-op batch is rejected.
 

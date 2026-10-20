@@ -35,6 +35,17 @@ final class MetadataKeywordBatchControllerTest extends TestCase
         );
     }
 
+    public function testKeepDoesNotUseClientSuppliedKeywords(): void
+    {
+        self::assertSame(
+            ['action' => 'keep', 'values' => []],
+            $this->change([
+                'keyword_action' => 'keep',
+                'keyword_values' => ['ignored'],
+            ]),
+        );
+    }
+
     public function testBlankAppendIsRejected(): void
     {
         $this->expectException(\InvalidArgumentException::class);
