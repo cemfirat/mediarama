@@ -1,0 +1,59 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Review keyword changes · Mediarama{% endblock %}
+
+{% block body %}
+<div class="uk-margin-bottom">
+    <a class="uk-text-meta" href="{{ path('library_home') }}">← Back to Library</a>
+    <h1 class="uk-heading-small uk-margin-small-top">Review batch keyword changes</h1>
+    <p class="uk-text-lead">{{ preview|length }} selected MediaAssets · {{ preview|filter(item => item.changed)|length }} will change.</p>
+</div>
+
+<div class="uk-alert-warning" uk-alert>
+    <p>Review the affected assets and keyword sets before confirming. This operation changes only normalized keyword memberships, not source metadata or original files.</p>
+</div>
+
+{% if action == 'keep' %}
+    <p><strong>Operation:</strong> Leave all selected keyword sets unchanged.</p>
+{% elseif action == 'clear' %}
+    <p><strong>Operation:</strong> Clear all current keywords from the selected assets.</p>
+{% else %}
+    <p><strong>Operation:</strong> {{ action|capitalize }} <span class="uk-text-break">{{ values|join(', ') }}</span></p>
+{% endif %}
+
+<div class="uk-overflow-auto">
+    <table class="uk-table uk-table-divider uk-table-small uk-table-middle">
+        <thead>
+            <tr><th>Asset</th><th>Current keywords</th><th>After confirmation</th><th>Change</th></tr>
+        </thead>
+        <tbody>
+        {% for item in preview %}
+            <tr>
+                <td>
+                    <strong>{{ item.title ?: item.filename }}</strong>
+                    {% if item.title %}<div class="uk-text-meta">{{ item.filename }}</div>{% endif %}
+                    {% if not item.changed %}<div class="uk-text-meta">No change</div>{% endif %}
+                </td>
+                <td>{{ item.current is not empty ? item.current|join(', ') : '—' }}</td>
+                <td>{{ item.result is not empty ? item.result|join(', ') : '—' }}</td>
+                <td>
+                    {% if item.added is not empty %}<div>Added: {{ item.added|join(', ') }}</div>{% endif %}
+                    {% if item.removed is not empty %}<div>Removed: {{ item.removed|join(', ') }}</div>{% endif %}
+                    {% if item.added is empty and item.removed is empty and item.changed %}<div>Membership provenance will be set to manual.</div>{% endif %}
+                    {% if not item.changed %}No change{% endif %}
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<form method="post" action="{{ path('library_metadata_keywords_batch_apply') }}" class="uk-margin">
+    <input type="hidden" name="_csrf_token" value="{{ apply_csrf_token }}">
+    <input type="hidden" name="keyword_action" value="{{ action }}">
+    {% for value in values %}<input type="hidden" name="keyword_values[]" value="{{ value }}">{% endfor %}
+    {% for item in preview %}<input type="hidden" name="media_ids[]" value="{{ item.id }}">{% endfor %}
+    <button class="uk-button uk-button-danger" type="submit" {% if preview|filter(item => item.changed)|length == 0 %}disabled{% endif %}>Confirm keyword changes</button>
+    <a class="uk-button uk-button-default uk-margin-small-left" href="{{ path('library_home') }}">Cancel</a>
+</form>
+{% endblock %}

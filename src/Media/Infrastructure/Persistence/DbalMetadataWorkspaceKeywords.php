@@ -17,6 +17,7 @@ use Symfony\Component\Uid\Uuid;
 final readonly class DbalMetadataWorkspaceKeywords implements MetadataWorkspaceKeywords
 {
     private const MAX_KEYWORDS = 200;
+    private const MAX_BATCH_MEDIA = 200;
     private const MAX_NAME_LENGTH = 160;
 
     public function __construct(private Connection $connection)
@@ -154,6 +155,332 @@ final readonly class DbalMetadataWorkspaceKeywords implements MetadataWorkspaceK
                 ['id' => $mediaId->toRfc4122()],
             );
         });
+    }
+
+    public function previewMany(
+        Uuid $ownerId,
+        array $mediaIds,
+        string $action,
+        array $values,
+    ): array {
+        [$ids, $values] = $this->batchInput($mediaIds, $action, $values);
+        $assets = $this->ownedAssets(
+            $this->connection,
+            $ownerId,
+            $ids,
+            false,
+        );
+        $current = $this->rowsByMedia($this->connection, $ids);
+
+        $preview = [];
+        foreach ($assets as $asset) {
+            $id = (string) $asset['id'];
+            $changes = $this->keywordResult(
+                $current[$id] ?? [],
+                $action,
+                $values,
+            );
+            $preview[] = [
+                'id' => $id,
+                'filename' => (string) $asset['original_filename'],
+                'title' => $asset['title'] === null
+                    ? null
+                    : (string) $asset['title'],
+                'current' => $changes['current'],
+                'result' => $changes['result'],
+                'added' => $changes['added'],
+                'removed' => $changes['removed'],
+                'changed' => $changes['changed'],
+            ];
+        }
+
+        return $preview;
+    }
+
+    public function updateMany(
+        Uuid $ownerId,
+        array $mediaIds,
+        string $action,
+        array $values,
+    ): int {
+        [$ids, $values] = $this->batchInput($mediaIds, $action, $values);
+
+        return $this->connection->transactional(function (Connection $connection) use (
+            $ownerId,
+            $ids,
+            $action,
+            $values,
+        ): int {
+            $assets = $this->ownedAssets(
+                $connection,
+                $ownerId,
+                $ids,
+                true,
+            );
+            $current = $this->rowsByMedia($connection, $ids);
+            $updates = [];
+
+            foreach ($assets as $asset) {
+                $id = (string) $asset['id'];
+                $changes = $this->keywordResult(
+                    $current[$id] ?? [],
+                    $action,
+                    $values,
+                );
+                if ($changes['changed']) {
+                    $updates[$id] = $changes;
+                }
+            }
+
+            if ($updates === []) {
+                throw new \InvalidArgumentException(
+                    'Metadata keyword batch contains no effective changes.',
+                );
+            }
+
+            foreach ($updates as $id => $changes) {
+                if ($action === 'append') {
+                    foreach ($changes['added'] as $name) {
+                        $this->attach(
+                            $connection,
+                            Uuid::fromString($id),
+                            $name,
+                            'manual',
+                        );
+                    }
+                } elseif ($action === 'remove') {
+                    $this->remove(
+                        $connection,
+                        Uuid::fromString($id),
+                        array_map(
+                            static fn (string $name): string => mb_strtolower($name, 'UTF-8'),
+                            $changes['removed'],
+                        ),
+                    );
+                } else {
+                    $connection->delete('media_tags', ['media_id' => $id]);
+                    foreach ($changes['result'] as $name) {
+                        $this->attach(
+                            $connection,
+                            Uuid::fromString($id),
+                            $name,
+                            'manual',
+                        );
+                    }
+                }
+
+                $connection->update(
+                    'media_assets',
+                    ['updated_at' => (new DateTimeImmutable())->format(DATE_ATOM)],
+                    ['id' => $id],
+                );
+            }
+
+            return count($updates);
+        });
+    }
+
+    /**
+     * @param list<Uuid> $mediaIds
+     * @param list<string> $values
+     * @return array{0:list<Uuid>,1:list<string>}
+     */
+    private function batchInput(
+        array $mediaIds,
+        string $action,
+        array $values,
+    ): array {
+        if (!in_array($action, ['keep', 'replace', 'append', 'remove', 'clear'], true)) {
+            throw new \InvalidArgumentException(
+                'Metadata keyword batch operation is invalid.',
+            );
+        }
+
+        if (
+            $mediaIds === []
+            || count($mediaIds) > self::MAX_BATCH_MEDIA
+        ) {
+            throw new \InvalidArgumentException(
+                'Metadata keyword batch requires 1-200 MediaAssets.',
+            );
+        }
+
+        $ids = [];
+        foreach ($mediaIds as $mediaId) {
+            if (!$mediaId instanceof Uuid) {
+                throw new \InvalidArgumentException(
+                    'Metadata keyword batch selection is invalid.',
+                );
+            }
+
+            $ids[$mediaId->toRfc4122()] = $mediaId;
+        }
+
+        if (count($ids) !== count($mediaIds)) {
+            throw new \InvalidArgumentException(
+                'Metadata keyword batch selection must be unique.',
+            );
+        }
+
+        if ($action === 'keep' || $action === 'clear') {
+            if ($values !== []) {
+                throw new \InvalidArgumentException(
+                    'Keep and clear keyword operations must not carry values.',
+                );
+            }
+
+            $values = [];
+        } else {
+            $values = $this->names($values);
+            if ($values === []) {
+                throw new \InvalidArgumentException(
+                    'Keyword batch operation requires at least one non-blank keyword.',
+                );
+            }
+        }
+
+        return [array_values($ids), $values];
+    }
+
+    /**
+     * @param list<Uuid> $mediaIds
+     * @return list<array{id:string,original_filename:string,title:?string}>
+     */
+    private function ownedAssets(
+        Connection $connection,
+        Uuid $ownerId,
+        array $mediaIds,
+        bool $lock,
+    ): array {
+        $sql = 'SELECT id, original_filename, title
+                FROM media_assets
+                WHERE owner_id = :owner
+                  AND deleted_at IS NULL
+                  AND id IN (:media_ids)
+                ORDER BY id';
+        if ($lock) {
+            $sql .= ' FOR UPDATE';
+        }
+
+        $assets = $connection->fetchAllAssociative(
+            $sql,
+            [
+                'owner' => $ownerId->toRfc4122(),
+                'media_ids' => array_map(
+                    static fn (Uuid $id): string => $id->toRfc4122(),
+                    $mediaIds,
+                ),
+            ],
+            ['media_ids' => ArrayParameterType::STRING],
+        );
+
+        if (count($assets) !== count($mediaIds)) {
+            throw new \DomainException(
+                'Metadata keyword batches may modify only requester-owned MediaAssets.',
+            );
+        }
+
+        return $assets;
+    }
+
+    /**
+     * @param list<Uuid> $mediaIds
+     * @return array<string,array<string,array{id:string,name:string,source:string}>>
+     */
+    private function rowsByMedia(
+        Connection $connection,
+        array $mediaIds,
+    ): array {
+        $rows = $connection->fetchAllAssociative(
+            'SELECT mt.media_id, t.id, t.name, mt.source
+             FROM media_tags mt
+             JOIN tags t ON t.id = mt.tag_id
+             WHERE mt.media_id IN (:media_ids)
+             ORDER BY mt.media_id, LOWER(t.name), t.id',
+            [
+                'media_ids' => array_map(
+                    static fn (Uuid $id): string => $id->toRfc4122(),
+                    $mediaIds,
+                ),
+            ],
+            ['media_ids' => ArrayParameterType::STRING],
+        );
+
+        $result = [];
+        foreach ($rows as $row) {
+            $mediaId = (string) $row['media_id'];
+            $name = (string) $row['name'];
+            $result[$mediaId][mb_strtolower($name, 'UTF-8')] = [
+                'id' => (string) $row['id'],
+                'name' => $name,
+                'source' => (string) $row['source'],
+            ];
+        }
+
+        return $result;
+    }
+
+    /**
+     * @param array<string,array{id:string,name:string,source:string}> $current
+     * @param list<string> $values
+     * @return array{
+     *     current:list<string>,
+     *     result:list<string>,
+     *     added:list<string>,
+     *     removed:list<string>,
+     *     changed:bool
+     * }
+     */
+    private function keywordResult(
+        array $current,
+        string $action,
+        array $values,
+    ): array {
+        $requested = $this->namesByKey($values);
+        $currentNames = [];
+        foreach ($current as $row) {
+            $currentNames[] = $row['name'];
+        }
+        $currentByName = $this->namesByKey($currentNames);
+
+        if ($action === 'keep') {
+            $addedByName = [];
+            $removedByName = [];
+            $resultByName = $currentByName;
+            $changed = false;
+        } elseif ($action === 'append') {
+            $addedByName = array_diff_key($requested, $currentByName);
+            $resultByName = $currentByName + $addedByName;
+            $removedByName = [];
+            $changed = $addedByName !== [];
+        } elseif ($action === 'remove') {
+            $removedByName = array_intersect_key($currentByName, $requested);
+            $resultByName = array_diff_key($currentByName, $requested);
+            $addedByName = [];
+            $changed = $removedByName !== [];
+        } elseif ($action === 'clear') {
+            $addedByName = [];
+            $removedByName = $currentByName;
+            $resultByName = [];
+            $changed = $currentByName !== [];
+        } else {
+            $addedByName = array_diff_key($requested, $currentByName);
+            $removedByName = array_diff_key($currentByName, $requested);
+            $resultByName = $requested;
+            $changed = $this->replacementChanged(
+                $current,
+                $requested,
+                'manual',
+            );
+        }
+
+        return [
+            'current' => array_values($currentByName),
+            'result' => array_values($resultByName),
+            'added' => array_values($addedByName),
+            'removed' => array_values($removedByName),
+            'changed' => $changed,
+        ];
     }
 
     /**

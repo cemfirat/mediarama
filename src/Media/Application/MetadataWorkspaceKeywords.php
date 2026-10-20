@@ -27,4 +27,39 @@ interface MetadataWorkspaceKeywords
         string $action,
         array $values,
     ): void;
+
+    /**
+     * @param list<Uuid> $mediaIds
+     * @param list<string> $values
+     * @return list<array{
+     *     id:string,
+     *     filename:string,
+     *     title:?string,
+     *     current:list<string>,
+     *     result:list<string>,
+     *     added:list<string>,
+     *     removed:list<string>,
+     *     changed:bool
+     * }>
+     */
+    public function previewMany(
+        Uuid $ownerId,
+        array $mediaIds,
+        string $action,
+        array $values,
+    ): array;
+
+    /**
+     * Apply one explicit keyword operation atomically to requester-owned assets.
+     *
+     * @param list<Uuid> $mediaIds
+     * @param list<string> $values
+     * @return int number of MediaAssets changed
+     */
+    public function updateMany(
+        Uuid $ownerId,
+        array $mediaIds,
+        string $action,
+        array $values,
+    ): int;
 }
