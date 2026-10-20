@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Mediarama\Http\Controller\Library;
 
+use Mediarama\Http\Support\InputBagValue;
 use Mediarama\Http\Support\LibraryMediaSearchCriteriaFactory;
 use Mediarama\Media\Application\LibraryMediaSearch;
 use Mediarama\Media\Application\LibraryMediaSearchCriteria;
@@ -65,8 +66,14 @@ final class LibraryBrowserController extends AbstractController
                 'error' => $error,
                 'smart_error' => $request->query->getString('smart_error') ?: null,
                 'organization_error' => $request->query->getString('organization_error') ?: null,
-                'metadata_batch_error' => $request->query->getBoolean('metadata_batch_error'),
-                'metadata_batch_saved' => $request->query->getInt('metadata_batch_saved'),
+                'metadata_batch_error' => InputBagValue::booleanOrDefault(
+                    $request->query,
+                    'metadata_batch_error',
+                ),
+                'metadata_batch_saved' => InputBagValue::integerOrDefault(
+                    $request->query,
+                    'metadata_batch_saved',
+                ),
             ],
             new Response(status: $error === null ? Response::HTTP_OK : Response::HTTP_BAD_REQUEST),
         );

@@ -7,6 +7,8 @@ BASE_URL="http://127.0.0.1:8098"
 OWNER_ID="76666666-6666-4666-8666-666666666661"
 OTHER_ID="76666666-6666-4666-8666-666666666662"
 MEDIA_ID="76666666-6666-4666-8666-666666666669"
+BATCH_MEDIA_ID="76666666-6666-4666-8666-666666666670"
+BATCH_TAG_ID="76666666-6666-4666-8666-666666666671"
 PASSWORD="mediarama-metadata-workspace-ci"
 OWNER_JAR="/tmp/metadata-workspace-owner.cookies"
 OTHER_JAR="/tmp/metadata-workspace-other.cookies"
@@ -29,6 +31,8 @@ $db = Doctrine\DBAL\DriverManager::getConnection(
     $dsn->parse((string) getenv('DATABASE_URL')),
 );
 $db->delete('media_assets', ['id' => '76666666-6666-4666-8666-666666666669']);
+$db->delete('media_assets', ['id' => '76666666-6666-4666-8666-666666666670']);
+$db->delete('tags', ['id' => '76666666-6666-4666-8666-666666666671']);
 $db->delete('users', ['id' => '76666666-6666-4666-8666-666666666661']);
 $db->delete('users', ['id' => '76666666-6666-4666-8666-666666666662']);
 $db->close();
@@ -147,6 +151,32 @@ $db->insert('media_assets', [
     'created_at' => $now,
     'updated_at' => $now,
     'deleted_at' => null,
+]);
+
+$batchMedia = $db->fetchAssociative(
+    'SELECT * FROM media_assets WHERE id = :id',
+    ['id' => '76666666-6666-4666-8666-666666666669'],
+);
+if ($batchMedia === false) {
+    throw new RuntimeException('Metadata workspace fixture asset is missing.');
+}
+$batchMedia['id'] = '76666666-6666-4666-8666-666666666670';
+$batchMedia['storage_key'] = 'PRIVATE_STORAGE_SENTINEL/batch-original.jpg';
+$batchMedia['original_filename'] = 'batch-owner-source.jpg';
+$batchMedia['checksum_sha256'] = hash('sha256', 'metadata-workspace-batch-fixture');
+$batchMedia['title'] = 'Batch keyword fixture';
+$db->insert('media_assets', $batchMedia);
+$db->insert('tags', [
+    'id' => '76666666-6666-4666-8666-666666666671',
+    'slug' => 'metadata-workspace-existing-batch',
+    'name' => 'Existing batch keyword',
+    'created_at' => $now,
+    'updated_at' => $now,
+]);
+$db->insert('media_tags', [
+    'media_id' => '76666666-6666-4666-8666-666666666670',
+    'tag_id' => '76666666-6666-4666-8666-666666666671',
+    'source' => 'coppermine',
 ]);
 
 $before = $db->fetchAssociative(
@@ -455,4 +485,90 @@ LIBRARY_AFTER_EDIT="$(curl --silent --show-error \
 expect_status 200 "$LIBRARY_AFTER_EDIT" "edited title participates in generated search document"
 grep -F 'EDITED_TITLE_SENTINEL' /tmp/metadata-workspace-library-after-edit.html >/dev/null
 
-echo "Metadata workspace inspection and descriptive editing checks passed."
+curl --fail --silent --show-error \
+    --cookie "$OWNER_JAR" --cookie-jar "$OWNER_JAR" \
+    "$BASE_URL/library" \
+    -o /tmp/metadata-workspace-library-batch.html
+grep -F 'Batch edit keywords' /tmp/metadata-workspace-library-batch.html >/dev/null
+grep -F "name=\"media_ids[]\" value=\"$BATCH_MEDIA_ID\"" /tmp/metadata-workspace-library-batch.html >/dev/null
+BATCH_PREVIEW_TOKEN="$(form_token /tmp/metadata-workspace-library-batch.html "/library/metadata/keywords/preview")"
+
+BATCH_PREVIEW_STATUS="$(curl --silent --show-error \
+    --cookie "$OWNER_JAR" --cookie-jar "$OWNER_JAR" \
+    --output /tmp/metadata-workspace-keyword-preview.html \
+    --write-out '%{http_code}' \
+    --data-urlencode "_csrf_token=$BATCH_PREVIEW_TOKEN" \
+    --data-urlencode "media_ids[]=$MEDIA_ID" \
+    --data-urlencode "media_ids[]=$BATCH_MEDIA_ID" \
+    --data-urlencode 'keyword_action=append' \
+    --data-urlencode $'keyword_values=Batch, phrase\nshared' \
+    "$BASE_URL/library/metadata/keywords/preview")"
+expect_status 200 "$BATCH_PREVIEW_STATUS" "owner can preview selected batch keyword changes"
+grep -F '2 selected MediaAssets' /tmp/metadata-workspace-keyword-preview.html >/dev/null
+grep -F 'Batch, phrase' /tmp/metadata-workspace-keyword-preview.html >/dev/null
+grep -F 'Existing batch keyword' /tmp/metadata-workspace-keyword-preview.html >/dev/null
+
+BATCH_APPLY_TOKEN="$(form_token /tmp/metadata-workspace-keyword-preview.html "/library/metadata/keywords/apply")"
+BATCH_APPLY_STATUS="$(curl --silent --show-error \
+    --cookie "$OWNER_JAR" --cookie-jar "$OWNER_JAR" \
+    --output /tmp/metadata-workspace-keyword-apply.html \
+    --write-out '%{http_code}' \
+    --data-urlencode "_csrf_token=$BATCH_APPLY_TOKEN" \
+    --data-urlencode "media_ids[]=$MEDIA_ID" \
+    --data-urlencode "media_ids[]=$BATCH_MEDIA_ID" \
+    --data-urlencode 'keyword_action=append' \
+    --data-urlencode 'keyword_values[]=Batch, phrase' \
+    --data-urlencode 'keyword_values[]=shared' \
+    "$BASE_URL/library/metadata/keywords/apply")"
+expect_status 302 "$BATCH_APPLY_STATUS" "owner can confirm batch keyword changes"
+
+curl --fail --silent --show-error \
+    --cookie "$OWNER_JAR" --cookie-jar "$OWNER_JAR" \
+    "$BASE_URL/library?metadata_batch_saved=2" \
+    -o /tmp/metadata-workspace-library-batch-saved.html
+grep -F 'Keywords updated for 2 MediaAssets.' /tmp/metadata-workspace-library-batch-saved.html >/dev/null
+
+php <<'PHP'
+<?php
+require 'vendor/autoload.php';
+
+$dsn = new Doctrine\DBAL\Tools\DsnParser([
+    'postgresql' => 'pdo_pgsql',
+    'postgres' => 'pdo_pgsql',
+]);
+$db = Doctrine\DBAL\DriverManager::getConnection(
+    $dsn->parse((string) getenv('DATABASE_URL')),
+);
+$rows = $db->fetchAllAssociative(
+    'SELECT mt.media_id, t.name, mt.source
+     FROM media_tags mt
+     JOIN tags t ON t.id = mt.tag_id
+     WHERE mt.media_id IN (:first, :second)
+     ORDER BY mt.media_id, t.name',
+    [
+        'first' => '76666666-6666-4666-8666-666666666669',
+        'second' => '76666666-6666-4666-8666-666666666670',
+    ],
+);
+$memberships = [];
+foreach ($rows as $row) {
+    $memberships[(string) $row['media_id']][(string) $row['name']] = (string) $row['source'];
+}
+$checks = [
+    'first asset receives appended phrase' => ($memberships['76666666-6666-4666-8666-666666666669']['Batch, phrase'] ?? null) === 'manual',
+    'first asset receives appended keyword' => ($memberships['76666666-6666-4666-8666-666666666669']['shared'] ?? null) === 'manual',
+    'second asset receives appended phrase' => ($memberships['76666666-6666-4666-8666-666666666670']['Batch, phrase'] ?? null) === 'manual',
+    'second asset receives appended keyword' => ($memberships['76666666-6666-4666-8666-666666666670']['shared'] ?? null) === 'manual',
+    'existing membership provenance is preserved' => ($memberships['76666666-6666-4666-8666-666666666670']['Existing batch keyword'] ?? null) === 'coppermine',
+];
+foreach ($checks as $label => $ok) {
+    if (!$ok) {
+        fwrite(STDERR, "FAIL ".$label.PHP_EOL);
+        exit(1);
+    }
+    echo "OK ".$label.PHP_EOL;
+}
+$db->close();
+PHP
+
+echo "Metadata workspace inspection, editing and batch keyword checks passed."

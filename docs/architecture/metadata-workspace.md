@@ -1,6 +1,6 @@
 # Metadata Workspace
 
-Status: inspection foundation + explicit single-asset descriptive and keyword editing  
+Status: inspection foundation + single-asset editing + confirmed batch keyword editing
 Tracking: #91
 
 The Metadata Workspace is the authenticated professional surface over Mediarama's existing complete source metadata snapshot, normalized canonical fields, relational keywords and per-field provenance.
@@ -71,6 +71,16 @@ The typed source priority is XMP Dublin Core `Subject`, then generic XMP `Subjec
 
 Keyword mutations update the MediaAsset's private workspace timestamp but do not rewrite the immutable source snapshot. Public publication-timeline implications of future batch/tag-driven Smart Collection changes remain a separate policy slice.
 
+## Batch keyword editing
+
+The Library can select up to 200 requester-owned MediaAssets for one keyword operation. Assets not owned by the requester cannot be selected for this workflow, and the server independently verifies ownership for every submitted ID.
+
+The batch editor supports explicit **Replace**, **Append**, **Remove** and **Clear all** operations. Append, Replace and Remove require one or more non-blank keywords; blank input never means deletion. Keyword input retains the single-asset limits of 200 values, 1–160 printable characters per value, case-insensitive matching and de-duplication.
+
+Before writing, the owner reviews each selected asset's current keyword set, resulting set and additions/removals. Confirmation revalidates the entire selection and applies changes in one transaction; if any asset is missing, deleted or not owned by the requester, none are changed. Assets with no effective change are skipped, and an all-no-op batch is rejected.
+
+Append preserves existing membership provenance and creates new memberships as `manual`. Replace explicitly makes all resulting memberships `manual`; Remove deletes only matching memberships; Clear all deliberately deletes every current membership. These operations do not change source metadata, immutable originals, ACLs, publication state or storage identity.
+
 ## Authorization and privacy
 
 Raw source inspection is owner-only in this foundation.
@@ -112,7 +122,7 @@ Batch operations must make the intended operation explicit per field:
 
 Blank input must never implicitly mean "erase this field across every selected MediaAsset".
 
-The single-asset keyword workflow establishes those operation semantics before batch selection, preview and confirmation are added.
+The single-asset keyword workflow established the operation semantics; the Library batch workflow adds owner-only selection, per-asset preview and transactional confirmation.
 
 Raw unknown/vendor/structural tags remain read-only unless a later schema explicitly declares safe write semantics.
 
