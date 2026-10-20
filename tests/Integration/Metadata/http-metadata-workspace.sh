@@ -225,6 +225,19 @@ expect_status() {
     echo "OK $label"
 }
 
+expect_contains() {
+    local file="$1"
+    local expected="$2"
+    local label="$3"
+
+    if ! grep -F "$expected" "$file" >/dev/null; then
+        echo "FAIL $label: expected text was not present"
+        exit 1
+    fi
+
+    echo "OK $label"
+}
+
 login() {
     local username="$1"
     local jar="$2"
@@ -490,8 +503,8 @@ curl --fail --silent --show-error \
     --cookie "$OWNER_JAR" --cookie-jar "$OWNER_JAR" \
     "$BASE_URL/library" \
     -o /tmp/metadata-workspace-library-batch.html
-grep -F 'Batch edit keywords' /tmp/metadata-workspace-library-batch.html >/dev/null
-grep -F "name=\"media_ids[]\" value=\"$BATCH_MEDIA_ID\"" /tmp/metadata-workspace-library-batch.html >/dev/null
+expect_contains /tmp/metadata-workspace-library-batch.html 'Batch edit keywords' "Library renders batch keyword form"
+expect_contains /tmp/metadata-workspace-library-batch.html "name=\"media_ids[]\" value=\"$BATCH_MEDIA_ID\"" "owner asset has batch selection control"
 BATCH_PREVIEW_TOKEN="$(form_token /tmp/metadata-workspace-library-batch.html "/library/metadata/keywords/preview")"
 
 BATCH_PREVIEW_STATUS="$(curl --silent --show-error \
@@ -505,9 +518,9 @@ BATCH_PREVIEW_STATUS="$(curl --silent --show-error \
     --data-urlencode $'keyword_values=Batch, phrase\nshared' \
     "$BASE_URL/library/metadata/keywords/preview")"
 expect_status 200 "$BATCH_PREVIEW_STATUS" "owner can preview selected batch keyword changes"
-grep -F '2 selected MediaAssets' /tmp/metadata-workspace-keyword-preview.html >/dev/null
-grep -F 'Batch, phrase' /tmp/metadata-workspace-keyword-preview.html >/dev/null
-grep -F 'Existing batch keyword' /tmp/metadata-workspace-keyword-preview.html >/dev/null
+expect_contains /tmp/metadata-workspace-keyword-preview.html '2 selected MediaAssets' "preview reports selected and changed asset counts"
+expect_contains /tmp/metadata-workspace-keyword-preview.html 'Batch, phrase' "preview retains comma-containing keyword"
+expect_contains /tmp/metadata-workspace-keyword-preview.html 'Existing batch keyword' "preview includes current keyword values"
 
 BATCH_APPLY_TOKEN="$(form_token /tmp/metadata-workspace-keyword-preview.html "/library/metadata/keywords/apply")"
 BATCH_APPLY_STATUS="$(curl --silent --show-error \
@@ -527,7 +540,7 @@ curl --fail --silent --show-error \
     --cookie "$OWNER_JAR" --cookie-jar "$OWNER_JAR" \
     "$BASE_URL/library?metadata_batch_saved=2" \
     -o /tmp/metadata-workspace-library-batch-saved.html
-grep -F 'Keywords updated for 2 MediaAssets.' /tmp/metadata-workspace-library-batch-saved.html >/dev/null
+expect_contains /tmp/metadata-workspace-library-batch-saved.html 'Keywords updated for 2 MediaAssets.' "Library reports confirmed batch changes"
 
 php <<'PHP'
 <?php
