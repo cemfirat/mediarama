@@ -58,10 +58,15 @@ final class LibraryBrowserController extends AbstractController
                 'organization_csrf_token' => $this->csrf
                     ->getToken('organization_analyze')
                     ->getValue(),
+                'metadata_keyword_batch_csrf_token' => $this->csrf
+                    ->getToken('metadata_keyword_batch_preview')
+                    ->getValue(),
                 'organization_ai_available' => $this->aiProviders->available() !== [],
                 'error' => $error,
                 'smart_error' => $request->query->getString('smart_error') ?: null,
                 'organization_error' => $request->query->getString('organization_error') ?: null,
+                'metadata_batch_error' => $request->query->getBoolean('metadata_batch_error'),
+                'metadata_batch_saved' => $request->query->getInt('metadata_batch_saved'),
             ],
             new Response(status: $error === null ? Response::HTTP_OK : Response::HTTP_BAD_REQUEST),
         );

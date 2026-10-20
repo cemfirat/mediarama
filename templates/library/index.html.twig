@@ -33,6 +33,11 @@
         <p>No optional AI provider is configured. Deterministic metadata analysis remains fully available.</p>
     </div>
 {% endif %}
+{% if metadata_batch_saved > 0 %}
+    <div class="uk-alert-success" uk-alert><p>Keywords updated for {{ metadata_batch_saved }} MediaAssets.</p></div>
+{% elseif metadata_batch_error %}
+    <div class="uk-alert-danger" uk-alert><p>The batch keyword operation was not applied. Select 1–200 MediaAssets that you own, choose an explicit operation and provide valid keywords where required.</p></div>
+{% endif %}
 
 <section class="uk-card uk-card-default uk-card-body uk-margin-large-top" aria-labelledby="library-filter-heading">
     <h2 id="library-filter-heading" class="uk-card-title">Filter media</h2>
@@ -121,12 +126,38 @@
         </form>
         {% endif %}
     </div>
+    {% if items is not empty %}
+        <form id="metadata-keyword-batch-form" method="post" action="{{ path('library_metadata_keywords_batch_preview') }}" class="uk-card uk-card-default uk-card-body uk-margin">
+            <input type="hidden" name="_csrf_token" value="{{ metadata_keyword_batch_csrf_token }}">
+            <h3 class="uk-card-title">Batch edit keywords</h3>
+            <p class="uk-text-meta">Select only assets you own. Review each affected keyword set before confirming. Up to 200 assets and 200 keywords are supported.</p>
+            <div class="uk-grid-small uk-flex-middle" uk-grid>
+                <div class="uk-width-1-4@m">
+                    <label class="uk-form-label" for="metadata-keyword-batch-action">Operation</label>
+                    <select id="metadata-keyword-batch-action" class="uk-select" name="keyword_action">
+                        <option value="append" selected>Append</option>
+                        <option value="replace">Replace</option>
+                        <option value="remove">Remove</option>
+                        <option value="clear">Clear all</option>
+                    </select>
+                </div>
+                <div class="uk-width-expand@m">
+                    <label class="uk-form-label" for="metadata-keyword-batch-values">Keywords</label>
+                    <textarea id="metadata-keyword-batch-values" class="uk-textarea" rows="3" maxlength="32200" name="keyword_values" placeholder="One keyword per line"></textarea>
+                    <div class="uk-text-meta">Blank input is rejected for Append, Replace and Remove; use Clear all to remove keywords.</div>
+                </div>
+                <div class="uk-width-auto">
+                    <button class="uk-button uk-button-secondary" type="submit">Preview selected</button>
+                </div>
+            </div>
+        </form>
+    {% endif %}
     {% if items is empty %}
         <div class="uk-placeholder uk-text-center">No matching media.</div>
     {% else %}
         <div class="uk-overflow-auto">
             <table class="uk-table uk-table-divider uk-table-small uk-table-middle">
-                <thead><tr><th>Analyze</th><th>Title</th><th>File</th><th>Captured</th><th>Creator</th><th>Camera</th><th>Location</th><th>Metadata</th></tr></thead>
+                <thead><tr><th>Analyze</th><th>Keywords</th><th>Title</th><th>File</th><th>Captured</th><th>Creator</th><th>Camera</th><th>Location</th><th>Metadata</th></tr></thead>
                 <tbody>
                 {% for item in items %}
                     <tr>
@@ -137,6 +168,18 @@
                                    name="media_ids[]"
                                    value="{{ item.id.toRfc4122() }}"
                                    aria-label="Select {{ item.title ?: 'untitled MediaAsset' }} for organization analysis">
+                        </td>
+                        <td>
+                           {% if item.metadataWorkspaceAvailable %}
+                               <input class="uk-checkbox"
+                                      type="checkbox"
+                                      form="metadata-keyword-batch-form"
+                                      name="media_ids[]"
+                                      value="{{ item.id.toRfc4122() }}"
+                                      aria-label="Select {{ item.title ?: 'untitled MediaAsset' }} for batch keyword editing">
+                           {% else %}
+                               <span class="uk-text-muted">Owner only</span>
+                           {% endif %}
                         </td>
                         <td>{{ item.title ?: 'Untitled' }}</td>
                         <td class="uk-text-meta">{{ item.originalFilename }}</td>
