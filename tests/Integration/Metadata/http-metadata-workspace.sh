@@ -160,6 +160,7 @@ $batchMedia = $db->fetchAssociative(
 if ($batchMedia === false) {
     throw new RuntimeException('Metadata workspace fixture asset is missing.');
 }
+unset($batchMedia['search_document']);
 $batchMedia['id'] = '76666666-6666-4666-8666-666666666670';
 $batchMedia['storage_key'] = 'PRIVATE_STORAGE_SENTINEL/batch-original.jpg';
 $batchMedia['original_filename'] = 'batch-owner-source.jpg';
