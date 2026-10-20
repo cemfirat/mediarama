@@ -238,6 +238,23 @@ expect_contains() {
     echo "OK $label"
 }
 
+expect_keyword_checkbox() {
+    local file="$1"
+    local media_id="$2"
+
+    php -r '
+        $html = (string) file_get_contents($argv[1]);
+        $id = preg_quote($argv[2], "~");
+        $pattern = "~<input\\b(?=[^>]*\\bform=\"metadata-keyword-batch-form\")(?=[^>]*\\bname=\"media_ids\\[\\]\")(?=[^>]*\\bvalue=\"".$id."\")[^>]*>~s";
+        if (!preg_match($pattern, $html)) {
+            fwrite(STDERR, "Batch keyword selection control missing for asset.\n");
+            exit(1);
+        }
+    ' "$file" "$media_id"
+
+    echo "OK owner asset has batch selection control"
+}
+
 login() {
     local username="$1"
     local jar="$2"
@@ -504,7 +521,7 @@ curl --fail --silent --show-error \
     "$BASE_URL/library" \
     -o /tmp/metadata-workspace-library-batch.html
 expect_contains /tmp/metadata-workspace-library-batch.html 'Batch edit keywords' "Library renders batch keyword form"
-expect_contains /tmp/metadata-workspace-library-batch.html "name=\"media_ids[]\" value=\"$BATCH_MEDIA_ID\"" "owner asset has batch selection control"
+expect_keyword_checkbox /tmp/metadata-workspace-library-batch.html "$BATCH_MEDIA_ID"
 BATCH_PREVIEW_TOKEN="$(form_token /tmp/metadata-workspace-library-batch.html "/library/metadata/keywords/preview")"
 
 BATCH_PREVIEW_STATUS="$(curl --silent --show-error \
