@@ -12,9 +12,19 @@ The project is **not intended to be a visual reskin of Coppermine**. The goal is
 
 ## Project status
 
-**Phase: architecture baseline and foundation planning**
+**Evidence checked: 31 October 2026, 21:42 UTC.** This section is the dated project entrypoint, not live telemetry. The source baseline checked for this documentation update is [`main@ca4c3f4dacb9ad1e61c9cd387404fe97caac6018`](https://github.com/cemfirat/mediarama/commit/ca4c3f4dacb9ad1e61c9cd387404fe97caac6018). The active product roadmap is [#17](https://github.com/cemfirat/mediarama/issues/17); this reconciliation is tracked in [#162](https://github.com/cemfirat/mediarama/issues/162).
 
-The initial research phase is complete enough to establish the architecture baseline: Mediarama will be a clean implementation rather than a permanent Coppermine fork, PostgreSQL is the primary database, media storage is abstracted, originals are immutable by default, heavy media processing is asynchronous, and UIkit is the presentation foundation. Detailed decisions are recorded as ADRs.
+**Phase: implemented application foundations and gallery intelligence, with open metadata and migration evidence work.** Accepted ADRs establish a clean implementation, PostgreSQL, PHP/Symfony/Doctrine, storage abstraction, immutable originals, asynchronous media processing and UIkit presentation. Initial technology selection is no longer the next task.
+
+| Layer | Verified source or record | Remaining boundary |
+| --- | --- | --- |
+| Source and CI | The source baseline above has a successful [full CI run 39448421068](https://github.com/cemfirat/mediarama/actions/runs/39448421068). | This existing run does not validate a later candidate or prove a deployed installation. |
+| Gallery intelligence | [#17](https://github.com/cemfirat/mediarama/issues/17) records #13 SEO/public discovery, #14 deterministic Smart Collections and #16 proposal-based organization AI as implemented. | Optional AI keeps the normal proposal, approval, privacy and publication boundaries. This milestone does not close the Coppermine exit gate. |
+| Metadata Workspace | [PR #152](https://github.com/cemfirat/mediarama/pull/152), merge `cd0fec559fe8cc95cd934a52b731f614a6f6c051`, integrated an authenticated owner-only, read-only inspector with separate source/current/provenance views. | Typed editing, clear/revert behavior, batch operations and templates remain in [#91](https://github.com/cemfirat/mediarama/issues/91); the inspector is not their completion. |
+| Coppermine exit audit | [#19](https://github.com/cemfirat/mediarama/issues/19) still requires a representative real/anonymized Coppermine 1.6 database, matching media and permission to use them. | [#11](https://github.com/cemfirat/mediarama/issues/11) and draft [PR #12](https://github.com/cemfirat/mediarama/pull/12) remain open. Synthetic fixtures cannot replace this evidence. |
+| Release, installation and acceptance | No GitHub Release was present in the checked repository release list. No host or customer installation was inspected for this update. | Publication, installation, browser/owner acceptance and the 1.0 production/LTS policy remain separately evidenced decisions. The publication and installation stop remains in force. |
+
+The Technical Lead owns implementation, independent review, verification and this dated handoff. The product owner decides goals, priorities, budget and visible/functional acceptance. Read [AGENTS.md](AGENTS.md), the applicable ADRs, the active issue and current GitHub evidence before continuing. A source merge or successful CI is not a release, installation or product acceptance.
 
 ## Runtime baseline
 
@@ -56,12 +66,12 @@ Core principles:
 
 ## Reference projects
 
-The first research phase compares both active Coppermine codebases:
+The original discovery work compared these Coppermine codebases:
 
 - [Coppermine 1.6.x](https://github.com/coppermine-gallery/cpg1.6.x)
 - [Coppermine 1.7.x](https://github.com/coppermine-gallery/cpg1.7.x)
 
-The comparison should cover at least:
+Its original scope included the following areas; the linked research and accepted ADRs record the findings and the open exit audit retains the remaining evidence requirements:
 
 - application architecture
 - PHP/runtime requirements
@@ -89,11 +99,11 @@ The comparison should cover at least:
 - tests and development tooling
 - known legacy dependencies
 
-The purpose is not to assume that 1.7.x is automatically the correct foundation. Its actual architectural differences from 1.6.x must first be established.
+The resulting [clean-implementation decision](docs/adr/0001-clean-implementation.md) uses Coppermine 1.6 as the primary behavioral/migration reference and selected 1.7 work as additional UX research. Remaining real-source migration evidence is tracked separately in #19.
 
 ## Frontend and design system
 
-Mediarama should use **UIkit (getuikit)** as its primary UI framework.
+Mediarama uses **UIkit (getuikit)** as its presentation foundation under [ADR-0005](docs/adr/0005-uikit-presentation.md).
 
 The frontend should use semantic, responsive structures such as:
 
@@ -132,15 +142,13 @@ Presentation
 UIkit-based Views
 ```
 
-The exact framework and implementation are intentionally not fixed yet. They should be selected after the Coppermine analysis and requirements inventory.
+The framework is fixed by accepted [ADR-0006](docs/adr/0006-symfony-php-doctrine.md): PHP 8.5, Symfony 8.1, Twig and Doctrine, with infrastructure concerns kept behind the application boundaries. Runtime updates follow the existing maintenance policy; this documentation update changes no dependency or runtime requirement.
 
-## Database evaluation
+## Database decision
 
-Coppermine's existing database model and MySQL dependencies will be analyzed before selecting Mediarama's persistence layer.
+Accepted [ADR-0002](docs/adr/0002-postgresql.md) selects **PostgreSQL as the primary and initially supported database**. MySQL/MariaDB are Coppermine source systems for the importer, not an additional promised Mediarama v1 backend.
 
-**PostgreSQL is a candidate, not yet a decision.**
-
-The evaluation should include:
+The original evaluation considered:
 
 - relational integrity
 - compatibility with the required media model
@@ -155,13 +163,13 @@ The evaluation should include:
 - portability
 - migration from existing Coppermine installations
 
-If PostgreSQL offers meaningful architectural advantages, Mediarama may use it. Database abstraction should nevertheless be considered so application logic is not unnecessarily coupled to vendor-specific SQL.
+Vendor-specific persistence belongs in infrastructure/repository implementations. A second runtime database backend would require its own decision and test matrix.
 
-## Fork vs. new foundation
+## Clean implementation decision
 
-A permanent fork of Coppermine is **not assumed**.
+Accepted [ADR-0001](docs/adr/0001-clean-implementation.md) selects a new Mediarama application with a dedicated Coppermine importer. A permanent fork and a progressive in-place refactor are historical alternatives, not unresolved current choices.
 
-Three approaches must be evaluated:
+The original evaluation compared:
 
 1. **Direct fork**  
    Modernize Coppermine incrementally while retaining its codebase.
@@ -172,13 +180,13 @@ Three approaches must be evaluated:
 3. **New Mediarama core with Coppermine compatibility/migration**  
    Treat Coppermine as the functional reference and migration source while implementing a clean architecture for Mediarama.
 
-The decision should consider development effort, security, maintainability, technical debt, upgrade paths, licensing, migration requirements and the amount of Coppermine code that can realistically remain useful.
+The decision weighs maintainability, security, migration and licensing consequences. Coppermine remains a functional and migration reference; any deliberate source reuse still requires its own licensing review.
 
 ## Compatibility and migration
 
 Existing Coppermine installations are important.
 
-Even if Mediarama becomes a new implementation, the project should investigate migration of:
+The migration scope to validate includes:
 
 - albums and categories
 - media files
@@ -192,9 +200,9 @@ Even if Mediarama becomes a new implementation, the project should investigate m
 
 A reliable migration path may provide more long-term value than maintaining source-level compatibility with Coppermine.
 
-## Research before implementation
+## Original research sequence — historical
 
-Before large implementation work begins:
+This was the initial discovery sequence. It is retained as planning history; accepted ADRs and implemented work above supersede its former position as the immediate implementation gate. Open source-specific audit work remains in #11/#19.
 
 1. Analyze Coppermine 1.6.x.
 2. Analyze Coppermine 1.7.x.
@@ -210,7 +218,7 @@ Before large implementation work begins:
 
 ## GitHub project structure
 
-After the research phase, development should be organized using:
+Development is organized using:
 
 - milestones
 - focused issues
@@ -222,7 +230,9 @@ After the research phase, development should be organized using:
 
 Large umbrella tasks should be split into independently verifiable work instead of creating an unstructured backlog.
 
-## Initial roadmap
+## Original roadmap — historical
+
+These phases describe the original planning structure. Use the dated Project status section and #17 for actual progress, dependencies and remaining acceptance work; the phase labels below are not a claim that implementation has yet to begin.
 
 ### Phase 0 — Discovery
 Coppermine 1.6/1.7 analysis and feature inventory.
@@ -270,10 +280,10 @@ Architecture:
 - [Media Storage Contract](docs/architecture/media-storage.md)
 - [Runtime and dependency maintenance](docs/architecture/runtime-dependency-maintenance.md)
 
-The current working hypothesis is to build a new Mediarama core, use the actively maintained Coppermine 1.6.x line as the primary functional and migration reference, and use selected 1.7.x Theme2/responsive work as additional UX research. This remains subject to the remaining discovery work and formal architecture decisions.
+The accepted ADRs establish the new Mediarama core, PostgreSQL and the framework boundary. Remaining discovery for a real Coppermine source does not reopen those decisions automatically or waive the required migration evidence.
 
 ## Current next step
 
-The immediate task is a **deep technical comparison of Coppermine 1.6.x and 1.7.x**.
+Continue the existing scoped work under [#17](https://github.com/cemfirat/mediarama/issues/17), including the remaining Metadata Workspace slices in #91. Check current branches and PRs before implementation; preserve the separate draft migration audit PR #12 and dependency maintenance PR #161.
 
-The findings will determine Mediarama's architecture and will be converted into professional GitHub milestones, issues and architecture decisions before substantial implementation begins.
+For the Coppermine exit gate, the next permitted evidence step is the real/anonymized source package and permission described in #19, followed by its isolated migration/reconciliation procedure. For any source change, complete the relevant local checks and independent review, then full successful branch CI, an independent full PR run and an identical-tree merge check. No publication or installation follows from this documentation work.
