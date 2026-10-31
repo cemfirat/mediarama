@@ -1,5 +1,7 @@
 # Mediarama repository instructions
 
+Read [AGENTS.md](../AGENTS.md) and the dated [README Project status](../README.md#project-status) before work. Accepted ADRs and the active issue define the scope; historical discovery text is not a new product decision. Keep source, verification, integration, release, installation and owner acceptance distinct in the handoff.
+
 ## Change workflow
 
 - Never open a pull request before the current branch has completed its full CI successfully.
